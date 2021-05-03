@@ -1,0 +1,67 @@
+---
+title: "campy-covid visualizations"
+author: "SL"
+date: "03/05/2021"
+output: html_document
+---
+
+# set up knitting option for pdf document
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Purpose**: The purpose of this code is to "dry test" campy-covid visualizations before they are included in the shiny app. 
+
+Load the required libraries
+```{r libraries}
+library(here) # for clear dir calling
+library(tidyverse) # tidy data/ kind of used
+library(leaflet) # for map visualizations
+library(maps) # for drawing maps
+```
+
+Load pre-processed data with epi-cluster cohesion info.
+```{r load_data}
+clusdata <- readxl::read_xlsx(here("input_data", "2021-05-03_0.Europe_1st wave.9000_Merged_strain_results.xlsx"))
+```
+
+Potential visualzations:
+- Heatmap of epi-cluster cohesion (ECC) matrix/data
+- Timeline visualizations for cluster expansion/ECC
+- Ridgeline plot for temporal data
+- Map-based visualizations
+
+These countries have the most number of entries:
+- Spain 
+- Germany
+- France
+
+Create a simple map visualization
+```{r map_vis}
+# radius of circles = number of cases in outbreak
+# colour of circles can indicate the number of strains in a given outbreak
+# or colour can represent the cluster
+pal <- colorFactor(palette(rainbow(length(unique(test$`TP1 cluster`)))),
+                   domain = unique(test$`TP1 cluster`))
+
+# get map of france from maps package
+region <- map(regions = "France", fill=T)
+
+# overlay france polygon on top of map tile
+leaflet(data=region) %>% 
+  addTiles() %>%
+  addPolygons(fillColor = "blue", stroke = F) %>%
+  
+  # add circles that correspond to clusters at TP1
+  addCircleMarkers(lng = test$Longitude,
+                   lat = test$Latitude,
+                   radius = log(test$`TP1 cluster size`+1),
+                  fillColor = ~pal(test$`TP1 cluster`), 
+                   stroke = F, fillOpacity = 0.3)
+```
+
+To use date in a slide it is probably easiet to format yyyy/mm/dd. Combine year, month, and day columns
+```{r format_date}
+clusdata$tp1_date <- paste(clusdata$Year, clusdata$Month, clusdata$Day, sep="-")
+
+```
