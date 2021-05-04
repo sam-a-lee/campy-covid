@@ -27,6 +27,9 @@ library(maps) # for drawing maps
 #Load pre-processed data with epi-cluster cohesion info.
 clusdata <- readxl::read_xlsx(here("input_data", "2021-05-03_0.Europe_1st wave.9000_Merged_strain_results.xlsx"))
 
+# remove columns that dont contain useful information
+clusdata <-  clusdata[,-c(32:35)]
+
 # To use date in a shiny slider 
 # it is probably easiet to format yyyy/mm/dd 
 # Combine year, month, and day columns
@@ -51,6 +54,18 @@ clusdata$cumsum_tp1 <- unlist(tmp_tp1$TP1)
 clusdata$cumsum_tp2 <- clusdata$cumsum_all - clusdata$cumsum_tp1
 
 rm(tmp_all, tmp_tp1)
+
+
+# hard code colour in for pie charts
+
+# colour for pie charts
+pal <- data.frame("colour" = rainbow(length(unique(clusdata$`TP1 cluster`))),
+                  "tp1_cluster" = unique(clusdata$`TP1 cluster`))
+                  
+clusdata$chart_colours <- apply(clusdata, 1, function(x){
+    return(pal[pal$tp1_cluster == x["TP1 cluster"], "colour"])
+})
+
 
 #######################################
 # the user interface of the shiny app #
@@ -104,11 +119,6 @@ ui <- fluidPage(
 # sever logic: the plots and function that the shiny app will call #
 ####################################################################
 
-# colour for pie charts
-colors <- c("#4fc13c", "#cccccc")
-
-# tp2 date =- "average tp2 date"
-
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
@@ -140,28 +150,31 @@ server <- function(input, output) {
         leaflet(data=region) %>% 
             
             # set base zoom over mid asia/europe
-            setView(lng = 60, lat = 50, zoom = 2) %>%
+            #setView(lng = 60, lat = 50, zoom = 2) %>%
             
             # load tile for selected region
             addTiles("http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}") %>%
             
             # add circles that correspond to clusters at TP1
-            # addCircleMarkers(lng = sub_date$Longitude,
-            #                     lat = sub_date$Latitude,
-            #                     radius = log(sub_date$tp1_cumsum*10)*10,
-            #                     fillColor = sub_date$cluster_color,
-            #                     stroke = F, fillOpacity = 0.3) %>%
+             addCircleMarkers(lng = clusdata_sub$Longitude,
+                                 lat = clusdata_sub$Latitude,
+                                 radius = (log(clusdata_sub$cumsum_all*10)*10)/2,
+                                 fillColor = clusdata_sub$chart_colours,
+                                 stroke = F, fillOpacity = 0.6) %>%
             
-            
+            # layer pie chart on top of cluster to represent new strains
+            # present at TP2
             addMinicharts(lng = clusdata_sub$Longitude,
                           lat = clusdata_sub$Latitude,
                           type = "pie",
-                          chartdata = as.matrix(clusdata[, c("cumsum_tp1", 
+                          chartdata = as.matrix(clusdata_sub[, c("cumsum_tp1", 
                                                              "cumsum_tp2")]), 
-                          colorPalette = colors, 
+                          colorPalette = c("white", "black"), 
                           width = log(clusdata_sub$cumsum_all*10)*10, 
                           transitionTime = 0,
-                          opacity = 0.5)
+                          opacity = 0.1)
+        
+        
     })
 }
 
