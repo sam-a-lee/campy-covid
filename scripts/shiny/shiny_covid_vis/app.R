@@ -13,11 +13,44 @@
 ###############################
 
 library(shiny) # for running shiny apps
+library(shinyWidgets) # for better slider/dropdown options
+library(leaflet.minicharts) # for better mini charts on map
 library(here) # for clear dir calling
 library(tidyverse) # tidy data/ kind of used
 library(leaflet) # for map visualizations
 library(maps) # for drawing maps
 
+#######################
+# load and clean data #
+#######################
+
+#Load pre-processed data with epi-cluster cohesion info.
+clusdata <- readxl::read_xlsx(here("input_data", "2021-05-03_0.Europe_1st wave.9000_Merged_strain_results.xlsx"))
+
+# To use date in a shiny slider 
+# it is probably easiet to format yyyy/mm/dd 
+# Combine year, month, and day columns
+clusdata$tp1_date <- paste(clusdata$Year, clusdata$Month, clusdata$Day, sep="-")
+
+# reorder data by province, month, and day
+clusdata <- clusdata %>% group_by(Province) %>% arrange(Month, Day, .by_group = T)
+
+# calculate a cumulative total of strains present
+tmp_all <- aggregate(!is.na(TP1)~Province, data=clusdata, "cumsum") 
+
+# cum sum for size
+clusdata$cumsum_all <- unlist(tmp_all$`!is.na(TP1)`)
+
+# calculate a cumulative total of strains present
+tmp_tp1 <- aggregate(TP1~Province, data=clusdata, "cumsum") 
+
+# cum sum for size
+clusdata$cumsum_tp1 <- unlist(tmp_tp1$TP1)
+
+# cumsum tp2
+clusdata$cumsum_tp2 <- clusdata$cumsum_all - clusdata$cumsum_tp1
+
+rm(tmp_all, tmp_tp1)
 
 #######################################
 # the user interface of the shiny app #
@@ -29,15 +62,33 @@ ui <- fluidPage(
     # Application title
     titlePanel("Location and size of SARS-CoV-2 clusters over time"),
 
-    # Sidebar with a slider input for number of bins 
+    # Side bar with a sliders for data selection
     sidebarLayout(
+        
+        # side bar
         sidebarPanel(
+            
+            # slide to select date 
             sliderInput("date",
                         "Select date:",
                         min = as.Date("2020-1-1","%Y-%m-%d"),
                         max = as.Date("2020-6-1","%Y-%m-%d"),
                         value=as.Date("2020-1-1"),
-                        timeFormat="%Y-%m-%d")
+                        timeFormat="%Y-%m-%d"),
+
+            # drop down menu to select country 
+            pickerInput("country",
+                        "Select country:", 
+                        choices = unique(clusdata$Country), 
+                        options = list(`actions-box` = TRUE),
+                        multiple = T),
+            
+            # drop down menu to select country 
+            pickerInput("cluster",
+                        "Select cluster:", 
+                        choices = unique(clusdata$`TP1 cluster`), 
+                        options = list(`actions-box` = TRUE),
+                        multiple = T)
         ),
 
         # Show a plot of the generated distribution
@@ -48,24 +99,38 @@ ui <- fluidPage(
 )
 
 
+
 #################################################################### 
 # sever logic: the plots and function that the shiny app will call #
 ####################################################################
+
+# colour for pie charts
+colors <- c("#4fc13c", "#cccccc")
+
+# tp2 date =- "average tp2 date"
+
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
 
     output$mymap <- renderLeaflet({
         
-        # radius of circles = number of cases in outbreak
-        # colour of circles can indicate the number of strains in a given outbreak
-        # or colour can represent the cluster
-        pal <- colorFactor(palette(rainbow(length(unique(clusdata$`TP1 cluster`)))),
-                           domain = unique(clusdata$`TP1 cluster`))
-        
-
-        # subset data according to date selected in slider
-        sub_date <- clusdata %>% subset(tp1_date == input$date)
+        # radius of circles = number of cases cluster 
+        # radius will grow during time period as more strains identified
+        # colour of circles can be used to indicate ECC values using dat matrix
+        # colours will likely be similar between clusters and TP1 and TP2
+        # How to make more distinct?
+       
+        # subset data according to data selected in side bar
+        # want dates less than or equal to selected date
+        # only want most recent data (largest cumulative sum)
+        # otherwise circles become too opaque
+        clusdata_sub <- clusdata %>% 
+            subset(Country %in% input$country) %>% 
+            subset(`TP1 cluster` %in% input$cluster) %>% 
+            subset(tp1_date <= input$date) %>% 
+            group_by(Province) %>% 
+            top_n(1, cumsum_all)
         
         # set region for map
         # for now, whole world
@@ -73,24 +138,30 @@ server <- function(input, output) {
         
         # map the data using leaflet
         leaflet(data=region) %>% 
+            
             # set base zoom over mid asia/europe
             setView(lng = 60, lat = 50, zoom = 2) %>%
-            # load tile for selected region
-            addTiles() %>%
-            # add circles that correspond to clusters at TP1
-            addCircleMarkers(lng = sub_date$Longitude,
-                             lat = sub_date$Latitude,
-                             radius = log(sub_date$`TP1 cluster size`+1),
-                             fillColor = ~pal(sub_date$`TP1 cluster`), 
-                             stroke = F, fillOpacity = 0.3) 
             
-            # add legend for relating colours to cluster
-            # set this as static so all colours always shown
-            # addLegend("bottomright", pal = pal, 
-            #          values = ~sub_date$`TP1 cluster`,
-            #          title = "ClusterW",
-            #          #labFormat = labelFormat(prefix = "$"),
-            #          opacity = 1)
+            # load tile for selected region
+            addTiles("http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}") %>%
+            
+            # add circles that correspond to clusters at TP1
+            # addCircleMarkers(lng = sub_date$Longitude,
+            #                     lat = sub_date$Latitude,
+            #                     radius = log(sub_date$tp1_cumsum*10)*10,
+            #                     fillColor = sub_date$cluster_color,
+            #                     stroke = F, fillOpacity = 0.3) %>%
+            
+            
+            addMinicharts(lng = clusdata_sub$Longitude,
+                          lat = clusdata_sub$Latitude,
+                          type = "pie",
+                          chartdata = as.matrix(clusdata[, c("cumsum_tp1", 
+                                                             "cumsum_tp2")]), 
+                          colorPalette = colors, 
+                          width = log(clusdata_sub$cumsum_all*10)*10, 
+                          transitionTime = 0,
+                          opacity = 0.5)
     })
 }
 
