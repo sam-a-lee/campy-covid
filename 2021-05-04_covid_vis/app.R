@@ -30,33 +30,33 @@ clusdata <- readxl::read_xlsx(here("input_data", "2021-05-03_0.Europe_1st wave.9
 # remove columns that dont contain useful information
 clusdata <-  clusdata[,-c(32:35)]
 
-
-
+# just grouping data by cluster 
 test <- clusdata %>% 
-    group_by(`TP1 cluster`, Month, Year, Province) %>% 
-    summarise( day = mean(Day),
-               country = unique(Country),
-               lat = mean(Latitude), 
-               long = mean(Longitude),
-               num_tp1_strains = sum(TP1==1),
-               tp1_t0_ecc_temporal = mean(TP1_T0_ECC_0.0.1),
-               tp1_t0_ecc_geo = mean(TP1_T0_ECC_0.1.0),
-               avg_tp1_date = mean.Date(as.Date(`Average TP1 date`, format="%d-%m-%Y")),
-               avg_tp1_lat = mean(`Average TP1 latitude`),
-               avg_tp1_long = mean(`Average TP1 longitude`),
-               avg_tp1_cluster_diam = mean(as.numeric(`TP1 geo average cluster distance (km)`)),
-               avg_tp1_cluster_dur = mean(as.numeric(`TP1 temp average cluster distance (days)`)),
-               num_tp2_strains = sum(TP1==0),
-               tp2_t0_ecc_temp = mean(TP2_T0_ECC_0.0.1),
-               tp2_t0_ecc_geo = mean(TP2_T0_ECC_0.1.0),
-               avg_tp2_date = mean.Date(as.Date(`Average TP2 date`, format="%d-%m-%Y")),
-               avg_tp2_lat = mean(`Average TP2 latitude`),
-               avg_tp2_long = mean(`Average TP2 longitude`),
-               avg_tp2_cluster_diam = mean(as.numeric(`TP2 geo average cluster distance (km)`)),
-               avg_tp2_cluster_dur = mean(as.numeric(`TP2 temp average cluster distance (days)`)),
-               avg_delta_ecc_temp = mean(delta_ECC_0.0.1),
-               avg_delta_geo_geo = mean(delta_ECC_0.1.0),
-               strains = paste0(Strain, collapse = ";")) 
+    group_by(`TP1 cluster`, Month, Year, TP1, `TP2 cluster`) %>% 
+    
+    summarise(tp1_t0_ecc_temporal = mean(TP1_T0_ECC_0.0.1),
+              tp1_t0_ecc_geo = mean(TP1_T0_ECC_0.1.0),
+              avg_tp1_date = mean.Date(as.Date(`Average TP1 date`, format="%d-%m-%Y")),
+              avg_tp1_lat = mean(`Average TP1 latitude`),
+              avg_tp1_long = mean(`Average TP1 longitude`),
+              avg_tp1_size = mean(`TP1 cluster size (2)`),
+              avg_tp1_cluster_diam = mean(as.numeric(`TP1 geo average cluster distance (km)`)),
+              avg_tp1_cluster_dur = mean(as.numeric(`TP1 temp average cluster distance (days)`)),
+              tp2_t0_ecc_temp = mean(TP2_T0_ECC_0.0.1),
+              tp2_t0_ecc_geo = mean(TP2_T0_ECC_0.1.0),
+              avg_tp2_date = mean.Date(as.Date(`Average TP2 date`, format="%d-%m-%Y")),
+              avg_tp2_lat = mean(`Average TP2 latitude`),
+              avg_tp2_long = mean(`Average TP2 longitude`),
+              avg_tp2_size = mean(`TP2 cluster size (2)`),
+              avg_tp2_cluster_diam = mean(as.numeric(`TP2 geo average cluster distance (km)`)),
+              avg_tp2_cluster_dur = mean(as.numeric(`TP2 temp average cluster distance (days)`)),
+              avg_delta_ecc_temp = mean(delta_ECC_0.0.1),
+              avg_delta_geo_geo = mean(delta_ECC_0.1.0)) %>%
+    # for now only work with points that have data at tp1 and tp2
+    subset(TP1 == 1)
+
+
+
 
 test <- as.data.frame(test)
 
@@ -66,9 +66,6 @@ test <- as.data.frame(test)
 #test$tp1_date <- paste(test$Year, test$Month, test$Day, sep="-")
 
 
-# make a  sum of all strain
-test$num_all_strains <- test$num_tp1_strains + test$num_tp2_strains
-    
     
 # colour for pie charts
 pal <- data.frame("colour" = rainbow(length(unique(test$`TP1 cluster`))),
@@ -81,6 +78,9 @@ test$chart_colours <- apply(test, 1, function(x){
     return(pal[pal$tp1_cluster == x["TP1 cluster"], "colour"])
 })
 
+
+
+
 ##########################################
 # helper functions for running Shiny app #
 ##########################################
@@ -92,6 +92,10 @@ monthStart <- function(x) {
     x$mday <- 1
     as.Date(x)
 }
+
+
+
+
 
 #######################################
 # the user interface of the shiny app #
@@ -128,11 +132,11 @@ ui <- fluidPage(
             
             
             # drop down menu to select country 
-            pickerInput("country",
-                        "Select country:", 
-                        choices = unique(test$country), 
-                        options = list(`actions-box` = TRUE),
-                        multiple = T),
+            #pickerInput("country",
+            #            "Select country:", 
+            #            choices = unique(test$country), 
+            #            options = list(`actions-box` = TRUE),
+            #            multiple = T),
             
             # drop down menu to select country 
             pickerInput("cluster",
@@ -144,7 +148,7 @@ ui <- fluidPage(
         
         # Show a plot of the generated distribution
         mainPanel(
-            leafletOutput("mymap"),
+            leafletOutput("map")
         )
     )
 )
@@ -164,35 +168,29 @@ server <- function(input, output) {
     ######################################
     
     sliderMonth <- reactiveValues()
+    
     observe({
         full.date <- as.POSIXct(input$slider, tz="GMT")
         sliderMonth$Month <- as.character(monthStart(full.date))
     })
+    
     output$SliderText <- renderText({sliderMonth$Month})
+    
+
     
     
     #########################################
     # plot a reactive map of covid clusters #
     #########################################
     
-    output$mymap <- renderLeaflet({
+    output$map <- renderLeaflet({
         
-        # radius of circles = number of cases cluster 
-        # radius will grow during time period as more strains identified
-        # colour of circles can be used to indicate ECC values using dat matrix
-        # colours will likely be similar between clusters and TP1 and TP2
-        # How to make more distinct?
-        
-        # subset data according to data selected in side bar
-        # want dates less than or equal to selected date
-        # only want most recent data (largest cumulative sum)
-        # otherwise circles become too opaque
+        # subset data according to date selected in slider
         clusdata_sub <- test %>% 
-            subset(country %in% input$country) %>% 
+            #subset(country %in% input$country) %>% 
             subset(`TP1 cluster` %in% input$cluster) %>% 
-            subset(substr(as.character(test$avg_tp1_date),1,7) == substr(as.character(input$slider),1,7)) %>% 
-            group_by(Province) %>% 
-            top_n(1, num_all_strains)
+            subset(substr(as.character(test$avg_tp1_date),1,7) == substr(as.character(input$slider),1,7))
+
         
         # set region for map
         # for now, whole world
@@ -202,35 +200,51 @@ server <- function(input, output) {
         leaflet(data=region) %>% 
             
             # set base zoom over mid asia/europesubstr(as.character(test$avg_tp1_date),1,7)
-            #setView(lng = 60, lat = 50, zoom = 2) %>%
+            setView(lng = 60, lat = 50, zoom = 2) %>%
             
             # load tile for selected region
             addTiles("http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}") %>%
             
             # add circles that correspond to clusters at TP1
-            addCircleMarkers(lng = clusdata_sub$long,
-                             lat = clusdata_sub$lat,
-                             radius = (log((clusdata_sub$num_tp1_strains + clusdata_sub$num_tp1_strains)*10)*10)/2,
+            addCircleMarkers(lng = clusdata_sub$avg_tp1_long,
+                             lat = clusdata_sub$avg_tp1_lat,
+                             radius = log(clusdata_sub$avg_tp1_size)*10,
                              fillColor = clusdata_sub$chart_colours,
-                             stroke = F, fillOpacity = 0.7) 
-            
- 
-
-            # layer pie chart on top of cluster to represent new strains
-            # present at TP2
-            #addMinicharts(lng = clusdata_sub$long,
-            #              lat = clusdata_sub$lat,
-            #              type = "pie",
-            #              chartdata = as.matrix(clusdata_sub[, c("num_tp1_strains", 
-            #                                                     "num_tp2_strains")]), 
-            #              colorPalette = c("white", "darkgrey"), 
-            #              width = log((clusdata_sub$num_tp1_strains + clusdata_sub$num_tp1_strains)*10)*10, 
-            #              transitionTime = 0,
-            #              opacity = c(0.4,0.8))
-        
-        
+                             stroke = F, fillOpacity = 0.5) 
     })
+    
 }
+
 
 # Run the application 
 shinyApp(ui = ui, server = server)
+
+############## junk ##############
+
+
+#test <- clusdata %>% 
+#    group_by(`TP1 cluster`, Month, Year, Province, TP1) %>% 
+#    # for now only work with points that have data at tp1 and tp2
+#    subset(TP1 == 0) %>%
+#    summarise( day = mean(Day),
+#               country = unique(Country),
+#               lat = mean(Latitude), 
+#               long = mean(Longitude),
+#               num_tp1_strains = sum(TP1==1),
+#               tp1_t0_ecc_temporal = mean(TP1_T0_ECC_0.0.1),
+#               tp1_t0_ecc_geo = mean(TP1_T0_ECC_0.1.0),
+#               avg_tp1_date = mean.Date(as.Date(`Average TP1 date`, format="%d-%m-%Y")),
+#               avg_tp1_lat = mean(`Average TP1 latitude`),
+ #              avg_tp1_long = mean(`Average TP1 longitude`),
+ #              avg_tp1_cluster_diam = mean(as.numeric(`TP1 geo average cluster distance (km)`)),
+ #              avg_tp1_cluster_dur = mean(as.numeric(`TP1 temp average cluster distance (days)`)),
+ #              tp2_t0_ecc_temp = mean(TP2_T0_ECC_0.0.1),
+ ##              tp2_t0_ecc_geo = mean(TP2_T0_ECC_0.1.0),
+  #             avg_tp2_date = mean.Date(as.Date(`Average TP2 date`, format="%d-%m-%Y")),
+  #             avg_tp2_lat = mean(`Average TP2 latitude`),
+  #             avg_tp2_long = mean(`Average TP2 longitude`),
+  #             avg_tp2_cluster_diam = mean(as.numeric(`TP2 geo average cluster distance (km)`)),
+  #             avg_tp2_cluster_dur = mean(as.numeric(`TP2 temp average cluster distance (days)`)),
+  #             avg_delta_ecc_temp = mean(delta_ECC_0.0.1),
+  #             avg_delta_geo_geo = mean(delta_ECC_0.1.0),
+  #             strains = paste0(Strain, collapse = ";")) 
