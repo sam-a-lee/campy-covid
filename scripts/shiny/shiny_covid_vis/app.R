@@ -135,7 +135,7 @@ server <- function(input, output) {
         # want dates less than or equal to selected date
         # only want most recent data (largest cumulative sum)
         # otherwise circles become too opaque
-        clusdata_sub <- clusdata %>% 
+        clusdata_sub <- test %>% 
             subset(Country %in% input$country) %>% 
             subset(`TP1 cluster` %in% input$cluster) %>% 
             subset(tp1_date <= input$date) %>% 
@@ -173,6 +173,14 @@ server <- function(input, output) {
                           width = log(clusdata_sub$cumsum_all*10)*10, 
                           transitionTime = 0,
                           opacity = 0.1)
+        
+        # add legend for relating colours to cluster
+        # set this as static so all colours always shown
+         addLegend("bottomright", pal = pal, 
+                  values = ~sub_date$`TP1 cluster`,
+                  title = "ClusterW",
+                  labFormat = labelFormat(prefix = "$"),
+                  opacity = 1)
         
         
     })
