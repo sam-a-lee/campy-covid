@@ -1,0 +1,102 @@
+---
+title: "campy-covid visualizations"
+author: "SL"
+date: "03/05/2021"
+output: html_document
+---
+
+# set up knitting option for pdf document
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Purpose**: The purpose of this code is to "dry test" campy-covid visualizations before they are included in the shiny app. 
+
+Load the required libraries
+```{r libraries}
+library(here) # for clear dir calling
+library(tidyverse) # tidy data/ kind of used
+library(leaflet) # for map visualizations
+library(maps) # for drawing maps
+```
+
+Load pre-processed data with epi-cluster cohesion info.
+```{r load_data}
+clusdata <- readxl::read_xlsx(here("input_data", "2021-05-03_0.Europe_1st wave.9000_Merged_strain_results.xlsx"))
+```
+
+Potential visualzations:
+- Heatmap of epi-cluster cohesion (ECC) matrix/data
+- Timeline visualizations for cluster expansion/ECC
+- Ridgeline plot for temporal data
+- Map-based visualizations
+
+These countries have the most number of entries:
+- Spain 
+- Germany
+- France
+
+To use date in a slide it is probably easiet to format yyyy/mm/dd. Combine year, month, and day columns
+```{r format_date}
+clusdata$tp1_date <- paste(clusdata$Year, clusdata$Month, clusdata$Day, sep="-")
+```
+
+Create a simple map visualization
+```{r map_vis}
+# radius of circles = number of cases in outbreak
+# colour of circles can indicate the number of strains in a given outbreak
+# or colour can represent the cluster
+pal <- colorFactor(palette(rainbow(length(unique(test$`TP1 cluster`)))),
+                   domain = unique(test$`TP1 cluster`))
+
+# get map of france from maps package
+region <- map(regions = "France", fill=T)
+
+# overlay france polygon on top of map tile
+leaflet(data=region) %>% 
+  addTiles() %>%
+  addPolygons(fillColor = "blue", stroke = F) %>%
+  
+  # add circles that correspond to clusters at TP1
+  addCircleMarkers(lng = test$Longitude,
+                   lat = test$Latitude,
+                   radius = log(test$`TP1 cluster size`+1),
+                  fillColor = ~pal(test$`TP1 cluster`), 
+                   stroke = F, fillOpacity = 0.3)
+```
+
+Want a cumulative sum of strains through the first time period.
+```{r tes}
+# get just tp1 for cluster 1 for testing
+test <- clusdata %>% subset(`TP1 cluster`=="TP1_h0_c001") %>% subset(TP1 == 1)
+
+# group by province then order by month
+test <- test %>% group_by(Province) %>% arrange(Month, Day, .by_group = T)
+
+tmp <- aggregate(TP1~Province, data=test, "cumsum") 
+
+test$tp1_cumsum <- unlist(tmp$TP1)
+```
+
+Colour mixing for colouring according to ECC values
+```{r colours}
+#https://stackoverflow.com/questions/11773295/how-can-one-mix-2-or-more-color-palettes-to-show-a-combined-color-value
+dat <- expand.grid(blue= seq(0, 100, by=10), red=seq(0, 100, by=10))
+dat <- within(dat, mix <- rgb(green=0, red=rev(red), blue=rev(blue), maxColorValue=100))
+
+
+test$cluster_color <- apply(test, 1, function(x){
+    
+    # if else statement for selecting cluster colour based on time point
+    ifelse(x["TP1"]==1, 
+           # colour for cluster at TP1
+           return(dat[dat$blue== (round(as.numeric(x["TP1_T0_ECC_0.1.0"]), 1)*100) & 
+                   dat$red == (round(as.numeric(x["TP1_T0_ECC_0.0.1"]), 1)*100), 
+               "mix"]),  
+           # colour for cluster at TP2
+           return(dat[dat$blue== (round(as.numeric(x["TP2_T0_ECC_0.1.0"]), 1)*100) & 
+                   dat$red == (round(as.numeric(x["TP2_T0_ECC_0.0.1"]), 1)*100), 
+               "mix"]))
+})
+
+```
