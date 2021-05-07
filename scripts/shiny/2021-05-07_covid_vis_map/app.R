@@ -68,7 +68,7 @@ test <- as.data.frame(eccdata %>% select( -c(day, month, year,
 ui <- fluidPage(
     
     # Application title
-    titlePanel("Epi-cluster cohesian data"),
+    titlePanel("SARS-CoV-2 epi-cluster cohesion (ECC) data"),
     
     # Side bar with a sliders for data selection
     sidebarLayout(
@@ -82,8 +82,8 @@ ui <- fluidPage(
                         choices = unique(test$tp1_cluster), 
                         selected = "TP1_h0_c001",
                         options = list(
-                            "max-options" = 10,
-                            "max-options-text" = "Maximum 10 selected clusters!"),
+                            "max-options" = 8,
+                            "max-options-text" = "Maximum 8 selected clusters!"),
                         multiple = T)
         ),
         
@@ -110,10 +110,24 @@ server <- function(input, output) {
     
     output$map <- renderLeaflet({
         
-        # susbet data according for unique strains
-        strain <- test %>% 
+        
+        #######################
+        # subset data for map #
+        #######################
+        
+        # kind of janky but it works
+        
+        # subset data according for tp1 strains
+        tp1_strain <- test %>% 
             # subset by cluster
-            subset(tp1_cluster %in% input$cluster) 
+            subset(tp1_cluster %in% input$cluster) %>%
+            subset(present_at_tp1==1)
+        
+        #susbet data according for tp2 strains
+        tp2_strain <- test %>% 
+            # subset by cluster
+            subset(tp1_cluster %in% input$cluster) %>%
+            subset(present_at_tp1==0)
         
         # subset data for unique tp1 clusters
         tp1 <- test %>% 
@@ -128,7 +142,19 @@ server <- function(input, output) {
             subset(tp1_cluster %in% input$cluster) %>%
             # subset unique tp2 strains
             distinct(tp2_cluster, .keep_all = T)
-    
+        
+        ##################
+        # colour palette #
+        ##################
+        
+        # create colour palettes for centroids
+        num_clust <- length(unique(tp1$tp1_cluster))
+        factpal <- colorFactor(rainbow(8), factor(tp1$tp1_cluster))
+
+
+        ############### 
+        # leaflet map #
+        ###############
         
         # set region for map
         # for now, whole world
@@ -147,25 +173,47 @@ server <- function(input, output) {
             addCircleMarkers(lat = tp1$avg_tp1_latitude,
                              lng = tp1$avg_tp1_longitude,
                              radius = log10(as.numeric(tp1$avg_tp1_geo_dist_km))*10,
-                             fillColor = "blue",
+                             fillColor = ~factpal(tp1$tp1_cluster),
                              fillOpacity = 0.4,
-                             stroke=F) %>%
+                             stroke = F) %>%
             
             # add circles that correspond to tp1 strains
-            addCircleMarkers(lat = strain$latitude,
-                             lng = strain$longitude,
+            addCircleMarkers(lat = tp1_strain$latitude,
+                             lng = tp1_strain$longitude,
                              radius = 5,
-                             fillColor = "yellow",
+                             fillColor = ~factpal(tp1$tp1_cluster),
                              fillOpacity = 0.5,
-                             stroke=F) %>%
+                             stroke = F) %>%
             
             # add circles that correspond to tp2  cluster centroids
              addCircleMarkers(lat = tp2$avg_tp2_latitude,
                              lng = tp2$avg_tp2_longitude,
                              radius = log10(as.numeric(tp2$avg_tp2_geo_dist_km))*10,
-                             fillColor = "green",
+                             fillColor = ~factpal(tp1$tp1_cluster),
                              fillOpacity = 0.4,
-                             stroke=F)
+                             stroke = T,
+                             opacity = 0.8,
+                             weight = 1,
+                             color = "black") %>%
+            
+            # add circles that correspond to tp2 strains
+            addCircleMarkers(lat = tp2_strain$latitude,
+                             lng = tp2_strain$longitude,
+                             radius = 5,
+                             fillColor = ~factpal(tp1$tp1_cluster),
+                             fillOpacity = 0.5,
+                             stroke = T,
+                             opacity = 0.8,
+                             weight = 1,
+                             color = "black") %>%
+            
+            
+            # add a legend for colours
+            addLegend("topright", pal = factpal, values = tp1$tp1_cluster,
+                      title = "Time point one cluster",
+                      opacity = 1)
+        
+        
         
     })
     
