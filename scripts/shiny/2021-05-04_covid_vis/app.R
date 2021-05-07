@@ -128,7 +128,7 @@ ui <- fluidPage(
                         max =as.Date("2020-06-30"),
                         value=as.Date("2020-01-01"),
                         timeFormat="%b %Y"),
-            textOutput("SliderText"),
+            #textOutput("SliderText"),
             
             
             # drop down menu to select country 
@@ -177,8 +177,6 @@ server <- function(input, output) {
     output$SliderText <- renderText({sliderMonth$Month})
     
 
-    
-    
     #########################################
     # plot a reactive map of covid clusters #
     #########################################
