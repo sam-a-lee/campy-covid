@@ -21,6 +21,7 @@ library(here) # for clear dir calling
 library(tidyverse) # tidy data/ kind of used
 library(leaflet) # for map visualizations
 library(maps) # for drawing maps
+library(RColorBrewer) # for prettier colours
 
 
 #######################
@@ -51,10 +52,6 @@ colnames(eccdata) <- c("strain", "country", "province", "city", "latitude",
                        "num_novel_tp2_strains", "overall_cluster_growth_rate", "cluster_novel_growth_rate", 
                        "type")
 
-
-#saveRDS(test, here("scripts", "shiny", "2021-05-07_covid_vis_map", "2021-05-07_ecc.RDS")) 
-
-#test <- readRDS("2021-05-07_ecc.RDS")
 
 ###################################
 # user interface of the shiny app #
@@ -114,7 +111,8 @@ ui <- fluidPage(
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-    
+
+
     ############################################
     # reactive subsetting of data for plotting #
     ############################################
@@ -129,6 +127,7 @@ server <- function(input, output) {
             # subset by cluster
             subset(tp1_cluster %in% input$cluster) %>%
             subset(present_at_tp1==1)
+        
     })
     
     # data subset for TP1 clusters
@@ -173,9 +172,6 @@ server <- function(input, output) {
     })
     
     
-    
-    
-
     #################### 
     # base leaflet map #
     ####################
@@ -195,20 +191,22 @@ server <- function(input, output) {
             setView(lng = 60, lat = 50, zoom = 2) 
         })
     
-    ########################################
-    # reactive plotting of clusters on map #
-    ########################################
-           #input$strain_transparency | input$centroid_transparency,  
-    observe({
+    
+    ####################################################
+    # reactive plotting of clusters and strains on map #
+    ####################################################
 
+    observe({
+    
         leafletProxy("map") %>%
             
             # clear old shapes
             clearMarkers() %>%
             
             #add circles that correspond to tp1 centroids
-            addCircleMarkers(lat = tp1_centroid()$avg_tp1_latitude,
-                             lng = tp1_centroid()$avg_tp1_longitude,
+            addCircleMarkers(#data = tp1_centroid(),
+                             lat =  tp1_centroid()$avg_tp1_latitude,
+                             lng =  tp1_centroid()$avg_tp1_longitude,
                              radius = log10(as.numeric(tp1_centroid()$avg_tp1_geo_dist_km))*10,
                              fillColor = "red",
                              fillOpacity = input$centroid_transparency/100,
@@ -216,7 +214,8 @@ server <- function(input, output) {
                              group = "TP1 centroid") %>%
             
             # add circles that correspond to tp1 strains
-            addCircleMarkers(lat = tp1_strains()$latitude,
+            addCircleMarkers(#data = tp1_strains(),
+                             lat = tp1_strains()$latitude,
                              lng = tp1_strains()$longitude,
                              radius = 5,
                              fillColor = "red",
@@ -246,8 +245,15 @@ server <- function(input, output) {
                              opacity = input$strain_transparency/100,
                              weight = 1,
                              color = "black",
-                             group = "TP2 strains")
+                             group = "TP2 strains") %>%
+            
+            # contorl layer for toggling strains and centroids on/off
+            addLayersControl(overlayGroups = c("TP1 centroid", "TP2 centroid",
+                                               "TP1 strains", "TP2 strains"),
+                             options = layersControlOptions(collapsed = TRUE)) 
     })
+    
+
 }
 
 
