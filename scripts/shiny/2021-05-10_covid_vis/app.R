@@ -2,7 +2,7 @@
 # General info #
 ################
 
-# May 10, 2021
+# May 11, 2021
 # Samantha Lee
 
 # The purpose of this script is to generate a map of epi-cluster cohesian data
@@ -201,7 +201,7 @@ server <- function(input, output) {
             setView(lng = 60, lat = 50, zoom = 2) 
         })
     
-    
+
     ####################################################
     # reactive plotting of clusters and strains on map #
     ####################################################
@@ -212,19 +212,7 @@ server <- function(input, output) {
         # custom colouring of strains #
         ###############################
         
-        # if all inputs are new
-        if(is.null(colorpal)) {
-            
-            # new pal 
-            colorpal <- data.frame(tp1_cluster = as.character(rep(NA,9)), colour = brewer.pal(9, "Set1"), rownum = 1:9)
-            
-            # assign new tp1 clusters
-            colorpal$tp1_cluster <- as.character(c(input$cluster, as.character(rep(NA, 9-length(input$cluster)))))
-            
-            colorpal <<- colorpal
-            cat(file=stderr(), "all new colours!", "\n")
-        }
-        
+     
         # if some inputs are old
         if(sum(as.character(input$cluster) %in% as.character(colorpal$tp1_cluster)) > 0) {
             
@@ -248,12 +236,27 @@ server <- function(input, output) {
                   as.character(rep(NA, length(na_pos) - length(input$cluster[!input$cluster %in% colorpal$tp1_cluster])))))
             
             colorpal <<- colorpal
+            colorpal_nona <<- na.omit(colorpal)
             
             cat(file=stderr(), "modifying old colours", "\n")
         } 
         
-        cat(file=stderr(), "clusters", colorpal$tp1_clusters, "\n")
-        cat(file=stderr(), "colours", colorpal$colours, "\n")
+        
+        # if all inputs are new
+        if(is.null(colorpal)) {
+            
+            # new pal 
+            colorpal <- data.frame(tp1_cluster = as.character(rep(NA,9)), colour = brewer.pal(9, "Set1"), rownum = 1:9)
+            
+            # assign new tp1 clusters
+            colorpal$tp1_cluster <- as.character(c(input$cluster, as.character(rep(NA, 9-length(input$cluster)))))
+            
+            colorpal <<- colorpal
+            colorpal_nona <<- na.omit(colorpal)
+            
+            cat(file=stderr(), "all new colours!", "\n")
+        }
+        
      
         leafletProxy("map") %>%
             
@@ -267,7 +270,10 @@ server <- function(input, output) {
                              radius = log10(as.numeric(tp1_centroid()$avg_tp1_geo_dist_km))*10,
                              fillColor =  unname(unlist(sapply(tp1_centroid()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$centroid_transparency/100,
-                             stroke = F,
+                             stroke = T,
+                             opacity = input$centroid_transparency/100,
+                             weight = 1,
+                             color = "white",
                              group = "TP1 centroid") %>%
             
             # add circles that correspond to tp1 strains
@@ -277,7 +283,10 @@ server <- function(input, output) {
                              radius = 5,
                              fillColor = unname(unlist(sapply(tp1_strains()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$strain_transparency/100,
-                             stroke = F,
+                             stroke = T,
+                             opacity = input$strain_transparency/100,
+                             weight = 1,
+                             color = "white",
                              group = "TP1 strains") %>%
             
             # add circles that correspond to tp2  cluster centroids
@@ -304,13 +313,21 @@ server <- function(input, output) {
                              color = "black",
                              group = "TP2 strains") %>%
             
-            # contorl layer for toggling strains and centroids on/off
+            clearControls() %>%
+            
+            addLegend(group = "legend", "bottomright", colors = as.character(colorpal_nona$colour), labels = as.character(colorpal_nona$tp1_cluster),
+                      opacity = 1)  %>%
+
+        
+            # control layer for toggling strains and centroids on/off
             addLayersControl(overlayGroups = c("TP1 centroid", "TP2 centroid",
-                                               "TP1 strains", "TP2 strains"),
-                             options = layersControlOptions(collapsed = TRUE)) 
+                                               "TP1 strains", "TP2 strains", "legend"),
+                             options = layersControlOptions(collapsed = TRUE))
+            
     })
     
 
+    
 }
 
 
