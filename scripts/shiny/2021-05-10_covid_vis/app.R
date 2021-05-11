@@ -53,6 +53,8 @@ colnames(eccdata) <- c("strain", "country", "province", "city", "latitude",
                        "type")
 
 
+
+colorpal <- NULL
 ###################################
 # user interface of the shiny app #
 ###################################
@@ -112,7 +114,6 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
 
-
     ############################################
     # reactive subsetting of data for plotting #
     ############################################
@@ -141,7 +142,16 @@ server <- function(input, output) {
             # subset by cluster
             subset(tp1_cluster %in% input$cluster) %>%
             # select only unique tp1 info
-            distinct(avg_tp1_date, .keep_all = T)
+            distinct(avg_tp1_date, .keep_all = T) 
+        
+        #eccsub$colour <- NA
+        
+
+        
+        #apply(eccsub, 1, function(x){
+        #    x["color"] <- pal %>% subset(as.character(tp1_cluster) == as.character(x["tp1_cluster"])) %>% select(colour)
+        #})
+
     })
     
     # data subset for TP2 strains
@@ -197,7 +207,54 @@ server <- function(input, output) {
     ####################################################
 
     observe({
-    
+        
+        ###############################
+        # custom colouring of strains #
+        ###############################
+        
+        # if all inputs are new
+        if(is.null(colorpal)) {
+            
+            # new pal 
+            colorpal <- data.frame(tp1_cluster = as.character(rep(NA,9)), colour = brewer.pal(9, "Set1"), rownum = 1:9)
+            
+            # assign new tp1 clusters
+            colorpal$tp1_cluster <- as.character(c(input$cluster, as.character(rep(NA, 9-length(input$cluster)))))
+            
+            colorpal <<- colorpal
+            cat(file=stderr(), "all new colours!", "\n")
+        }
+        
+        # if some inputs are old
+        if(sum(as.character(input$cluster) %in% as.character(colorpal$tp1_cluster)) > 0) {
+            
+            # find out position of exisiting cluster(s) in colorpal
+            #pal_pos <-  colorpal$tp1_cluster %in% input$cluster
+            pal_pos <- colorpal[colorpal$tp1_cluster %in% input$cluster, "rownum"]
+            
+            # set other positions to NA
+            #colorpal$tp1_cluster[!pal_pos] <- as.character(NA)
+            colorpal[!colorpal$rownum %in% pal_pos, "tp1_cluster"] <- as.character(NA)
+            
+            # reorder according to rownum
+            colorpal <- colorpal[order(colorpal$rownum),]
+            
+            # get NA positions
+            #na_pos <- is.na(colorpal$tp1_cluster)
+            na_pos <- colorpal[is.na(colorpal$tp1_cluster), "rownum"]
+            
+            colorpal$tp1_cluster[na_pos] <- 
+                as.character(c(input$cluster[!input$cluster %in% colorpal$tp1_cluster],
+                  as.character(rep(NA, length(na_pos) - length(input$cluster[!input$cluster %in% colorpal$tp1_cluster])))))
+            
+            colorpal <<- colorpal
+            
+            cat(file=stderr(), "modifying old colours", "\n")
+        } 
+        
+        cat(file=stderr(), "clusters", colorpal$tp1_clusters, "\n")
+        cat(file=stderr(), "colours", colorpal$colours, "\n")
+     
         leafletProxy("map") %>%
             
             # clear old shapes
@@ -208,7 +265,7 @@ server <- function(input, output) {
                              lat =  tp1_centroid()$avg_tp1_latitude,
                              lng =  tp1_centroid()$avg_tp1_longitude,
                              radius = log10(as.numeric(tp1_centroid()$avg_tp1_geo_dist_km))*10,
-                             fillColor = "red",
+                             fillColor =  unname(unlist(sapply(tp1_centroid()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$centroid_transparency/100,
                              stroke = F,
                              group = "TP1 centroid") %>%
@@ -218,7 +275,7 @@ server <- function(input, output) {
                              lat = tp1_strains()$latitude,
                              lng = tp1_strains()$longitude,
                              radius = 5,
-                             fillColor = "red",
+                             fillColor = unname(unlist(sapply(tp1_strains()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$strain_transparency/100,
                              stroke = F,
                              group = "TP1 strains") %>%
@@ -227,7 +284,7 @@ server <- function(input, output) {
             addCircleMarkers(lat = tp2_centroid()$avg_tp2_latitude,
                              lng = tp2_centroid()$avg_tp2_longitude,
                              radius = log10(as.numeric(tp2_centroid()$avg_tp2_geo_dist_km))*10,
-                             fillColor = "cyan",
+                             fillColor = unname(unlist(sapply(tp2_centroid()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$centroid_transparency/100,
                              stroke = T,
                              opacity = input$centroid_transparency/100,
@@ -239,7 +296,7 @@ server <- function(input, output) {
             addCircleMarkers(lat = tp2_strains()$latitude,
                              lng = tp2_strains()$longitude,
                              radius = 5,
-                             fillColor = "cyan",
+                             fillColor = unname(unlist(sapply(tp2_strains()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$strain_transparency/100,
                              stroke = T,
                              opacity = input$strain_transparency/100,
