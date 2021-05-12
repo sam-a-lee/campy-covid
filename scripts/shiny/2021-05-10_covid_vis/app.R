@@ -55,6 +55,7 @@ colnames(eccdata) <- c("strain", "country", "province", "city", "latitude",
 
 
 colorpal <- NULL
+
 ###################################
 # user interface of the shiny app #
 ###################################
@@ -95,7 +96,9 @@ ui <- fluidPage(
                         min = 0,
                         max = 100,
                         step = 1,
-                        value = 40)
+                        value = 40),
+            
+            checkboxInput("legend", "Show legend", TRUE)
         ),
         
         # Show a plot of the generated distribution
@@ -120,6 +123,7 @@ server <- function(input, output) {
     
     # data subset for TP1 strains
     tp1_strains <- reactive({
+        
         # a cluster must be selected
         req(input$cluster)
         
@@ -143,15 +147,6 @@ server <- function(input, output) {
             subset(tp1_cluster %in% input$cluster) %>%
             # select only unique tp1 info
             distinct(avg_tp1_date, .keep_all = T) 
-        
-        #eccsub$colour <- NA
-        
-
-        
-        #apply(eccsub, 1, function(x){
-        #    x["color"] <- pal %>% subset(as.character(tp1_cluster) == as.character(x["tp1_cluster"])) %>% select(colour)
-        #})
-
     })
     
     # data subset for TP2 strains
@@ -198,7 +193,13 @@ server <- function(input, output) {
             addTiles("http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}") %>%
             
             # set base zoom over mid asia/europe
-            setView(lng = 60, lat = 50, zoom = 2) 
+            setView(lng = 60, lat = 50, zoom = 2) %>%
+            
+            # control layer for toggling strains and centroids on/off
+            # never changes so can be part of base map
+            addLayersControl(overlayGroups = c("TP1 centroid", "TP2 centroid",
+                                               "TP1 strains", "TP2 strains"),
+                             options = layersControlOptions(collapsed = TRUE))
         })
     
 
@@ -211,8 +212,7 @@ server <- function(input, output) {
         ###############################
         # custom colouring of strains #
         ###############################
-        
-     
+
         # if some inputs are old
         if(sum(as.character(input$cluster) %in% as.character(colorpal$tp1_cluster)) > 0) {
             
@@ -257,7 +257,13 @@ server <- function(input, output) {
             cat(file=stderr(), "all new colours!", "\n")
         }
         
-     
+        # if no colours selected
+        if(length(input$cluster)==0){
+            colorpal <- NULL
+            colorpal <<- colorpal
+        }
+
+
         leafletProxy("map") %>%
             
             # clear old shapes
@@ -311,22 +317,36 @@ server <- function(input, output) {
                              opacity = input$strain_transparency/100,
                              weight = 1,
                              color = "black",
-                             group = "TP2 strains") %>%
-            
-            clearControls() %>%
-            
-            addLegend(group = "legend", "bottomright", colors = as.character(colorpal_nona$colour), labels = as.character(colorpal_nona$tp1_cluster),
-                      opacity = 1)  %>%
-
-        
-            # control layer for toggling strains and centroids on/off
-            addLayersControl(overlayGroups = c("TP1 centroid", "TP2 centroid",
-                                               "TP1 strains", "TP2 strains", "legend"),
-                             options = layersControlOptions(collapsed = TRUE))
+                             group = "TP2 strains") 
             
     })
     
-
+    
+    ###############################
+    # add reactive legend to plot #
+    ###############################
+    
+    observe({
+        
+        # require input to change to updat map
+        req(input$cluster)
+        
+        # proxy for leaflet map
+        proxy <- leafletProxy("map")
+        
+        # Remove any existing legend, and only if the legend is
+        # enabled, create a new one.
+        proxy %>% clearControls()
+        if (input$legend) {
+            proxy %>% 
+                addLegend(group = "legend", 
+                          "bottomleft", 
+                          colors = as.character(colorpal_nona$colour), 
+                          labels = as.character(colorpal_nona$tp1_cluster),
+                          opacity = 1) 
+        }
+        
+    })
     
 }
 
