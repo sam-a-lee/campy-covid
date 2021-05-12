@@ -143,10 +143,22 @@ server <- function(input, output) {
         req(input$cluster)
         
         # subset data for tp1 strains
+        #eccdata %>% 
+        #    # subset by cluster
+        #    subset(tp1_cluster %in% input$cluster) %>%
+        #    subset(present_at_tp1==1)
+        
+        # this aggregates by province
         eccdata %>% 
-            # subset by cluster
-            subset(tp1_cluster %in% input$cluster) %>%
-            subset(present_at_tp1==1)
+            subset(tp1_cluster %in% c("TP1_h0_c001")) %>%
+            subset(present_at_tp1==1) %>% 
+            aggregate(.~province, data = ., unique) %>% 
+            mutate(num_tp1_strains = lengths(strain))
+        
+        
+        # difficulty visualizing all strains
+        # as many occur at the same location
+        # how to capture this in visualization
         
     })
     
@@ -302,53 +314,73 @@ server <- function(input, output) {
                              group = "Average centroid") %>%
             
             #add circles that correspond to tp1 centroids
-            addCircleMarkers(#data = tp1_centroid(),
-                lat =  tp1_centroid()$avg_tp1_latitude,
-                lng =  tp1_centroid()$avg_tp1_longitude,
-                radius = log10(as.numeric(tp1_centroid()$avg_tp1_geo_dist_km))*10,
-                fillColor =  unname(unlist(sapply(tp1_centroid()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
-                fillOpacity = input$centroid_transparency/100,
-                stroke = T,
-                opacity = input$centroid_transparency/100,
-                weight = 1,
-                color = "white",
-                group = "TP1 centroid") %>%
+            addCircleMarkers(data = tp1_centroid(),
+                             lat =  ~avg_tp1_latitude,
+                             lng =  ~avg_tp1_longitude,
+                             radius = ~log10(as.numeric(avg_tp1_geo_dist_km))*10,
+                             fillColor =  ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
+                             fillOpacity = input$centroid_transparency/100,
+                             stroke = T,
+                             opacity = input$centroid_transparency/100,
+                             weight = 1,
+                             color = "white",
+                             label = ~HTML(paste("Average TP1 date:", avg_tp1_date, "<br/>",
+                                                 "Strains in TP1 cluster:", tp1_cluster_size_2-1, "<br/>",
+                                                 "Latitude:", avg_tp1_latitude, "<br/>",
+                                                 "Longitude", avg_tp1_longitude, sep=" ")),
+                             labelOptions = labelOptions(noHide = F),
+                             group = "TP1 centroid") %>%
+            
+            #class(cat(unlist(test$strain[[4]]), sep=";"))
             
             # add circles that correspond to tp1 strains
-            addCircleMarkers(#data = tp1_strains(),
-                lat = tp1_strains()$latitude,
-                lng = tp1_strains()$longitude,
-                radius = 5,
-                fillColor = unname(unlist(sapply(tp1_strains()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
-                fillOpacity = input$strain_transparency/100,
-                stroke = T,
-                opacity = input$strain_transparency/100,
-                weight = 1,
-                color = "white",
-                group = "TP1 strains") %>%
+            addCircleMarkers(data = tp1_strains(),
+                             lat = ~as.numeric(latitude),
+                             lng = ~as.numeric(longitude),
+                             radius = 5,
+                             fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
+                             fillOpacity = input$strain_transparency/100,
+                             stroke = T,
+                             opacity = input$strain_transparency/100,
+                             weight = 1,
+                             color = "white",
+                             label = ~paste("Number of strains in cluster:", num_tp1_strains, "<br/>",
+                                            "Country:", country, "<br/>",  "Province:", province, sep=" "),
+                             labelOptions = labelOptions(noHide = F),
+                             group = "TP1 strains") %>%
             
             # add circles that correspond to tp2  cluster centroids
-            addCircleMarkers(lat = tp2_centroid()$avg_tp2_latitude,
-                             lng = tp2_centroid()$avg_tp2_longitude,
-                             radius = log10(as.numeric(tp2_centroid()$avg_tp2_geo_dist_km))*10,
-                             fillColor = unname(unlist(sapply(tp2_centroid()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
+            addCircleMarkers(data = tp2_centroid(),
+                             lat = ~avg_tp2_latitude,
+                             lng = ~avg_tp2_longitude,
+                             radius = ~log10(as.numeric(avg_tp2_geo_dist_km))*10,
+                             fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$centroid_transparency/100,
                              stroke = T,
                              opacity = input$centroid_transparency/100,
                              weight = 1,
                              color = "black",
+                             label = ~HTML(paste("Average TP2 date:", avg_tp2_date, "<br/>",
+                                                 "Strains in TP2 cluster:", tp2_cluster_size_2-1, "<br/>",
+                                                 "Latitude:", avg_tp2_latitude, "<br/>",
+                                                 "Longitude", avg_tp2_longitude, sep=" ")),
+                             labelOptions = labelOptions(noHide = F),
                              group = "TP2 centroid") %>%
+
             
             # add circles that correspond to tp2 strains
-            addCircleMarkers(lat = tp2_strains()$latitude,
-                             lng = tp2_strains()$longitude,
+            addCircleMarkers(data = tp2_strains(),
+                             lat = ~latitude,
+                             lng = ~longitude,
                              radius = 5,
-                             fillColor = unname(unlist(sapply(tp2_strains()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
+                             fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$strain_transparency/100,
                              stroke = T,
                              opacity = input$strain_transparency/100,
                              weight = 1,
-                             color = "black",
+                             color = "black",                             
+                             label = ~strain,
+                             labelOptions = labelOptions(noHide = F),
                              group = "TP2 strains") 
         
         
@@ -388,3 +420,20 @@ server <- function(input, output) {
 # Run the application #
 #######################
 shinyApp(ui = ui, server = server)
+
+
+
+labs <- lapply(seq(nrow(cities)), function(i) {
+    paste0( '<p>', cities[i, "name"], '<p></p>', 
+            cities[i, "region"], ', ', 
+            cities[i, "country"],'</p><p>', 
+            cities[i, "data"], '</p>' ) 
+})
+
+map2 = leaflet( cities ) %>%
+    addTiles() %>%
+    addCircles(lng = ~lng, lat = ~lat, fillColor = 'darkBlue', radius = 10000, 
+               stroke = FALSE, fillOpacity = 0.8,
+               label = lapply(labs, htmltools::HTML))
+
+map2

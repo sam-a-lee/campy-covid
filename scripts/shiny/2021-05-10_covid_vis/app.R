@@ -28,6 +28,7 @@ library(RColorBrewer) # for prettier colours
 # load and clean data #
 #######################
 
+# input an input_data/data in the app when uploading
 # load pre-processed data with epi-cluster cohesion info.
 eccdata <- read_xlsx(here("input_data", "2021-05-03_0.Europe_1st wave.9000_Merged_strain_results.xlsx"))
 
