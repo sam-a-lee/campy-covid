@@ -52,8 +52,7 @@ colnames(eccdata) <- c("strain", "country", "province", "city", "latitude",
                        "num_novel_tp2_strains", "overall_cluster_growth_rate", "cluster_novel_growth_rate", 
                        "type")
 
-
-
+# initialize colorpal as null
 colorpal <- NULL
 
 ###################################
@@ -120,7 +119,22 @@ server <- function(input, output) {
     ############################################
     # reactive subsetting of data for plotting #
     ############################################
-    
+
+    # data subset avg centroid info
+    avg_centroid <- reactive({
+        
+        # a cluster must be selected
+        req(input$cluster)
+
+        eccdata %>% 
+            # subset by cluster
+            subset(tp1_cluster %in% input$cluster) %>% 
+            distinct(avg_tp1_date, .keep_all = T) %>%
+            group_by(present_at_tp1) %>% 
+            subset(present_at_tp1==1)
+        
+    })
+        
     # data subset for TP1 strains
     tp1_strains <- reactive({
         
@@ -146,7 +160,8 @@ server <- function(input, output) {
             # subset by cluster
             subset(tp1_cluster %in% input$cluster) %>%
             # select only unique tp1 info
-            distinct(avg_tp1_date, .keep_all = T) 
+            distinct(avg_tp1_date, .keep_all = T) %>%
+            subset(present_at_tp1==1) 
     })
     
     # data subset for TP2 strains
@@ -173,7 +188,8 @@ server <- function(input, output) {
             # subset by cluster
             subset(tp1_cluster %in% input$cluster) %>%
             # subset unique tp2 strains
-            distinct(tp2_cluster, .keep_all = T)
+            distinct(tp2_cluster, .keep_all = T) %>%
+            subset(present_at_tp2==1)
     })
     
     
@@ -198,7 +214,7 @@ server <- function(input, output) {
             # control layer for toggling strains and centroids on/off
             # never changes so can be part of base map
             addLayersControl(overlayGroups = c("TP1 centroid", "TP2 centroid",
-                                               "TP1 strains", "TP2 strains"),
+                                               "TP1 strains", "TP2 strains", "Average centroid"),
                              options = layersControlOptions(collapsed = TRUE))
         })
     
@@ -269,6 +285,21 @@ server <- function(input, output) {
             # clear old shapes
             clearMarkers() %>%
             
+            
+            # add circles that is the average of tp1 and tp2
+            # dashed stroke to indicate average 
+            addCircleMarkers(lat = (((avg_centroid()$avg_tp1_latitude) + (avg_centroid()$avg_tp2_latitude))/2),
+                             lng = (((avg_centroid()$avg_tp1_longitude) + (avg_centroid()$avg_tp2_longitude))/2),
+                             radius = ((log10(as.numeric(avg_centroid()$avg_tp1_geo_dist_km))*10) + (log10(as.numeric(avg_centroid()$avg_tp2_geo_dist_km))*10))/2,
+                             fillColor = unname(unlist(sapply(avg_centroid()$tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
+                             fillOpacity = input$centroid_transparency/100,
+                             stroke = T,
+                             opacity = input$centroid_transparency/100,
+                             weight = 1,
+                             color = "black",
+                             dashArray = "4",
+                             group = "Average centroid") %>%
+            
             #add circles that correspond to tp1 centroids
             addCircleMarkers(#data = tp1_centroid(),
                              lat =  tp1_centroid()$avg_tp1_latitude,
@@ -318,6 +349,7 @@ server <- function(input, output) {
                              weight = 1,
                              color = "black",
                              group = "TP2 strains") 
+        
             
     })
     
