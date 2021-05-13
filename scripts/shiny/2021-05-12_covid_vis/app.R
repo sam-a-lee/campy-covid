@@ -20,8 +20,9 @@ library(leaflet.minicharts) # for better mini charts on map
 library(here) # for clear dir calling
 library(tidyverse) # tidy data/ kind of used
 library(leaflet) # for map visualizations
-library(maps) # for drawing maps
+library(maps) # for drawing maps/getting map data
 library(RColorBrewer) # for prettier colours
+library(DT) # provides an R interface to the JavaScript library
 
 
 #######################
@@ -103,7 +104,18 @@ ui <- fluidPage(
         
         # Show a plot of the generated distribution
         mainPanel(
-            leafletOutput("map")
+            
+            # a table panel at the top
+            # switch between map and the raw data that created it
+            tabsetPanel(
+                # table for map
+                tabPanel("Map", leafletOutput("map")), 
+                # tab for raw data
+                tabPanel("Raw data", DT::dataTableOutput(width = "100%", "raw_data"))),
+            
+            # a data table for selected TP1 clusters
+            DT::dataTableOutput(width = "100%", "tp1_filtered_data")
+        
         )
     )
 )
@@ -142,24 +154,12 @@ server <- function(input, output) {
         # a cluster must be selected
         req(input$cluster)
         
-        # subset data for tp1 strains
-        #eccdata %>% 
-        #    # subset by cluster
-        #    subset(tp1_cluster %in% input$cluster) %>%
-        #    subset(present_at_tp1==1)
-        
         # this aggregates by province
         eccdata %>% 
-            subset(tp1_cluster %in% c("TP1_h0_c001")) %>%
+            subset(tp1_cluster %in% input$cluster) %>%
             subset(present_at_tp1==1) %>% 
             aggregate(.~province, data = ., unique) %>% 
             mutate(num_tp1_strains = lengths(strain))
-        
-        
-        # difficulty visualizing all strains
-        # as many occur at the same location
-        # how to capture this in visualization
-        
     })
     
     # data subset for TP1 clusters
@@ -183,11 +183,12 @@ server <- function(input, output) {
         # a cluster must be selected
         req(input$cluster)
         
-        # subset data for tp2 strains
         eccdata %>% 
-            # subset by cluster
             subset(tp1_cluster %in% input$cluster) %>%
-            subset(present_at_tp1==0)
+            subset(present_at_tp1==0) %>% 
+            aggregate(.~province, data = ., unique) %>% 
+            mutate(num_tp2_strains = lengths(strain))
+
     })
     
     # data subset for TP2 clusters
@@ -238,9 +239,12 @@ server <- function(input, output) {
     
     observe({
         
-        ###############################
-        # custom colouring of strains #
-        ###############################
+        ######################################
+        # custom "function to colour strains #
+        ######################################
+        
+        # this could be placed into a function in a separate module
+        # and called here 
         
         # if some inputs are old
         if(sum(as.character(input$cluster) %in% as.character(colorpal$tp1_cluster)) > 0) {
@@ -293,11 +297,14 @@ server <- function(input, output) {
         }
         
         
+        ##########################
+        # put circles on the map #
+        ##########################
+        
         leafletProxy("map") %>%
             
             # clear old shapes
             clearMarkers() %>%
-            
             
             # add circles that is the average of tp1 and tp2
             # dashed stroke to indicate average 
@@ -324,14 +331,15 @@ server <- function(input, output) {
                              opacity = input$centroid_transparency/100,
                              weight = 1,
                              color = "white",
-                             label = ~HTML(paste("Average TP1 date:", avg_tp1_date, "<br/>",
-                                                 "Strains in TP1 cluster:", tp1_cluster_size_2-1, "<br/>",
-                                                 "Latitude:", avg_tp1_latitude, "<br/>",
-                                                 "Longitude", avg_tp1_longitude, sep=" ")),
+                             label = lapply(seq(nrow(tp1_centroid())), function(i) {
+                                 ~HTML(paste("<b>", "TP1 cluster:", tp1_cluster[i], "</b>", "<br/>",
+                                             "Average  date:", avg_tp1_date[i], "<br/>",
+                                             "Strains in cluster:", (tp1_cluster_size_2[i])-1, "<br/>",
+                                             "Latitude:", avg_tp1_latitude[i], "<br/>",
+                                             "Longitude", avg_tp1_longitude[i], sep=" ")) 
+                             }),
                              labelOptions = labelOptions(noHide = F),
                              group = "TP1 centroid") %>%
-            
-            #class(cat(unlist(test$strain[[4]]), sep=";"))
             
             # add circles that correspond to tp1 strains
             addCircleMarkers(data = tp1_strains(),
@@ -344,15 +352,19 @@ server <- function(input, output) {
                              opacity = input$strain_transparency/100,
                              weight = 1,
                              color = "white",
-                             label = ~paste("Number of strains in cluster:", num_tp1_strains, "<br/>",
-                                            "Country:", country, "<br/>",  "Province:", province, sep=" "),
-                             labelOptions = labelOptions(noHide = F),
-                             group = "TP1 strains") %>%
+                             label = lapply(seq(nrow(tp1_strains())), function(i) {
+                                 ~HTML(paste("Country:", country[i], "<br/>",
+                                             "Province:",province[i],"<br/>",
+                                             "Number of TP1 strains:", num_tp1_strains[i], "<br/>",
+                                             "Part of TP1 cluster:", tp1_cluster[i], sep=" ")) 
+                             }),
+                                 labelOptions = labelOptions(noHide = F),
+                                 group = "TP1 strains") %>%
             
             # add circles that correspond to tp2  cluster centroids
             addCircleMarkers(data = tp2_centroid(),
-                             lat = ~avg_tp2_latitude,
-                             lng = ~avg_tp2_longitude,
+                             lat = ~as.numeric(avg_tp2_latitude),
+                             lng = ~as.numeric(avg_tp2_longitude),
                              radius = ~log10(as.numeric(avg_tp2_geo_dist_km))*10,
                              fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$centroid_transparency/100,
@@ -360,18 +372,22 @@ server <- function(input, output) {
                              opacity = input$centroid_transparency/100,
                              weight = 1,
                              color = "black",
-                             label = ~HTML(paste("Average TP2 date:", avg_tp2_date, "<br/>",
-                                                 "Strains in TP2 cluster:", tp2_cluster_size_2-1, "<br/>",
-                                                 "Latitude:", avg_tp2_latitude, "<br/>",
-                                                 "Longitude", avg_tp2_longitude, sep=" ")),
+                             label = lapply(seq(nrow(tp2_centroid())), function(i) {
+                                 ~HTML(paste("<b>", "TP2 cluster:", tp2_cluster[i], "</b>", "<br/>",
+                                             "Contains TP1 cluster:", tp1_cluster[i],"<br/>",
+                                             "Average date:", avg_tp2_date[i], "<br/>",
+                                             "Strains in cluster:", (tp2_cluster_size_2[i])-1, "<br/>",
+                                             "Novel strains:", num_novel_tp2_strains[i], "<br/>",
+                                             "Latitude:", avg_tp2_latitude[i], "<br/>",
+                                             "Longitude", avg_tp2_longitude[i], sep=" ")) 
+                             }),
                              labelOptions = labelOptions(noHide = F),
                              group = "TP2 centroid") %>%
 
-            
             # add circles that correspond to tp2 strains
             addCircleMarkers(data = tp2_strains(),
-                             lat = ~latitude,
-                             lng = ~longitude,
+                             lat = ~as.numeric(latitude),
+                             lng = ~as.numeric(longitude),
                              radius = 5,
                              fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$strain_transparency/100,
@@ -379,11 +395,14 @@ server <- function(input, output) {
                              opacity = input$strain_transparency/100,
                              weight = 1,
                              color = "black",                             
-                             label = ~strain,
+                             label = lapply(seq(nrow(tp2_strains())), function(i) {
+                                 ~HTML(paste("Country:", country[i], "<br/>",
+                                             "Province:",province[i],"<br/>",
+                                             "Number of TP2 strains:", num_tp2_strains[i], 
+                                             "Part of TP2 cluster:", tp2_cluster[i],sep=" ")) 
+                             }),
                              labelOptions = labelOptions(noHide = F),
-                             group = "TP2 strains") 
-        
-        
+                             group = "TP2 strains")
     })
     
     
@@ -413,6 +432,29 @@ server <- function(input, output) {
         
     })
     
+    
+    ###########################################
+    # data tables for cluster and strain info #
+    ###########################################
+    
+    
+    # 1. could we add some tables underneath that show some cluster information and that can be expanded to show the strain-level info?
+    # 2. Can we include some cluster/strain info on hover-overs
+    output$tp1_filtered_data = renderDT(expr = tp1_centroid() %>% 
+                                            select(tp1_cluster, tp2_cluster),
+                                        colnames=c("TP1 cluster", "TP2 cluster"))
+    
+    
+    ###########################################
+    # raw data table to be displayed in a tab #
+    ###########################################
+    
+    output$raw_data = renderDT(expr = eccdata,
+                               rownames = FALSE,
+                               #colnames=c("aa", "cc"),
+                               escape = -1,
+                               extensions = c( 'Scroller'))
+    
 }
 
 
@@ -423,17 +465,3 @@ shinyApp(ui = ui, server = server)
 
 
 
-labs <- lapply(seq(nrow(cities)), function(i) {
-    paste0( '<p>', cities[i, "name"], '<p></p>', 
-            cities[i, "region"], ', ', 
-            cities[i, "country"],'</p><p>', 
-            cities[i, "data"], '</p>' ) 
-})
-
-map2 = leaflet( cities ) %>%
-    addTiles() %>%
-    addCircles(lng = ~lng, lat = ~lat, fillColor = 'darkBlue', radius = 10000, 
-               stroke = FALSE, fillOpacity = 0.8,
-               label = lapply(labs, htmltools::HTML))
-
-map2
