@@ -207,14 +207,24 @@ ecc_all$strain_date <- paste(ecc_all$day,
 ecc_all <- subset(ecc_all, select = -c(month, day, year, city))
 
 
+################################
+# add jitter to lats and longs #
+################################
+
+ecc_all <- ecc_all %>%
+  mutate(tp1_strain_latitude_jit = jitter(as.numeric(tp1_strain_latitude),10,1)) %>%
+  mutate(tp1_strain_longitude_jit = jitter(as.numeric(tp1_strain_longitude),10,1)) %>%
+  mutate(tp2_strain_latitude_jit = jitter(as.numeric(tp2_strain_latitude),10,1)) %>%
+  mutate(tp2_strain_longitude_jit = jitter(as.numeric(tp2_strain_longitude),10,1))
+
+
 #################################
 # type convert selected columns #
 #################################
 
 # covert appropriate columns to numeric
-ecc_all[,c(4:6, 8:11, 13:17, 19:22, 24:37)] <- 
-  sapply(ecc_all[,c(4:6, 8:11, 13:17, 19:22, 24:37)], as.numeric)
-
+ecc_all[,c(4:6, 8:11, 13:17, 19:22, 24:37, 39:42)] <- 
+  sapply(ecc_all[,c(4:6, 8:11, 13:17, 19:22, 24:37, 39:42)], as.numeric)
 
 
 # initialize colorpal as null
@@ -255,6 +265,13 @@ ui <- fluidPage(
                                     max = 100,
                                     step = 1,
                                     value = 40),
+                      
+                        selectInput("centroid_radius",
+                                    "Centroid radius representation:",
+                                    choices = c("Avg geo dist",
+                                                "Tot num strain"),
+                                    selected = "Average geospatial distance", 
+                                    multiple = FALSE),
                         
                         checkboxInput("legend", "Show legend", TRUE))),
                
@@ -331,11 +348,12 @@ server <- function(input, output, session) {
       # if selection is not null then filter on it
       {if (!is.null(input$cluster)) filter(., tp1_cluster %in% input$cluster) else .} %>% 
       {if (!is.null(input$country)) filter(., country %in% input$country) else .} %>%
-      {if (!is.null(input$province)) filter(., province %in% input$province) else .}
+      {if (!is.null(input$province)) filter(., province %in% input$province) else .} 
+    
     #{if (FALSE) select(., cyl) else .}
   })
   
-  
+
   ###################################################################
   # reactable that appears below map and updates on user selections #
   ###################################################################
@@ -391,12 +409,11 @@ server <- function(input, output, session) {
   # list for any change in input
   toListen <- reactive({
     list(input$cluster, input$country, input$province, 
-         input$strain_transparency, input$centroid_transparency)
+         input$strain_transparency, input$centroid_transparency,
+         input$centroid_radius)
   })
   
   observeEvent(toListen(),{
-    
-    
     
     ################### color pal function start #################
     
@@ -467,7 +484,7 @@ server <- function(input, output, session) {
           addCircleMarkers(data = ecc_all_filtered(),
                            lat =  ~avg_tp1_latitude,
                            lng =  ~avg_tp1_longitude,
-                           radius = ~log10(as.numeric(avg_tp1_geo_dist_km))*10,
+                           radius = {if(input$centroid_radius=="Avg geo dist") ~log10(as.numeric(avg_tp1_geo_dist_km))*10 else ~log10(as.numeric(tp1_cluster_size))*10}, 
                            fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                            fillOpacity = input$centroid_transparency/100,
                            stroke = T,
@@ -492,7 +509,7 @@ server <- function(input, output, session) {
           addCircleMarkers(data = ecc_all_filtered(),
                            lat = ~avg_tp2_latitude,
                            lng = ~avg_tp2_longitude,
-                           radius = ~log10(as.numeric(avg_tp2_geo_dist_km))*10,
+                           radius = {if(input$centroid_radius=="Avg geo dist") ~log10(as.numeric(avg_tp2_geo_dist_km))*10 else ~log10(as.numeric(tp2_cluster_size))*10},
                            fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                            fillOpacity = input$centroid_transparency/100,
                            stroke = T,
@@ -518,8 +535,8 @@ server <- function(input, output, session) {
         print("updating tp1 strains")
         proxy %>% 
           addCircleMarkers(data = ecc_all_filtered(),
-                           lat = ~jitter(as.numeric(as.character(tp1_strain_latitude)), 10),
-                           lng = ~jitter(as.numeric(as.character(tp1_strain_longitude)), 10),
+                           lat = ~jitter(as.numeric(as.character(tp1_strain_latitude_jit)), 10),
+                           lng = ~jitter(as.numeric(as.character(tp1_strain_longitude_jit)), 10),
                            radius = 5,
                            fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                            fillOpacity = input$strain_transparency/100,
@@ -534,7 +551,6 @@ server <- function(input, output, session) {
                                          "Date:",strain_date[i],"<br/>", sep=" ")) 
                            }),
                            group = "TP1 strains")
-    
       }
       
       # add tp2 strains
@@ -543,8 +559,8 @@ server <- function(input, output, session) {
         print("updating tp2 strains")
         proxy %>%
           addCircleMarkers(data = ecc_all_filtered(),
-                           lat = ~jitter(as.numeric(as.character(tp2_strain_latitude)), 10),
-                           lng = ~jitter(as.numeric(as.character(tp2_strain_longitude)), 10),
+                           lat = ~jitter(as.numeric(as.character(tp2_strain_latitude_jit)), 10),
+                           lng = ~jitter(as.numeric(as.character(tp2_strain_longitude_jit)), 10),
                            radius = 5,
                            fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                            fillOpacity = input$strain_transparency/100,
