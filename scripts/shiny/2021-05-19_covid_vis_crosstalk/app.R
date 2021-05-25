@@ -22,11 +22,7 @@ library(leaflet) # for map visualizations
 library(maps) # for drawing maps/getting map data
 library(RColorBrewer) # for prettier colours
 library(reactable) # nested interable dables
-#library(shinyBS)
 library(crosstalk) # for talk between reactable and leaflet
-
-
-
 
 #######################
 # load and clean data #
@@ -41,8 +37,8 @@ eccdata <- eccdata[,-c(32:35)]
 
 # rename columns
 # remove spaces, all lowercase
-colnames(eccdata) <- c("strain", "country", "province", "city", "latitude", 
-                       "longitude", "day", "month", "year", "present_at_tp1", 
+colnames(eccdata) <- c("strain", "country", "province", "city", "tp1_latitude", 
+                       "tp1_longitude", "day", "month", "year", "present_at_tp1", 
                        "tp1_cluster", "tp1_cluster_size_2", "tp1_t0_ecc_0.1.0", 
                        "tp1_t0_ecc_0.0.1", "present_at_tp2", "tp2_cluster", 
                        "tp2_cluster_size_2", "tp2_t0_ecc_0.1.0", 
@@ -57,18 +53,93 @@ colnames(eccdata) <- c("strain", "country", "province", "city", "latitude",
                        "num_novel_tp2_strains", "overall_cluster_growth_rate", "cluster_novel_growth_rate", 
                        "type")
 
-eccdata$timepoint <- ifelse(eccdata$present_at_tp1==1, "tp1", "tp2")
 
-# make column for strain date
-eccdata$strain_date <- paste(eccdata$day, eccdata$month, eccdata$year, sep = "-")
+##############################################
+# create tp1 and tp2 strain specific columns #
+##############################################
 
-# remove month, day, year and city
-eccdata <- subset(eccdata,select = -c(month, day, year, city))
+# create additional latitude and longitude for tp2 strains
+eccdata$tp2_latitude <- eccdata$tp1_latitude
+eccdata$tp2_longitude <- eccdata$tp1_longitude
+
+# na out information that does not pertain to tp1 or tp1 strains
+eccdata_na <- apply(eccdata, 1, function(x){
+  # create NAs in tp1 data for tp2 strains
+  if(x["present_at_tp1"]==0){
+    x[c("present_at_tp1", "avg_tp1_date", "avg_tp1_temporal_dist_days",
+        "avg_tp1_longitude", "avg_tp1_latitude", "avg_tp1_geo_dist_km",
+        "tp1_latitude", "tp1_longitude")] <- NA
+  } 
+  # create na in tp2 strains for tp1 
+  else if(x["present_at_tp1"]==1){
+    x[c("tp2_latitude", "tp2_longitude")] <- NA
+    } 
+  # catch if neither of these conditions exist
+  else {print("uh oh")}
+  
+  # return df
+  return(x)
+})
+
+# transpose and convert to df
+eccdata_nat <- as.data.frame(t(eccdata_na))
+
+# make column for strain date instead of having three separate columns
+eccdata_nat$strain_date <- paste(eccdata_nat$day, 
+                                 eccdata_nat$month, 
+                                 eccdata_nat$year, 
+                                 sep = "-")
+
+# remove month day year and city
+eccdata <- subset(eccdata,
+                  select = -c(month, day, year, city))
+
+
+##############################################
+# create tp1 and tp2 strain specific columns #
+##############################################
+
+# subset out unique tp1 cluster info 
+tp1ecc <- eccdata %>% 
+  distinct(avg_tp1_date, .keep_all = T) 
+
+
+# na out information that does not pertain to tp1 clusters
+tp1ecc_na <- apply(tp1ecc, 1, function(x){
+  # create NAs in tp1 data for tp2 strains
+  if(x["present_at_tp1"]==0){
+    x[c("present_at_tp1", "avg_tp1_date", "avg_tp1_temporal_dist_days",
+        "avg_tp1_longitude", "avg_tp1_latitude", "avg_tp1_geo_dist_km",
+        "tp1_latitude", "tp1_longitude")] <- NA
+  } 
+  # create na in tp2 strains for tp1 
+  else if(x["present_at_tp1"]==1){
+    x[c("tp2_latitude", "tp2_longitude")] <- NA
+  } 
+  # catch if neither of these conditions exist
+  else {print("uh oh")}
+  
+  # return df
+  return(x)
+})
+
+# subset out unique tp1 cluster info 
+tp2ecc <- eccdata %>% 
+  subset(present_at_tp2 == 1) %>% 
+  distinct(avg_tp2_date, .keep_all = T) 
+
+
+# covert appropriate columns to numeric
+eccdata[,c(4:6, 8:11, 13:17, 19:22, 24:37)] <- 
+ sapply(eccdata[,c(4:6, 8:11, 13:17, 19:22, 24:37)], as.numeric)
+           
+
 
 # initialize colorpal as null
 colorpal <- NULL
 
 ecc_all <- eccdata
+
 ###################################
 # user interface of the shiny app #
 ###################################
@@ -190,53 +261,53 @@ server <- function(input, output, session) {
     # as a shared object between table and map
     ecc_all_share <- SharedData$new(ecc_all, group="ecc")
     
-    
-    # filter for tp1 cluster data
-    # filter eccdata based on user selections in UI
-    tp1_clust <- reactive({
-        ecc_all() %>% 
-            subset(timepoint=="tp1") %>%
-            distinct(avg_tp1_date, .keep_all = T)
-    })
-    
-    # an ecc share for tp1 clusters
-    tp1_clust_share <- SharedData$new(tp1_clust, group = "ecc")
-    
-    
-    # filter for tp1 strain data
-    # filter eccdata based on user selections in UI
-    tp1_strain <- reactive({
-        ecc_all() %>% 
-            subset(timepoint=="tp1") %>%
-            {if (nrow(.) >= 1) aggregate(.~province, data = ., unique) else .} %>% 
-            mutate(num_tp1_strains = lengths(strain))
-    })
-    
-    # an ecc share for tp1 clusters
-    tp1_strain_share <- SharedData$new(tp1_strain, group = "ecc")
-    
-    # filter for tp2 cluster data
-    # filter eccdata based on user selections in UI
-    tp2_clust <- reactive({
-        ecc_all() %>% 
-            distinct(tp2_cluster, .keep_all = T) %>%
-            subset(timepoint=="tp1")
-    })
-    
-    # an ecc share for tp1 clusters
-    tp2_clust_share <- SharedData$new(tp2_clust, group = "ecc")
-    
-    # filter for tp2 cluster data
-    # filter eccdata based on user selections in UI
-    tp2_strain <- reactive({
-        ecc_all() %>% 
-            subset(timepoint=="tp2") %>% 
-            {if (nrow(.) >= 1) aggregate(.~province, data = ., unique) else .} %>% 
-            mutate(num_tp2_strains = lengths(strain)) 
-    })
-    
-    # an ecc share for tp1 clusters
-    tp2_strain_share <- SharedData$new(tp2_strain, group = "ecc")
+    # 
+    # # filter for tp1 cluster data
+    # # filter eccdata based on user selections in UI
+    # tp1_clust <- reactive({
+    #     ecc_all() %>% 
+    #         subset(timepoint=="tp1") %>%
+    #         distinct(avg_tp1_date, .keep_all = T)
+    # })
+    # 
+    # # an ecc share for tp1 clusters
+    # tp1_clust_share <- SharedData$new(tp1_clust, group = "ecc")
+    # 
+    # 
+    # # filter for tp1 strain data
+    # # filter eccdata based on user selections in UI
+    # tp1_strain <- reactive({
+    #     ecc_all() %>% 
+    #         subset(timepoint=="tp1") %>%
+    #         {if (nrow(.) >= 1) aggregate(.~province, data = ., unique) else .} %>% 
+    #         mutate(num_tp1_strains = lengths(strain))
+    # })
+    # 
+    # # an ecc share for tp1 clusters
+    # tp1_strain_share <- SharedData$new(tp1_strain, group = "ecc")
+    # 
+    # # filter for tp2 cluster data
+    # # filter eccdata based on user selections in UI
+    # tp2_clust <- reactive({
+    #     ecc_all() %>% 
+    #         distinct(tp2_cluster, .keep_all = T) %>%
+    #         subset(timepoint=="tp1")
+    # })
+    # 
+    # # an ecc share for tp1 clusters
+    # tp2_clust_share <- SharedData$new(tp2_clust, group = "ecc")
+    # 
+    # # filter for tp2 cluster data
+    # # filter eccdata based on user selections in UI
+    # tp2_strain <- reactive({
+    #     ecc_all() %>% 
+    #         subset(timepoint=="tp2") %>% 
+    #         {if (nrow(.) >= 1) aggregate(.~province, data = ., unique) else .} %>% 
+    #         mutate(num_tp2_strains = lengths(strain)) 
+    # })
+    # 
+    # # an ecc share for tp1 clusters
+    # tp2_strain_share <- SharedData$new(tp2_strain, group = "ecc")
     
     ###################################################################
     # reactable that appears below map and updates on user selections #
@@ -358,7 +429,7 @@ server <- function(input, output, session) {
             clearMarkers() %>%
             
             # add circles that correspond to tp1 centroids
-            addCircleMarkers(data = tp1_clust_share,
+            addCircleMarkers(data = ecc_all_share,
                              lat =  ~avg_tp1_latitude,
                              lng =  ~avg_tp1_longitude,
                              radius = ~log10(as.numeric(avg_tp2_geo_dist_km))*10,
@@ -371,9 +442,9 @@ server <- function(input, output, session) {
                              group = "TP1 centroid") %>%
             
             # add circles that correspond to tp2  cluster centroids
-            addCircleMarkers(data = tp2_clust_share,
-                             lat = ~as.numeric(avg_tp2_latitude),
-                             lng = ~as.numeric(avg_tp2_longitude),
+            addCircleMarkers(data = ecc_all_share,
+                             lat = ~avg_tp2_latitude,
+                             lng = ~avg_tp2_longitude,
                              radius = ~log10(as.numeric(avg_tp2_geo_dist_km))*10,
                              fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$centroid_transparency/100,
@@ -383,22 +454,12 @@ server <- function(input, output, session) {
                              color = "black",
                              group = "TP2 centroid") %>%
             
-            # add circles that correspond to tp1 strains
-            addCircleMarkers(data = tp1_strain_share,
-                             lat = ~as.numeric(as.character(latitude)),
-                             lng = ~as.numeric(as.character(longitude)),
-                             radius = 5,
-                             fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
-                             fillOpacity = input$strain_transparency/100,
-                             stroke = T,
-                             opacity = input$strain_transparency/100,
-                             weight = 1,
-                             color = "white",
-                             group = "TP1 strains") %>%
-            
-            addCircleMarkers(data = tp2_strain_share,
-                             lat = ~as.numeric(as.character(latitude)),
-                             lng = ~as.numeric(as.character(longitude)),
+
+        # add circles that correspond to tp2 strains
+        
+            addCircleMarkers(data = ecc_all_share,
+                             lat = ~jitter(as.numeric(as.character(tp2_latitude)), 10),
+                             lng = ~jitter(as.numeric(as.character(tp2_longitude)), 10),
                              radius = 5,
                              fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                              fillOpacity = input$strain_transparency/100,
@@ -406,7 +467,19 @@ server <- function(input, output, session) {
                              opacity = input$strain_transparency/100,
                              weight = 1,
                              color = "black",     
-                             group = "TP2 strains")
+                             group = "TP2 strains") %>%
+        
+        addCircleMarkers(data = ecc_all_share,
+                         lat = ~jitter(as.numeric(as.character(tp1_latitude)), 10),
+                         lng = ~jitter(as.numeric(as.character(tp1_longitude)), 10),
+                         radius = 5,
+                         fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
+                         fillOpacity = input$strain_transparency/100,
+                         stroke = T,
+                         opacity = input$strain_transparency/100,
+                         weight = 1,
+                         color = "white",
+                         group = "TP1 strains") 
 
     })
     
@@ -414,7 +487,7 @@ server <- function(input, output, session) {
     # add reactive legend to plot #
     ###############################
     
-    observe({
+    observeEvent(input$cluster, {
         
         # require input cluster to change to update legend
         req(input$cluster)

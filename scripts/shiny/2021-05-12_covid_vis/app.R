@@ -23,6 +23,7 @@ library(maps) # for drawing maps/getting map data
 library(RColorBrewer) # for prettier colours
 library(reactable) # nested interable dables
 library(shinyBS)
+library(crosstalk)
 
 
 
@@ -55,11 +56,13 @@ colnames(eccdata) <- c("strain", "country", "province", "city", "latitude",
                        "num_novel_tp2_strains", "overall_cluster_growth_rate", "cluster_novel_growth_rate", 
                        "type")
 
+eccdata$timepoint <- ifelse(eccdata$present_at_tp1==1, "tp1", "tp2")
+
 # make column for strain date
 eccdata$strain_date <- paste(eccdata$day, eccdata$month, eccdata$year, sep = "-")
 
-# remove month, day, year
-eccdata <- subset(eccdata,select = -c(month, day, year))
+# remove month, day, year and city
+eccdata <- subset(eccdata,select = -c(month, day, year, city))
 
 # initialize colorpal as null
 colorpal <- NULL
@@ -182,7 +185,7 @@ ui <- fluidPage(
             # switch between map and the raw data that created it
             tabsetPanel(
                 # table for map
-                tabPanel("Map", leafletOutput("map"),reactableOutput("tp1_filtered_grouped_data")), 
+                tabPanel("Map", leafletOutput("map"), reactableOutput("tp1_filtered_grouped_data"),  verbatimTextOutput("table_state")), 
                 # tab for raw data
                 tabPanel("Raw data", reactableOutput("raw_data")),
                 # table panel for filtered data
@@ -222,74 +225,60 @@ server <- function(input, output, session) {
   # data subset avg centroid info
   avg_centroid <- reactive({
     
-    # a cluster must be selected
     req(input$cluster)
     
     eccdata %>% 
-      # subset by cluster
       subset(tp1_cluster %in% input$cluster) %>% 
       distinct(avg_tp1_date, .keep_all = T) %>%
       group_by(present_at_tp1) %>% 
-      subset(present_at_tp1==1)
-    
+      subset(timepoint=="tp1")
   })
   
   # data subset for TP1 strains
   tp1_strains <- reactive({
     
-    # a cluster must be selected
     req(input$cluster)
-    
-    # this aggregates by province
+
     eccdata %>% 
-      subset(tp1_cluster %in% input$cluster) %>%
-      subset(present_at_tp1==1) %>% 
-      aggregate(.~province, data = ., unique) %>% 
-      mutate(num_tp1_strains = lengths(strain)) 
+        subset(tp1_cluster %in% input$cluster) %>%
+        subset(timepoint=="tp1") %>% 
+        aggregate(.~province, data = ., unique) %>% 
+        mutate(num_tp1_strains = lengths(strain))
   })
+
   
   # data subset for TP1 clusters
   tp1_centroid <- reactive({
     
-    # a cluster must be selected
     req(input$cluster)
     
-    # subset data for tp1 clusters
     eccdata %>% 
-      # subset by cluster
       subset(tp1_cluster %in% input$cluster) %>%
-      # select only unique tp1 info
       distinct(avg_tp1_date, .keep_all = T) %>%
-      subset(present_at_tp1==1) 
+      subset(timepoint=="tp1")
   })
   
   # data subset for TP2 strains
   tp2_strains <- reactive({
     
-    # a cluster must be selected
     req(input$cluster)
     
     eccdata %>% 
       subset(tp1_cluster %in% input$cluster) %>%
-      subset(present_at_tp1==0) %>% 
+      subset(timepoint=="tp2") %>% 
       aggregate(.~province, data = ., unique) %>% 
       mutate(num_tp2_strains = lengths(strain)) 
-    
   })
   
   # data subset for TP2 clusters
   tp2_centroid <- reactive({
     
-    # a cluster must be selected
     req(input$cluster)
     
-    # subset data for tp1 clusters
     eccdata %>% 
-      # subset by cluster
       subset(tp1_cluster %in% input$cluster) %>%
-      # subset unique tp2 strains
       distinct(tp2_cluster, .keep_all = T) %>%
-      subset(present_at_tp2==1)
+      subset(timepoint=="tp1")
   })
   
   
@@ -329,24 +318,21 @@ server <- function(input, output, session) {
     # custom "function to colour strains #
     ######################################
     # this could be placed into a function in a separate module
-    # and called here 
+    # and called here i think?
     
     # if some inputs are old
     if(sum(as.character(input$cluster) %in% as.character(colorpal$tp1_cluster)) > 0) {
       
       # find out position of exisiting cluster(s) in colorpal
-      #pal_pos <-  colorpal$tp1_cluster %in% input$cluster
       pal_pos <- colorpal[colorpal$tp1_cluster %in% input$cluster, "rownum"]
       
       # set other positions to NA
-      #colorpal$tp1_cluster[!pal_pos] <- as.character(NA)
       colorpal[!colorpal$rownum %in% pal_pos, "tp1_cluster"] <- as.character(NA)
       
       # reorder according to rownum
       colorpal <- colorpal[order(colorpal$rownum),]
       
       # get NA positions
-      #na_pos <- is.na(colorpal$tp1_cluster)
       na_pos <- colorpal[is.na(colorpal$tp1_cluster), "rownum"]
       
       colorpal$tp1_cluster[na_pos] <- 
@@ -409,26 +395,7 @@ server <- function(input, output, session) {
                        dashArray = "4",
                        group = "Average centroid") %>%
       
-      #add circles that correspond to tp1 centroids
-      addCircleMarkers(data = tp1_centroid(),
-                       lat =  ~avg_tp1_latitude,
-                       lng =  ~avg_tp1_longitude,
-                       radius = ~log10(as.numeric(avg_tp1_geo_dist_km))*10,
-                       fillColor =  ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
-                       fillOpacity = input$centroid_transparency/100,
-                       stroke = T,
-                       opacity = input$centroid_transparency/100,
-                       weight = 1,
-                       color = "white",
-                       label = lapply(seq(nrow(tp1_centroid())), function(i) {
-                         ~HTML(paste("<b>", "TP1 cluster:", tp1_cluster[i], "</b>", "<br/>",
-                                     "Average  date:", avg_tp1_date[i], "<br/>",
-                                     "Strains in cluster:", (tp1_cluster_size_2[i])-1, "<br/>",
-                                     "Latitude:", avg_tp1_latitude[i], "<br/>",
-                                     "Longitude", avg_tp1_longitude[i], sep=" ")) 
-                       }),
-                       labelOptions = labelOptions(noHide = F),
-                       group = "TP1 centroid") %>%
+                           
       
       # add circles that correspond to tp1 strains
       addCircleMarkers(data = tp1_strains(),
@@ -449,7 +416,29 @@ server <- function(input, output, session) {
                        }),
                        labelOptions = labelOptions(noHide = F),
                        group = "TP1 strains") %>%
+     
+      # add circles that correspond to tp2  cluster centroids
+      addCircleMarkers(data = tp1_centroid(),
+                       lat = ~as.numeric(avg_tp1_latitude),
+                       lng = ~as.numeric(avg_tp1_longitude),
+                       radius = ~log10(as.numeric(avg_tp1_geo_dist_km))*10,
+                       fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
+                       fillOpacity = input$centroid_transparency/100,
+                       stroke = T,
+                       opacity = input$centroid_transparency/100,
+                       weight = 1,
+                       color = "black",
+                       label = lapply(seq(nrow(tp1_centroid())), function(i) {
+                         ~HTML(paste("<b>", "TP1 cluster:", tp1_cluster[i], "</b>", "<br/>",
+                                     "Average date:", avg_tp1_date[i], "<br/>",
+                                     "Strains in cluster:", (tp1_cluster_size_2[i])-1, "<br/>",
+                                     "Latitude:", avg_tp1_latitude[i], "<br/>",
+                                     "Longitude", avg_tp1_longitude[i], sep=" ")) 
+                       }),
+                       labelOptions = labelOptions(noHide = F),
+                       group = "TP1 centroid") %>%
       
+       
       # add circles that correspond to tp2  cluster centroids
       addCircleMarkers(data = tp2_centroid(),
                        lat = ~as.numeric(avg_tp2_latitude),
@@ -522,24 +511,39 @@ server <- function(input, output, session) {
   })
   
   
-  ###########################################
-  # data tables for cluster and strain info #
-  ###########################################
+  ##############################################################
+  # data table for cluster and strain info displayed below map #
+  ##############################################################
   
-  # displayed below map
+  # create 0 length variable
+  selected_rows <<- numeric()
+  
+  # data table displayed below map
   output$tp1_filtered_grouped_data <- renderReactable({
-    reactable(data = eccdata %>% subset(tp1_cluster %in% input$cluster),
+    
+    data = eccdata %>% subset(tp1_cluster %in% input$cluster)
+    reactable(data = data,
               groupBy = c("tp1_cluster", "country"),
               filterable = T,
-              searchable = T,
               sortable = T,
               showSortIcon = T,
               showSortable = T,
               compact = TRUE, 
               selection = "multiple")
   })
+
+  # rows are selectable/checkable
+  # when a row is selected get its row number
+  table_rows <- reactive({
+    state <- req(getReactableState("tp1_filtered_grouped_data", name = "selected"))
+    print(state)
+  })
   
 
+  ##############################################
+  # filtered data to be displayed in a new tab #
+  ##############################################
+  
   # displayed in new tab without grouping
   output$tp1_filtered_data <- renderReactable({
     reactable(data = eccdata %>% subset(tp1_cluster %in% input$cluster),  
@@ -562,7 +566,6 @@ server <- function(input, output, session) {
   })
   
   
-  
   ###########################################
   # raw data table to be displayed in a tab #
   ###########################################
@@ -582,53 +585,29 @@ server <- function(input, output, session) {
               pageSizeOptions = c(10, 25, 50, 100),
               paginationType = "numbers")
   })
-  
-  
-  
-  
-  #########################
-  # requests for data vis #
-  #########################
-  
-  # third table - a version of the raw data table that is being filtered 
-  # in the same way as the cascading table. i.e. if you select some clusters, 
-  # they get filtered on a table similar to the raw table
-  
-  # link search data to the data selected to view on the map?  
-  # i.e. say I filter the raw table for strains from Spain 
-  # and let's say that they belong to 10 clusters. 
-  # Any way to have those 10 clusters displayed on the map?
+
   
   ####################################################
   # clickable map to pull up info on clicked cluster #
   ####################################################
   
   observeEvent(input$map_marker_click, { 
-    p <- input$map_marker_click  # typo was on this line
-    print(p)
-    # p contains $id, $.nonce, $group, $lat, $lng
+    
+    #marker click contains $id, $.nonce, $group, $lat, $lng
+    markerclick <- input$map_marker_click  # typo was on this line
+    
+    # this is long  so do it beforehand
+    # make it global so that it can be accessed by other functions
+    selected_rows <<- intersect(intersect(which(eccdata %>% subset(tp1_cluster %in% c(input$cluster)) %>% .$longitude==markerclick$lng), 
+                                         which(eccdata %>% subset(tp1_cluster %in% c(input$cluster)) %>% .$latitude==markerclick$lat)),
+                               which(eccdata %>% subset(tp1_cluster %in% c(input$cluster)) %>% .$timepoint==tolower(substr(markerclick$group, 1, 3))))
+    
+  # update the data table to display corresponding strains as clicked 
+    updateReactable("tp1_filtered_grouped_data",
+                    data = eccdata %>% subset(tp1_cluster %in% input$cluster),
+                    selected = selected_rows,          
+                    expanded = T)
   })
-  
-  ####################################
-  # filter map output based on table #
-  ####################################
-  
-  
-  #filtered_table <- reactive({
-  #     req(input$mytable_rows_all)
-  #     mc[input$mytable_rows_all, ]  
-  # })
-  # 
-  # output$plot1 <- renderPlot({
-  #     plot(filtered_table()$wt, filtered_table()$mpg, col = "red", lwd = 10)
-  # })
-  # 
-  # output$test <- renderPrint({
-  #     filtered_table()
-  # })
-  
-  
-  
   
 }
 
@@ -639,4 +618,11 @@ server <- function(input, output, session) {
 shinyApp(ui = ui, server = server)
 
 
+#########################
+# requests for data vis #
+#########################
 
+# link search data to the data selected to view on the map?  
+# i.e. say I filter the raw table for strains from Spain 
+# and let's say that they belong to 10 clusters. 
+# Any way to have those 10 clusters displayed on the map?
