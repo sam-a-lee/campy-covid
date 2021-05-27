@@ -22,7 +22,6 @@ library(leaflet) # for map visualizations
 library(maps) # for drawing maps/getting map data
 library(RColorBrewer) # for prettier colours
 library(reactable) # nested interable dables
-#library(crosstalk) # for talk between reactable and leaflet
 
 #######################
 # load and clean data #
@@ -270,17 +269,10 @@ ui <- fluidPage(
                                     "Centroid radius representation:",
                                     choices = c("Avg geo dist",
                                                 "Tot num strain"),
-                                    selected = "Average geospatial distance", 
+                                    selected = "Avg geo dist", 
                                     multiple = FALSE),
                         
-                        checkboxInput("legend", "Show legend", TRUE),
-                        
-                        selectInput("centroid_radius",
-                                    "Centroid radius representation:",
-                                    choices = c("Average geo distance",
-                                                "Total number of strains"),
-                                    selected = "Average geospatial distance", 
-                                    multiple = FALSE))),
+                        checkboxInput("legend", "Show legend", TRUE))),
                
                column(9,leafletOutput("map"))
              ),
@@ -491,11 +483,7 @@ server <- function(input, output, session) {
           addCircleMarkers(data = ecc_all_filtered(),
                            lat =  ~avg_tp1_latitude,
                            lng =  ~avg_tp1_longitude,
-<<<<<<< HEAD
-                           radius = {if(input$centroid_radius=="Avg geo dist") ~log10(as.numeric(avg_tp1_geo_dist_km))*10 else ~log10(as.numeric(tp1_cluster_size))*10}, 
-=======
-                           radius = {if(input$centroid_radius=="Average geo distance") ~log10(as.numeric(avg_tp1_geo_dist_km))*10 else ~log10(as.numeric(tp1_cluster_size))*10}, 
->>>>>>> f59801f31f0e6af7ba51a7a17ec5fe1ebefa6ec2
+                           radius = {if(input$centroid_radius=="Avg geo dist") ~log10(as.numeric(avg_tp1_geo_dist_km))*10 else ~log10(as.numeric(tp1_cluster_size))*10},
                            fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                            fillOpacity = input$centroid_transparency/100,
                            stroke = T,
@@ -509,10 +497,7 @@ server <- function(input, output, session) {
                                          "Geo ECC:",tp1_t0_ecc_0.1.0[i],"<br/>",
                                          "Avg date:", avg_tp1_date[i],"<br/>", sep=" ")) 
                            }),
-                           group = "TP1 centroid") 
-        
-        
-        
+                           group = "TP1 centroid")
       }
       
       # add tp2 centroids
@@ -523,11 +508,7 @@ server <- function(input, output, session) {
           addCircleMarkers(data = ecc_all_filtered(),
                            lat = ~avg_tp2_latitude,
                            lng = ~avg_tp2_longitude,
-<<<<<<< HEAD
                            radius = {if(input$centroid_radius=="Avg geo dist") ~log10(as.numeric(avg_tp2_geo_dist_km))*10 else ~log10(as.numeric(tp2_cluster_size))*10},
-=======
-                           radius = {if(input$centroid_radius=="Average geo distance") ~log10(as.numeric(avg_tp2_geo_dist_km))*10 else ~log10(as.numeric(tp2_cluster_size))*10},
->>>>>>> f59801f31f0e6af7ba51a7a17ec5fe1ebefa6ec2
                            fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                            fillOpacity = input$centroid_transparency/100,
                            stroke = T,
