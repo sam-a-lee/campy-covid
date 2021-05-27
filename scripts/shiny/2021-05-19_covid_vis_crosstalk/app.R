@@ -360,17 +360,59 @@ server <- function(input, output, session) {
   # create a table using the shared data 
   output$ecctable <- renderReactable({
     reactable(data = ecc_all_filtered(),
-              pagination = FALSE,
               compact = TRUE,
+              resizable = TRUE, 
               sortable = T,
               showSortIcon = T,
               showSortable = T,
-              # Group by for the aggregation
+              pagination = TRUE,
+              defaultPageSize = 10,
+              showPageSizeOptions = T,
+              pageSizeOptions = c(10, 25, 50, 100),
+              paginationType = "numbers",
+              showPageInfo = TRUE,
+              minRows = 1,
               groupBy = c("tp1_cluster", "country"),
+              columns = list(tp1_cluster = colDef(defaultSortOrder = "asc"),
+                country = colDef(name = "Country"),
+                province = colDef(name = "Province"),
+                strain = colDef(name = "Strain")),
+              selection = "multiple", 
+              onClick = "select",
               theme = reactableTheme(
-                # set a default theme for font across table
-                style = list(fontFamily = "Fira Mono")))
+                rowSelectedStyle = list(backgroundColor = "#eee", boxShadow = "inset 2px 0 0 0 #ffa62d")
+              ))
   })
+  
+  
+  ################################################
+  # filtering map data based on table selections #
+  ################################################
+  
+  selected <- reactive(getReactableState("ecctable", "selected"))
+  
+  observe({
+    print(ecc_all_filtered() %>% slice(as.numeric(selected())))
+  })
+  
+  
+  ############################################
+  # table rendering based on map data clicks #
+  ############################################
+  
+  
+  observeEvent(input$map_marker_click, { 
+    p <- input$map_marker_click
+    print(p)
+  })
+  
+  # returns jittered lats and longs
+  # these should USUALLY be unique 
+  # as the jitter function adds in 
+  # RANDOM noise 
+  
+  
+  
   
   
   ####################
@@ -507,7 +549,7 @@ server <- function(input, output, session) {
         proxy %>% 
           addCircleMarkers(data = ecc_all_filtered(),
                            lat = ~avg_tp2_latitude,
-                           lng = ~avg_tp2_longitude,
+                           lng = ~avg_tp2_longitude,  
                            radius = {if(input$centroid_radius=="Avg geo dist") ~log10(as.numeric(avg_tp2_geo_dist_km))*10 else ~log10(as.numeric(tp2_cluster_size))*10},
                            fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                            fillOpacity = input$centroid_transparency/100,
@@ -534,6 +576,7 @@ server <- function(input, output, session) {
         print("updating tp1 strains")
         proxy %>% 
           addCircleMarkers(data = ecc_all_filtered(),
+                           layerId = ~strain,
                            lat = ~jitter(as.numeric(as.character(tp1_strain_latitude_jit)), 10),
                            lng = ~jitter(as.numeric(as.character(tp1_strain_longitude_jit)), 10),
                            radius = 5,

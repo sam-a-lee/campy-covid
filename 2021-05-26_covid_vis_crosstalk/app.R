@@ -23,7 +23,7 @@ library(maps) # for drawing maps/getting map data
 library(RColorBrewer) # for prettier colours
 library(reactable) # nested interable dables
 library(crosstalk) # for talk between reactable and leaflet
-library(DT)
+library(htmltools)
 
 #######################
 # load and clean data #
@@ -289,7 +289,8 @@ ui <- fluidPage(
                                             selected = "Average geospatial distance", 
                                             multiple = FALSE),
                                 
-                                checkboxInput("legend", "Show legend", TRUE))),
+                                #checkboxInput("legend", "Show legend", TRUE)
+                                )),
                      
                      column(9,leafletOutput("map"))
                  ),
@@ -347,6 +348,10 @@ server <- function(input, output, session) {
     ####################
     # base leaflet map #
     ####################
+    
+    data <- sd$data(withSelection = T) %>% subset("selection_"==T)
+        
+    data2 <-reactive({data})
 
     output$map <- renderLeaflet({
         
@@ -360,6 +365,13 @@ server <- function(input, output, session) {
             
             # set base zoom over mid asia/europe
             setView(lng = 60, lat = 50, zoom = 2) %>%
+            
+            # control layer for toggling strains and centroids on/off
+            # never changes so can be part of base map
+            addLayersControl(overlayGroups = c("TP1 centroid", "TP2 centroid",
+                                               "TP1 strains", "TP2 strains",
+                                               "legend"),
+                             options = layersControlOptions(collapsed = TRUE)) %>%
 
             addCircleMarkers(lat =  ~as.numeric(avg_tp1_latitude),
                              lng =  ~as.numeric(avg_tp1_longitude),
@@ -370,20 +382,51 @@ server <- function(input, output, session) {
                              opacity = input$centroid_transparency/100,
                              weight = 1,
                              color = "white",
-                             group = "TP1 centroid") #%>%
+                             group = "TP1 centroid") %>%
             
-            # addCircleMarkers(lat = ~avg_tp2_latitude,
-            #                  lng = ~avg_tp2_longitude,
-            #                  radius = {if(input$centroid_radius=="Avg geo dist") ~log10(as.numeric(avg_tp2_geo_dist_km))*10 else ~log10(as.numeric(tp2_cluster_size))*10},
-            #                  fillColor = "blue",
-            #                  fillOpacity = input$centroid_transparency/100,
-            #                  stroke = T,
-            #                  opacity = input$centroid_transparency/100,
-            #                  weight = 1,
-            #                  color = "black",
-            #                  group = "TP2 centroid")
+            addCircleMarkers(lat = ~avg_tp2_latitude,
+                             lng = ~avg_tp2_longitude,
+                             radius = {if(input$centroid_radius=="Avg geo dist") ~log10(as.numeric(avg_tp2_geo_dist_km))*10 else ~log10(as.numeric(tp2_cluster_size))*10},
+                             fillColor = ~factpal(tp1_cluster),
+                             fillOpacity = input$centroid_transparency/100,
+                             stroke = T,
+                             opacity = input$centroid_transparency/100,
+                             weight = 1,
+                             color = "black",
+                             group = "TP2 centroid") %>%
+            
+            addCircleMarkers(lat = ~tp1_strain_latitude,
+                             lng = ~tp1_strain_longitude,
+                             radius = 5, 
+                             fillColor = ~factpal(tp1_cluster),
+                             fillOpacity = input$strain_transparency/100,
+                             stroke = T,
+                             opacity = input$strain_transparency/100,
+                             weight = 1,
+                             color = "white",
+                             group = "TP1 strains") %>%
+            
+            addCircleMarkers(lat = ~tp2_strain_latitude,
+                             lng = ~tp2_strain_longitude,
+                             radius = 5, 
+                             fillColor = ~factpal(tp1_cluster),
+                             fillOpacity = input$strain_transparency/100,
+                             stroke = T,
+                             opacity = input$strain_transparency/100,
+                             weight = 1,
+                             color = "black",
+                             group = "TP2 strains") %>%
+            
+            addLegend(position = "bottomleft",
+                      colors =  ~factpal(data2()$tp1_cluster),
+                      labels =  unique(data2()$tp1_cluster),
+                      opacity = 1,
+                      group = "legend") %>%
+        
+        hideGroup("legend")
+            
+        
     })
-    
 
     ###################################################################
     # reactable that appears below map and updates on user selections #
