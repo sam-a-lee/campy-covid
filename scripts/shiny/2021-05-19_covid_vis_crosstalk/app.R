@@ -211,11 +211,13 @@ ecc_all <- subset(ecc_all, select = -c(month, day, year, city))
 ################################
 
 ecc_all <- ecc_all %>%
-  mutate(tp1_strain_latitude_jit = jitter(as.numeric(tp1_strain_latitude),10,1)) %>%
-  mutate(tp1_strain_longitude_jit = jitter(as.numeric(tp1_strain_longitude),10,1)) %>%
-  mutate(tp2_strain_latitude_jit = jitter(as.numeric(tp2_strain_latitude),10,1)) %>%
-  mutate(tp2_strain_longitude_jit = jitter(as.numeric(tp2_strain_longitude),10,1))
+  mutate(tp1_strain_latitude_jit = round(jitter(as.numeric(tp1_strain_latitude),10,1),digits=4)) %>%
+  mutate(tp1_strain_longitude_jit = round(jitter(as.numeric(tp1_strain_longitude),10,1),digits=4)) %>%
+  mutate(tp2_strain_latitude_jit = round(jitter(as.numeric(tp2_strain_latitude),10,1),digits=4)) %>%
+  mutate(tp2_strain_longitude_jit = round(jitter(as.numeric(tp2_strain_longitude),10,1),digits=4))
 
+# 12-13 decimal places in lats and longs
+# too long, round to four for our purposes
 
 #################################
 # type convert selected columns #
@@ -228,7 +230,6 @@ ecc_all[,c(4:6, 8:11, 13:17, 19:22, 24:37, 39:42)] <-
 
 # initialize colorpal as null
 colorpal <- NULL
-
 
 ###################################
 # user interface of the shiny app #
@@ -299,7 +300,69 @@ ui <- fluidPage(
                         selectizeInput("province",
                                        "Province:",
                                        choices = sort(unique(ecc_all$province)),
-                                       multiple = T)
+                                       multiple = T),
+                        
+                        sliderInput("tp1_cluster_size",
+                                    "TP1 cluster size:",
+                                    min = 0,
+                                    max = max(na.omit(ecc_all$tp1_cluster_size_2)),
+                                    step = 5,
+                                    value = c(0,max(na.omit(ecc_all$tp1_cluster_size_2)))),
+                        
+                        sliderInput("tp2_cluster_size",
+                                    "TP2 cluster size:",
+                                    min = 0,
+                                    max = max(na.omit(ecc_all$tp2_cluster_size_2)),
+                                    step = 5,
+                                    value = c(0,max(na.omit(ecc_all$tp2_cluster_size_2)))),
+                        
+                        # tp1 geospatial ecc
+                        sliderInput("tp1_ecc_0.1.0",
+                                    "TP1 geospatial ECC:",
+                                    min = 0,
+                                    max = 1,
+                                    step = 0.01,
+                                    value = c(0,1)),
+                        
+                        # tp1 temporal ecc
+                        sliderInput("tp1_ecc_0.0.1",
+                                    "TP1 temporal ECC:",
+                                    min = 0,
+                                    max = 1,
+                                    step = 0.01,
+                                    value = c(0,1)),
+                        
+                        # tp2 geospatial ecc
+                        sliderInput("tp2_ecc_0.1.0",
+                                    "TP2 geospatial ECC:",
+                                    min = 0,
+                                    max = 1,
+                                    step = 0.01,
+                                    value = c(0,1)),
+                        
+                        # tp2 temporal ecc
+                        sliderInput("tp2_ecc_0.0.1",
+                                    "TP2 temporal ECC:",
+                                    min = 0,
+                                    max = 1,
+                                    step = 0.01,
+                                    value = c(0,1)),
+                        
+                        # delta geospatial ecc
+                        sliderInput("delta_ecc_0.1.0",
+                                    "Delta geospatial ECC:",
+                                    min = -1,
+                                    max = 1,
+                                    step = 0.01,
+                                    value = c(-1,1)),
+                        
+                        # delta temporal ecc
+                        sliderInput("delta_ecc_0.0.1",
+                                    "Delta temporal ECC:",
+                                    min = -1,
+                                    max = 1,
+                                    step = 0.01,
+                                    value = c(-1,1))
                       )),
                column(9,
                       reactableOutput("ecctable")
@@ -336,9 +399,9 @@ server <- function(input, output, session) {
   })
   
   
-  #####################
-  # data manipulation #
-  #####################
+  ######################################
+  # data filtering based on selections #
+  ######################################
   
   # filter based
   ecc_all_filtered <- reactive({
@@ -347,22 +410,90 @@ server <- function(input, output, session) {
       # if selection is not null then filter on it
       {if (!is.null(input$cluster)) filter(., tp1_cluster %in% input$cluster) else .} %>% 
       {if (!is.null(input$country)) filter(., country %in% input$country) else .} %>%
-      {if (!is.null(input$province)) filter(., province %in% input$province) else .} 
+      {if (!is.null(input$province)) filter(., province %in% input$province) else .}
     
     #{if (FALSE) select(., cyl) else .}
   })
   
+  
+  # unique tp1 clusters for table 
+  ecc_all_filtered_tp1 <- reactive({
+    
+    isolate(ecc_all_filtered()) %>%
+      filter(grepl('TP1|^0$', strain)) %>%
+      {if (!is.null(input$cluster)) filter(., strain %in% input$cluster) else .} %>% 
+      distinct(tp1_cluster, .keep_all = T) %>%
+      select(tp1_cluster, avg_tp1_latitude, avg_tp1_longitude, avg_tp1_geo_dist_km, 
+                 avg_tp1_temporal_dist_days, avg_tp2_latitude, avg_tp2_longitude, 
+                 avg_tp2_geo_dist_km, avg_tp2_temporal_dist_days, tp1_t0_ecc_0.1.0, 
+                 tp1_t0_ecc_0.0.1, tp2_t0_ecc_0.1.0, tp2_t0_ecc_0.0.1, delta_ecc_0.1.0,
+                 delta_ecc_0.0.1, tp1_cluster_size_2, tp2_cluster_size_2, tp2_cluster,
+                 delta_cluster_size, num_additional_tp1_strains_tp2, num_novel_tp2_strains, 
+                 overall_cluster_growth_rate, cluster_novel_growth_rate) %>% 
+      relocate(tp1_cluster, tp1_cluster_size_2, tp1_t0_ecc_0.1.0, tp1_t0_ecc_0.0.1,
+               avg_tp1_geo_dist_km, avg_tp1_temporal_dist_days,
+               avg_tp1_latitude, avg_tp1_longitude,
+               tp2_cluster, tp2_cluster_size_2, tp2_t0_ecc_0.1.0, tp2_t0_ecc_0.0.1,
+               avg_tp2_geo_dist_km, avg_tp2_temporal_dist_days,
+               avg_tp2_latitude, avg_tp2_longitude,
+               delta_cluster_size, delta_ecc_0.1.0, delta_ecc_0.0.1,
+               num_additional_tp1_strains_tp2, num_novel_tp2_strains,
+               overall_cluster_growth_rate, cluster_novel_growth_rate)
 
+    
+    # this gets unique tp2 strains
+    # (ecc_all %>% filter(grepl('TP1|^0$|TP2', strain)) %>% distinct(strain, tp1_cluster, .keep_all = T)) %>% filter(grepl('TP2', strain))
+    # make.names for unique naming 
+  })
+  
   ###################################################################
   # reactable that appears below map and updates on user selections #
   ###################################################################
   
   # create a table using the shared data 
   output$ecctable <- renderReactable({
-    reactable(data = ecc_all_filtered(),
+    
+
+    
+    reactable(data = ecc_all_filtered_tp1(),
+              details = function(index) {
+                plant_data <-  ecc_all_filtered() %>% 
+                  subset(tp1_cluster == ecc_all_filtered_tp1()$tp1_cluster[index]) %>%
+                  select(country, province, present_at_tp1, present_at_tp2, strain,
+                         tp1_strain_latitude, tp1_strain_longitude, 
+                         tp2_strain_latitude, tp2_strain_longitude,
+                         strain_date) %>% 
+                  # filter to remove cluster info from strains 
+                  relocate(country, province, strain, strain_date, present_at_tp1, 
+                           present_at_tp2, tp1_strain_latitude, tp1_strain_longitude, 
+                           tp2_strain_latitude, tp2_strain_longitude)
+                htmltools::div(style = "padding: 16px",
+                               reactable(plant_data, 
+                                         outlined = TRUE,
+                                         compact = TRUE,
+                                         resizable = TRUE,
+                                         sortable = T,
+                                         highlight = T,
+                                         showSortIcon = T,
+                                         showSortable = T,
+                                         pagination = F,
+                                         height = 600, 
+                                         columns = list(country = colDef(name = "Country"),
+                                                        province = colDef(name = "Province"),
+                                                        strain = colDef(name = "Strain"),
+                                                        present_at_tp1 = colDef(name = "Present at TP1"),
+                                                        present_at_tp2 = colDef(name = "Present at TP2"),
+                                                        tp1_strain_latitude = colDef(name = "TP1 strain latitude"),
+                                                        tp1_strain_longitude = colDef(name = "TP1 strain longitude"),
+                                                        tp2_strain_latitude = colDef(name = "TP2 strain latitude"),
+                                                        tp2_strain_longitude = colDef(name = "TP2 strain longitude"),
+                                                        strain_date = colDef(name = "Date identified"))
+                               ))
+              },
               compact = TRUE,
-              resizable = TRUE, 
+              resizable = TRUE,
               sortable = T,
+              highlight = T,
               showSortIcon = T,
               showSortable = T,
               pagination = TRUE,
@@ -372,16 +503,38 @@ server <- function(input, output, session) {
               paginationType = "numbers",
               showPageInfo = TRUE,
               minRows = 1,
-              groupBy = c("tp1_cluster", "country"),
-              columns = list(tp1_cluster = colDef(defaultSortOrder = "asc"),
-                country = colDef(name = "Country"),
-                province = colDef(name = "Province"),
-                strain = colDef(name = "Strain")),
-              selection = "multiple", 
+              wrap = TRUE,
+              height = 500,
+              #selection = {if(!is.null(input$cluster)) "multiple" else NULL },  
               onClick = "select",
-              theme = reactableTheme(
-                rowSelectedStyle = list(backgroundColor = "#eee", boxShadow = "inset 2px 0 0 0 #ffa62d")
-              ))
+              # theme = reactableTheme(
+              #   rowSelectedStyle = list(backgroundColor = "hsl(58, 100%, 76%)", boxShadow = "inset 2px 0 0 0 #ffa62d")
+              # ),
+              columns = list(tp1_cluster = colDef(name = "TP1 cluster"),
+                             tp2_cluster = colDef(name = "TP2 cluster"),
+                             avg_tp1_latitude = colDef(name = "TP1 cluster latitude"),
+                             avg_tp1_longitude = colDef(name = "TP1 cluster longitude" ),
+                             avg_tp1_geo_dist_km = colDef(name = "Average distance between TP1 strains (km)"),
+                             avg_tp1_temporal_dist_days = colDef(name = "Average time between TP1 strains (days)"),
+                             avg_tp2_latitude = colDef(name = "TP2 cluster latitude"),
+                             avg_tp2_longitude = colDef(name = "TP2 cluster longitude"),
+                             avg_tp2_geo_dist_km = colDef(name = "Average distance between TP2 strains (km)"),
+                             avg_tp2_temporal_dist_days = colDef(name = "Average time between TP2 strains (days)"),
+                             tp1_t0_ecc_0.1.0 = colDef(name = "TP1 cluster geospatial ECC"),
+                             tp1_t0_ecc_0.0.1 = colDef(name = "TP1 cluster temporal ECC"),
+                             tp2_t0_ecc_0.1.0 = colDef(name = "TP2 cluster geospatial ECC"),
+                             tp2_t0_ecc_0.0.1 = colDef(name = "TP2 cluster temporal ECC"),
+                             delta_ecc_0.1.0 = colDef(name = "Delta geospatial ECC"),
+                             delta_ecc_0.0.1 = colDef(name = "Delta temporal ECC"),
+                             tp1_cluster_size_2 = colDef(name = "TP1 cluster size"),
+                             tp2_cluster_size_2 = colDef(name = "TP2 cluster size"),
+                             delta_cluster_size = colDef(name = "Delta cluster size"),
+                             num_additional_tp1_strains_tp2 = colDef(name = "Number of additional TP1 strains in TP2 cluster"),
+                             num_novel_tp2_strains =  colDef(name = "Number of novel TP2 strains"),
+                             overall_cluster_growth_rate = colDef(name = "Overall cluster growth rate"),
+                             cluster_novel_growth_rate = colDef(name = "Novel cluster growth rate")
+                             )
+    )
   })
   
   
@@ -393,6 +546,7 @@ server <- function(input, output, session) {
   
   observe({
     print(ecc_all_filtered() %>% slice(as.numeric(selected())))
+    print(selected())
   })
   
   
@@ -400,19 +554,30 @@ server <- function(input, output, session) {
   # table rendering based on map data clicks #
   ############################################
   
-  
-  observeEvent(input$map_marker_click, { 
+   observeEvent(input$map_marker_click, { 
+    # get info from marker click
     p <- input$map_marker_click
-    print(p)
+    
+    # get the corresponding rownum in table
+    rownum1 <- intersect(which(ecc_all_filtered()$tp1_strain_latitude_jit == p$lat),
+                        which(ecc_all_filtered()$tp1_strain_longitude_jit == p$lng))
+    
+    rownum2 <- intersect(which(ecc_all_filtered()$tp2_strain_latitude_jit == p$lat),
+                        which(ecc_all_filtered()$tp2_strain_longitude_jit == p$lng))
+    
+    # get the corresponding rownum in table
+    rownum3 <- intersect(which(ecc_all_filtered()$avg_tp1_latitude == p$lat),
+                        which(ecc_all_filtered()$avg_tp1_longitude == p$lng))
+    
+    rownum4 <- intersect(which(ecc_all_filtered()$avg_tp2_latitude == p$lat),
+                        which(ecc_all_filtered()$avg_tp2_longitude == p$lng))
+    
+    rownum <- c(rownum1, rownum2, rownum3, rownum4)
+    
+    # updateReactable("ecctable",
+    #                 selected = rownum,
+    #                 expanded = T)
   })
-  
-  # returns jittered lats and longs
-  # these should USUALLY be unique 
-  # as the jitter function adds in 
-  # RANDOM noise 
-  
-  
-  
   
   
   ####################
@@ -577,8 +742,8 @@ server <- function(input, output, session) {
         proxy %>% 
           addCircleMarkers(data = ecc_all_filtered(),
                            layerId = ~strain,
-                           lat = ~jitter(as.numeric(as.character(tp1_strain_latitude_jit)), 10),
-                           lng = ~jitter(as.numeric(as.character(tp1_strain_longitude_jit)), 10),
+                           lat = ~as.numeric(as.character(tp1_strain_latitude_jit), 10),
+                           lng = ~as.numeric(as.character(tp1_strain_longitude_jit), 10),
                            radius = 5,
                            fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                            fillOpacity = input$strain_transparency/100,
@@ -601,8 +766,8 @@ server <- function(input, output, session) {
         print("updating tp2 strains")
         proxy %>%
           addCircleMarkers(data = ecc_all_filtered(),
-                           lat = ~jitter(as.numeric(as.character(tp2_strain_latitude_jit)), 10),
-                           lng = ~jitter(as.numeric(as.character(tp2_strain_longitude_jit)), 10),
+                           lat = ~as.numeric(as.character(tp2_strain_latitude_jit), 10),
+                           lng = ~as.numeric(as.character(tp2_strain_longitude_jit), 10),
                            radius = 5,
                            fillColor = ~unname(unlist(sapply(tp1_cluster, function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector"))),
                            fillOpacity = input$strain_transparency/100,
@@ -714,3 +879,105 @@ shinyApp(ui = ui, server = server)
 
 # need to add jitter in before plotting - otherwise gets confusing
 # because points move each time plot is updated
+
+
+
+##############
+# scrap code #
+##############
+
+
+
+
+# reactable(data = ecc_all_filtered(),
+#           compact = TRUE,
+#           resizable = TRUE, 
+#           sortable = T,
+#           highlight = T,
+#           showSortIcon = T,
+#           showSortable = T,
+#           pagination = TRUE,
+#           defaultPageSize = 10,
+#           showPageSizeOptions = T,
+#           pageSizeOptions = c(10, 25, 50, 100),
+#           paginationType = "numbers",
+#           showPageInfo = TRUE,
+#           minRows = 1,
+#           wrap = TRUE,
+#           height = 500, 
+#           defaultSorted = "tp1_cluster", 
+#           groupBy = c("tp1_cluster", "country"),
+#           selection = {if(!is.null(input$cluster)) "multiple" else NULL },  
+#           onClick = "select",
+#           theme = reactableTheme(
+#             rowSelectedStyle = list(backgroundColor = "hsl(58, 100%, 76%)", boxShadow = "inset 2px 0 0 0 #ffa62d")
+#           ),
+#           columns = list(tp1_cluster = colDef(name = "TP1 cluster"),
+#                          country = colDef(name = "Country"),
+#                          province = colDef(name = "Province"),
+#                          strain = colDef(name = "Strain"),
+#                          present_at_tp1 = colDef(name = "Present at TP1"),
+#                          tp1_strain_latitude = colDef(name = "TP1 strain latitude"),
+#                          tp1_strain_longitude = colDef(name = "TP1 strain longitude"),
+#                          tp2_strain_latitude = colDef(name = "TP2 strain latitude"),
+#                          tp2_strain_longitude = colDef(name = "TP2 strain longitude"),
+#                          avg_tp1_latitude = colDef(name = "TP1 cluster latitude"),
+#                          avg_tp1_longitude = colDef(name = "TP1 cluster longitude" ),
+#                          avg_tp1_geo_dist_km = colDef(name = "Average distance between TP1 strains (km)"),
+#                          avg_tp1_temporal_dist_days = colDef(name = "Average time between TP1 strains (days)"),
+#                          avg_tp2_latitude = colDef(name = "TP2 cluster latitude"),
+#                          avg_tp2_longitude = colDef(name = "TP2 cluster longitude"),
+#                          avg_tp2_geo_dist_km = colDef(name = "Average distance between TP2 strains (km)"),
+#                          avg_tp2_temporal_dist_days = colDef(name = "Average time between TP2 strains (days)"),
+#                          tp1_t0_ecc_0.1.0 = colDef(name = "TP1 cluster geospatial ECC"),
+#                          tp1_t0_ecc_0.0.1 = colDef(name = "TP1 cluster temporal ECC",),
+#                          tp2_t0_ecc_0.1.0 = colDef(name = "TP2 cluster geospatial ECC"),
+#                          tp2_t0_ecc_0.0.1 = colDef(name = "TP2 cluster temporal ECC"),
+#                          delta_ecc_0.1.0 = colDef(name = "Delta geospatial ECC"),
+#                          delta_ecc_0.0.1 = colDef(name = "Delta temporal ECC"),
+#                          tp1_cluster_size_2 = colDef(name = "TP1 cluster size"),
+#                          tp2_cluster_size_2 = colDef(name = "TP2 cluster size"),
+#                          delta_cluster_size = colDef(name = "Delta cluster size"),
+#                          num_additional_tp1_strains_tp2 = colDef(name = "Number of additional TP1 strains in TP2 cluster"),
+#                          num_novel_tp2_strains =  colDef(name = "Number of novel TP2 strains"),
+#                          overall_cluster_growth_rate = colDef(name = "Overall cluster growth rate"),    
+#                          cluster_novel_growth_rate = colDef(name = "Novel cluster growth rate"),
+#                          type = colDef(show=FALSE),
+#                          tp1_strain_latitude_jit = colDef(show=FALSE), 
+#                          tp1_strain_longitude_jit = colDef(show=FALSE),
+#                          tp2_strain_latitude_jit = colDef(show=FALSE), 
+#                          tp2_strain_longitude_jit = colDef(show=FALSE),
+#                          tp1_cluster_size = colDef(show=FALSE),
+#                          tp2_cluster_size = colDef(show=FALSE)
+#                          ))
+
+
+
+
+
+# # get tp1 cluster
+# tp1clust <- ecc_all_filtered()$tp1_cluster[rownum]
+# 
+# 
+# print(tp1clust)
+# 
+# # get the index of tp1_cluster in unique
+# tp1clustpos <- which(unique(ecc_all_filtered()$tp1_cluster)==tp1clust)
+# 
+# print(tp1clustpos )
+
+# # get page size
+# pagesize <- getReactableState("ecctable", name = "pageSize", session = NULL)
+# 
+# # round down page
+# page = floor(tp1clustpos/pagesize)
+# 
+
+
+
+# returns jittered lats and longs
+# these should USUALLY be unique 
+# as the jitter function adds in 
+# RANDOM noise 
+
+
