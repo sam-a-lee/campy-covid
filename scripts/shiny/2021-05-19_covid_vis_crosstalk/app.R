@@ -23,7 +23,7 @@ library(leaflet) # for map visualizations
 library(maps) # for drawing maps/getting map data
 library(RColorBrewer) # for prettier colours
 library(reactable) # nested interable dables
-library(ggridges) # for ridge plots 
+library(plotly) # for interactive ggplots
 
 #######################
 # load and clean data #
@@ -249,7 +249,8 @@ ui <- fluidPage(
                         
                         checkboxInput("legend", "Show legend", TRUE))),
                
-               column(9,leafletOutput("map"))
+               column(4,leafletOutput("map")),
+               column(4, plotlyOutput(outputId = "ridgeplot"))
              ),
              
              # data at bottom
@@ -369,13 +370,12 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   
   
-  ###################################
-  # initialize some reactive values #
-  ###################################
+  ##################################################
+  # initialize some reactive values for map clicks #
+  ##################################################
   
   strain_click <- reactiveVal(NA)
   cluster_click <- reactiveVal(NA)
-  
   
   
   ###################################
@@ -916,6 +916,128 @@ server <- function(input, output, session) {
   ###################
   
   
+  output$ridgeplot <- renderPlotly({
+    # dont run until at least one cluster selected 
+    req(input$cluster)
+    
+    # this should be moved into a function eventually
+    # if some inputs are old
+    if(sum(as.character(input$cluster) %in% as.character(colorpal$tp1_cluster)) > 0) {
+      
+      # find out position of exisiting cluster(s) in colorpal
+      pal_pos <- colorpal[colorpal$tp1_cluster %in% input$cluster, "rownum"]
+      
+      # set other positions to NA
+      colorpal[!colorpal$rownum %in% pal_pos, "tp1_cluster"] <- as.character(NA)
+      
+      # reorder according to rownum
+      colorpal <- colorpal[order(colorpal$rownum),]
+      
+      # get NA positions
+      na_pos <- colorpal[is.na(colorpal$tp1_cluster), "rownum"]
+      
+      colorpal$tp1_cluster[na_pos] <- 
+        as.character(c(input$cluster[!input$cluster %in% colorpal$tp1_cluster],
+                       as.character(rep(NA, length(na_pos) - length(input$cluster[!input$cluster %in% colorpal$tp1_cluster])))))
+      
+      colorpal <<- colorpal
+      colorpal_nona <<- na.omit(colorpal)
+      
+      cat(file=stderr(), "modifying old colours", "\n")
+    } 
+    
+    
+    # if all inputs are new
+    if(is.null(colorpal)) {
+      
+      # new pal 
+      colorpal <- data.frame(tp1_cluster = as.character(rep(NA,9)), colour = brewer.pal(9, "Set1"), rownum = 1:9)
+      
+      # assign new tp1 clusters
+      colorpal$tp1_cluster <- as.character(c(input$cluster, as.character(rep(NA, 9-length(input$cluster)))))
+      
+      colorpal <<- colorpal
+      colorpal_nona <<- na.omit(colorpal)
+      
+      cat(file=stderr(), "all new colours!", "\n")
+    }
+    
+    # if no colours selected
+    if(length(input$cluster)==0){
+      colorpal <- NULL
+      colorpal <<- colorpal
+    }
+    
+    
+
+    
+    df <- as.data.frame(ecc_all_filtered() %>% 
+                          mutate(time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y")))))
+    
+    p <- plot_ly(type = 'violin')
+    
+    i = 0
+    for (i in 1:length(unique(df$tp1_cluster))) {
+      # plotly violin plot
+      p <- p %>%  add_trace(df,
+                            y = df$tp1_cluster[df$present_at_tp1 == 0 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+                            x = df$time_diff[df$present_at_tp1 == 0 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+                            legendgroup = "TP2 clusters",
+                            scalemode = "count",
+                            side = 'positive',
+                            orientation = "h",
+                            color = I(unname(unlist(sapply(df$tp1_cluster[df$present_at_tp1 == 0 & df$tp1_cluster == unique(df$tp1_cluster)[i]], 
+                                                           function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector")))),
+                            meanline = list(
+                              visible = T
+                            ),
+                            name =  unique(df$tp2_cluster[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]]),
+                            points = "all",
+                            line = list(color = "black",
+                                        width = 1),
+                            marker = list(opacity = 0.4,
+                                          size = 10, 
+                                          line = list(color = "black",
+                                                      width = 1)))
+      
+      p <-  p %>% add_trace(df,
+                            y = df$tp1_cluster[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+                            x = df$time_diff[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+                            legendgroup = "TP1 clusters", 
+                            scalemode = "count",
+                            side = 'positive',
+                            orientation = "h",
+                            color = I(unname(unlist(sapply(df$tp1_cluster[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]], 
+                                                           function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector")))),
+                            meanline = list(
+                              visible = T
+                            ),
+                            line = list(width = 1),
+                            name =  df$tp1_cluster[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+                            points="all",
+                            marker = list(opacity = 0.4, 
+                                          size = 10)) 
+    }
+    
+    p <- p %>%
+      
+      
+      layout(
+        # y axis formatting
+        yaxis = list(
+          title = "TP1 cluster"
+        ),
+        # x axis formating 
+        xaxis = list(
+          title = "Elapsed time (days) since 01-01-2020"
+        )
+      )
+    
+    p
+    
+  })
+  
+  
   
   ####################################################
   # raw data filtered table to be displayed in a tab #
@@ -996,28 +1118,107 @@ shinyApp(ui = ui, server = server)
 #ggplot(test %>% subset(present_at_tp1==1), aes(y=tp1_cluster, x=time_diff)) + geom_density_ridges()+ theme_bw() + theme(panel.grid = element_blank(), panel.border = element_blank()) + labs(x="Elapsed time (days) since January 01, 2020", y = "TP1 cluster")
 
 
-
-# ggplot() + 
-#   geom_density_ridges(test %>% subset(present_at_tp1==0), 
-#                       mapping=aes(y=tp1_cluster, x=time_diff, 
-#                                   fill=tp1_cluster), linetype="dashed", alpha=0.5,  scale=0.8) + 
-#   geom_density_ridges(test %>% subset(present_at_tp1==1), 
+# 
+# ggplot() +
+#   geom_density_ridges(ecc_all_filtered() %>% 
+#                         subset(present_at_tp1==0) %>%
+#                         mutate(time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y")))),
 #                       mapping=aes(y=tp1_cluster, x=time_diff,
-#                                   fill=tp1_cluster), alpha=0.5, scale=0.8) + 
-#   theme_bw() + 
-#   theme(panel.grid = element_blank(), 
-#         panel.border = element_blank()) + 
+#                                   fill=tp1_cluster), linetype="dashed", alpha=0.5,  scale=0.8) +
+#   geom_density_ridges(ecc_all_filtered() %>%
+#                         subset(present_at_tp1==1) %>%
+#                         mutate(time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y")))),
+#                       mapping=aes(y=tp1_cluster, x=time_diff,
+#                                   fill=tp1_cluster), alpha=0.5, scale=0.8, inherit.aes = F) +
+#   theme_bw() +
+#   theme(panel.grid = element_blank(),
+#         panel.border = element_blank()) +
 #   labs(x="Elapsed time (days) since January 01, 2020", y = "TP1 cluster")
+# 
+# 
+# 
+# test$time_diff <- numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(test$strain_date, format = "%d-%m-%y")))
+# 
+# test <- ecc_all %>% subset(tp1_cluster %in% c("TP1_h0_c001", "TP1_h0_c002", "TP1_h0_c003", "TP1_h0_c004", "TP1_h0_c005", "TP1_h0_c006"))
+# 
+# ggplot(test %>% 
+#          subset(present_at_tp1==1) %>%
+#          mutate(time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y")))),
+#        aes(x=tp1_cluster, y=time_diff, group=tp1_cluster)) +
+#   geom_violin(trim=FALSE, side = "positive") +
+#   theme_bw()
+#   
+# 
+# 
+# 
+# fig <- test %>% 
+#   subset(present_at_tp1==1) %>%
+#   mutate(time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y")))) %>%
+#   plot_ly(type = 'violin') 
 
 
 
-
-
-
-
-
-
-
-
-
-
+# df <- as.data.frame(test %>% 
+#   mutate(time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y")))))
+# 
+# p <- 
+#   plot_ly(type = 'violin')
+#   
+# i = 0
+# for (i in 1:length(unique(df$tp1_cluster))) {
+# # plotly violin plot
+# p <- p %>%  add_trace(df,
+#                       y = df$tp1_cluster[df$present_at_tp1 == 0 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+#                       x = df$time_diff[df$present_at_tp1 == 0 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+#                       legendgroup = "TP2 clusters",
+#                       scalemode = "count",
+#                       side = 'positive',
+#                       orientation = "h",
+#                       color = I(unname(unlist(sapply(df$tp1_cluster[df$present_at_tp1 == 0 & df$tp1_cluster == unique(df$tp1_cluster)[i]], 
+#                                                      function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector")))),
+#                       meanline = list(
+#                         visible = T
+#                       ),
+#                       name =  unique(df$tp2_cluster[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]]),
+#                       points = "all",
+#                       line = list(color = "black",
+#                                   width = 1),
+#                       marker = list(opacity = 0.4,
+#                                     size = 10, 
+#                                     line = list(color = "black",
+#                                                 width = 1)))
+# 
+# p <-  p %>% add_trace(df,
+#                       y = df$tp1_cluster[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+#                       x = df$time_diff[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+#                       legendgroup = "TP1 clusters", 
+#                       scalemode = "count",
+#                       side = 'positive',
+#                       orientation = "h",
+#                       color = I(unname(unlist(sapply(df$tp1_cluster[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]], 
+#                                                      function(x) {colorpal %>% subset(tp1_cluster==x) %>% select(colour)}, simplify="vector")))),
+#                       meanline = list(
+#                         visible = T
+#                       ),
+#                       line = list(width = 1),
+#                       name =  df$tp1_cluster[df$present_at_tp1 == 1 & df$tp1_cluster == unique(df$tp1_cluster)[i]],
+#                       points="all",
+#                       marker = list(opacity = 0.4, 
+#                                     size = 10)) 
+# }
+# 
+# p <- p %>%
+#   
+#   
+#   layout(
+#     # y axis formatting
+#     yaxis = list(
+#       title = "TP1 cluster"
+#     ),
+#     # x axis formating 
+#     xaxis = list(
+#       title = "Elapsed time (days) since 01-01-2020"
+#     )
+#   )
+# 
+# p
