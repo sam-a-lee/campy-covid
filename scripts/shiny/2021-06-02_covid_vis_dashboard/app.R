@@ -467,15 +467,15 @@ server <- function(input, output, session) {
             # if selection is not null then filter on it
             {if (!is.null(input$cluster)) filter(., tp1_cluster %in% input$cluster) else .} %>% 
             {if (!is.null(input$country)) filter(., country %in% input$country) else .} %>%
-            {if (!is.null(input$province)) filter(., province %in% input$province) else .} %>% 
-            filter(.,  tp1_t0_ecc_0.1.0 >= input$tp1_ecc_0.1.0[1] & tp1_t0_ecc_0.1.0 <= input$tp1_ecc_0.1.0[2])  %>%
-            filter(.,  tp1_t0_ecc_0.0.1 >= input$tp1_ecc_0.0.1[1] & tp1_t0_ecc_0.0.1 <= input$tp1_ecc_0.0.1[2])  %>%
-            filter(.,  tp2_t0_ecc_0.1.0 >= input$tp2_ecc_0.1.0[1] & tp2_t0_ecc_0.1.0 <= input$tp2_ecc_0.1.0[2])  %>%
-            filter(.,  tp2_t0_ecc_0.0.1 >= input$tp2_ecc_0.0.1[1] & tp2_t0_ecc_0.0.1 <= input$tp2_ecc_0.0.1[2])  %>%
-            filter(.,  delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2])  %>%
-            filter(.,  delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2])  %>%
-            filter(.,  tp1_cluster_size_2 >= input$tp1_cluster_size[1] & tp1_cluster_size_2 <= input$tp1_cluster_size[2])  %>%
-            filter(.,  tp2_cluster_size_2 >= input$tp2_cluster_size[1] & tp2_cluster_size_2 <= input$tp2_cluster_size[2])
+            {if (!is.null(input$province)) filter(., province %in% input$province) else .} #%>% 
+            # filter(.,  tp1_t0_ecc_0.1.0 >= input$tp1_ecc_0.1.0[1] & tp1_t0_ecc_0.1.0 <= input$tp1_ecc_0.1.0[2])  %>%
+            # filter(.,  tp1_t0_ecc_0.0.1 >= input$tp1_ecc_0.0.1[1] & tp1_t0_ecc_0.0.1 <= input$tp1_ecc_0.0.1[2])  %>%
+            # filter(.,  tp2_t0_ecc_0.1.0 >= input$tp2_ecc_0.1.0[1] & tp2_t0_ecc_0.1.0 <= input$tp2_ecc_0.1.0[2])  %>%
+            # filter(.,  tp2_t0_ecc_0.0.1 >= input$tp2_ecc_0.0.1[1] & tp2_t0_ecc_0.0.1 <= input$tp2_ecc_0.0.1[2])  %>%
+            # filter(.,  delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2])  %>%
+            # filter(.,  delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2])  %>%
+            # filter(.,  tp1_cluster_size_2 >= input$tp1_cluster_size[1] & tp1_cluster_size_2 <= input$tp1_cluster_size[2])  %>%
+            # filter(.,  tp2_cluster_size_2 >= input$tp2_cluster_size[1] & tp2_cluster_size_2 <= input$tp2_cluster_size[2])
     })
     
     #############################
