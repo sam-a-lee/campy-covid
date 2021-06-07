@@ -1,5 +1,4 @@
-# COVID VIS SHINU DASHBOARD
-
+# COVID VIS SHINy DASHBOARD
 
 ################ 
 # General info #
@@ -29,9 +28,9 @@ library(RColorBrewer) # for prettier colours
 library(reactable) # nested interable dables
 library(plotly) # for interactive ggplots
 library(crosstalk) # for shazred data
-library(DT)
-library(htmltools) # for reactable searching 
-
+library(DT) # data table
+library(htmltools) # for html input
+library(lubridate) # for dates 
 
 #######################
 # load and clean data #
@@ -81,8 +80,6 @@ eccdata$strain_date <- paste(eccdata$day,
                              eccdata$year, 
                              sep = "-")
 
-eccdata$strain_date <- gsub(" ", "", eccdata$strain_date)
-
 eccdata <- eccdata %>% mutate(tp1_stain_time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y"))))
 eccdata <- eccdata %>% mutate(tp2_stain_time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y"))))
 
@@ -103,13 +100,23 @@ eccdata <- eccdata %>% subset(tp1_cluster != 0 )
 #################################
 
 # covert appropriate columns to numeric
-eccdata[,c(4:6, 8:11, 13:17, 19:22, 24:36, 37:38)] <- 
-    sapply(eccdata[,c(4:6, 8:11, 13:17, 19:22, 24:36, 37:38)], as.numeric)
+eccdata[,c(4:6, 8:11, 13:17, 19:22, 24:37, 39:40)] <- 
+    sapply(eccdata[,c(4:6, 8:11, 13:17, 19:22, 24:37, 39:40)], as.numeric)
 
 # time diff columns for ridgeline
 eccdata$tp1_cluster <- as.factor(eccdata$tp1_cluster)
 eccdata$province <- as.factor(eccdata$province)
 eccdata$country <- as.factor(eccdata$country)
+
+
+# convert to date
+eccdata$strain_date <- as.Date(eccdata$strain_date, format = "%d-%m-%y") 
+eccdata$avg_tp1_date <- as.Date(eccdata$avg_tp1_date, format = "%d-%m-%y") 
+eccdata$avg_tp2_date <- as.Date(eccdata$avg_tp2_date, format = "%d-%m-%y")
+
+# convert to factor
+eccdata$present_at_tp1 <- as.factor(eccdata$present_at_tp1)
+eccdata$present_at_tp2 <- as.factor(eccdata$present_at_tp2)
 
 
 #################
@@ -118,79 +125,6 @@ eccdata$country <- as.factor(eccdata$country)
 
 # create unique row ids for crosstalk
 eccdata$key <- as.numeric(rownames(eccdata))
-
-
-# initialize colorpal as null
-colorpal <- NULL
-
-
-######################
-# color pal function #
-######################
-
-
-color.pal <- function(clusters, colorpal) {
-    
-    uniq_clusters <- unique(as.character(clusters))
-    # this should be moved into a function eventually
-    # if some inputs are old
-    if(sum(as.character(uniq_clusters) %in% as.character(colorpal$tp1_cluster)) > 0) {
-        
-        
-        cat(file=stderr(), "modifying old colours", "\n")
-        # find out position of exisiting cluster(s) in colorpal
-        pal_pos <- colorpal[colorpal$tp1_cluster %in% uniq_clusters, "rownum"]
-        
-        # set other positions to NA
-        colorpal[!colorpal$rownum %in% pal_pos, "tp1_cluster"] <- as.character(NA)
-        
-        # reorder according to rownum
-        colorpal <- colorpal[order(colorpal$rownum),]
-        
-        # get NA positions
-        na_pos <- colorpal[is.na(colorpal$tp1_cluster), "rownum"]
-        
-        colorpal$tp1_cluster[na_pos] <- 
-            as.character(c(uniq_clusters[!uniq_clusters %in% colorpal$tp1_cluster],
-                           as.character(rep(NA, length(na_pos) - length(uniq_clusters[!uniq_clusters %in% colorpal$tp1_cluster])))))
-        
-        colorpal <<- colorpal
-        
-        return(colorpal)
-        
-    } 
-    
-    
-    # if all inputs are new
-    if(is.null(colorpal)) {
-        
-        # new pal 
-        colorpal <- data.frame(tp1_cluster = as.character(rep(NA,length(unique(eccdata$tp1_cluster)))), 
-                               colour = rep(brewer.pal(9, "Set1"), length.out = length(unique(eccdata$tp1_cluster))), 
-                               rownum = 1:length(unique(eccdata$tp1_cluster)))
-        
-        # assign new tp1 clusters
-        colorpal$tp1_cluster <- as.character(c(uniq_clusters, as.character(rep(NA,length(unique(eccdata$tp1_cluster))-length(uniq_clusters)))))
-        
-        colorpal <<- colorpal
-        
-        return(colorpal)
-        cat(file=stderr(), "all new colours!", "\n")
-        
-        
-    }
-    
-    # if no colours selected
-    if(length(clusters)==0){
-        colorpal <- NULL
-        colorpal <<- colorpal
-        return(colorpal)
-    }
-    
-}
-
-
-
 
 
 #############################
@@ -223,14 +157,6 @@ sidebar <- dashboardSidebar(
                                      max = 100,
                                      step = 1,
                                      value = 50),
-                         
-                         # cluster radius
-                         selectInput("centroid_radius",
-                                     "Cluster radius:",
-                                     choices = c("Avg geo dist",
-                                                 "Tot num strain"),
-                                     selected = "Avg geo dist", 
-                                     multiple = FALSE),
                          
                          checkboxInput("legend", "Show legend", TRUE)
                          
@@ -270,7 +196,7 @@ body <- dashboardBody(
                     
                     box(title = "Histogram", 
                         width = 6, 
-                        "Box content")
+                        plotlyOutput("histogram", width = "100%", height = "100%"))
                 ),
                 
                 # row 3 for cluster and strain data
@@ -332,17 +258,24 @@ server <- function(input, output, session) {
     # cluster and strain reactable tables that appear on first page #
     #################################################################
    
-    
     output$dt <- renderDataTable({
 
+        # for custom button actions
+        # https://community.rstudio.com/t/select-only-filtered-rows-using-select-all-button-that-comes-with-select-extension-in-shinys-dt-package/66749/2
         datatable(
-            shared_ecc_all, extensions = c('Select', 'Buttons','Scroller',
-                                           'RowGroup'), 
+            shared_ecc_all, extensions = c('Select', 'Buttons','Scroller','RowGroup'), 
             options = list(
                 select = list(style = 'os', items = 'row'),
                 dom = 'Blfrtip',
                 rowId = 0,
-                buttons = c('selectAll', 'selectNone', 'selectRows', 'selectColumns', 'selectCells'),
+                buttons = list('selectRows',
+                               list(extend='selectAll', className='selectAll',
+                                 text="Select all filtered rows",
+                                 action=DT::JS("function () {
+                                var table = $('#DataTables_Table_0').DataTable();
+                                table.rows({ search: 'applied'}).deselect();
+                                table.rows({ search: 'applied'}).select();}")),
+                               'selectAll', 'selectNone'),
                 deferRender = TRUE,
                 scrollY = 500,
                 scrollX = 600,
@@ -352,24 +285,67 @@ server <- function(input, output, session) {
             selection = 'none',
             filter = "top",
         )
-        
-        
     }, server=F)
+    
+    
+    ##################################################
+    # color palette using leaflets built in function #
+    ##################################################
 
-    
-    
-    ###########
-    # COLOURS #
-    ###########
-    
-    
+    # leaflet built in color function
+    pal <-  colorFactor(
+        palette = rep(brewer.pal(9, "Set1"), 
+                      length.out=length(unique(eccdata$tp1_cluster))),
+        domain = unique(eccdata$tp1_cluster))
+
+
     ####################
     # base leaflet map #
     ####################
-    
+
+    # leaflet map 
     output$map <- renderLeaflet({
         
-        # leaflet
+        # sub-setting shard data for selections and filters for plotting#
+        
+        # tp1 cluster data
+        tp1_clust <- shared_ecc_tp1$data(withSelection = TRUE, 
+                                         withFilter = TRUE) %>% 
+            subset(selected_ == T) %>%
+            group_by(tp1_cluster) %>%
+            summarise(avg_tp1_longitude = mean(avg_tp1_longitude),
+                      avg_tp1_latitude = mean(avg_tp1_latitude),
+                      tp1_cluster_size_2 = mean(tp1_cluster_size_2),
+                      tp1_t0_ecc_0.0.1 = mean(tp1_t0_ecc_0.0.1),
+                      tp1_t0_ecc_0.1.0 = mean(tp1_t0_ecc_0.1.0),
+                      avg_tp1_date = mean(avg_tp1_date))
+        
+        # tp2 cluster data
+        tp2_clust <- shared_ecc_tp2$data(withSelection = TRUE, 
+                                         withFilter = TRUE) %>% 
+            subset(selected_ == T) %>%
+            group_by(tp2_cluster) %>%
+            summarise(avg_tp2_longitude = mean(avg_tp2_longitude),
+                      avg_tp2_latitude = mean(avg_tp2_latitude),
+                      tp2_cluster_size_2 = mean(tp2_cluster_size_2),
+                      tp1_cluster = unique(tp1_cluster)[1],
+                      num_novel_tp2_strains = mean(num_novel_tp2_strains),
+                      tp2_t0_ecc_0.0.1 = mean(tp2_t0_ecc_0.0.1),
+                      tp2_t0_ecc_0.1.0 = mean(tp2_t0_ecc_0.1.0),
+                      avg_tp2_date = mean(avg_tp2_date))
+        
+        # tp1 strain 
+        tp1_strain <- shared_ecc_tp1$data(withSelection = TRUE, 
+                                          withFilter = TRUE) %>% 
+            subset(selected_ == T)
+        
+        # tp2 strain
+        tp2_strain <- shared_ecc_tp2$data(withSelection = TRUE,
+                                          withFilter = TRUE) %>% 
+            subset(selected_ == T)
+        
+        
+        # leaflet map 
         leaflet() %>% 
             
             # load tile for selected region
@@ -380,70 +356,91 @@ server <- function(input, output, session) {
             
             # control layer for toggling strains and centroids on/off
             # never changes so can be part of base map
-            addLayersControl(overlayGroups = c("TP1 centroid", "TP2 centroid",
-                                               "TP1 strains", "TP2 strains"),
+            addLayersControl(overlayGroups = c("TP1 clusters", "TP1 strains", 
+                                            "TP2 clusters", "TP2 strains"),
                              options = layersControlOptions(collapsed = TRUE)) %>% 
-            
-            # tp1 strain markers
-            addCircleMarkers(data = shared_ecc_tp1$data(withSelection = TRUE, withFilter = TRUE) %>% subset(selected_ == T),
-                             lat = ~strain_latitude_jit,
-                             lng = ~strain_longitude_jit,
-                             radius = 5,
-                             fillColor = "blue",
-                             fillOpacity = .50,
-                             stroke = T,
-                             opacity = .50,
-                             weight = 1,
-                             color = "white",
-                             group = "TP1 strains") %>% 
-            
-            
-            # tp2 strain markers
-            addCircleMarkers(data = shared_ecc_tp2$data(withSelection = TRUE, withFilter = TRUE) %>% subset(selected_ == T),
-                             lat = ~strain_latitude_jit,
-                             lng = ~strain_longitude_jit,
-                             radius = 5,
-                             fillColor = "blue",
-                             fillOpacity = .50,
-                             stroke = T,
-                             opacity = .50,
-                             weight = 1,
-                             color = "black",
-                             group = "TP2 strains") %>%
-            
-            # tp1 centroids 
-            addCircleMarkers(data = shared_ecc_all$data(withSelection = TRUE, withFilter = TRUE) %>% 
-                                 subset(selected_ == T) %>% 
-                                 group_by(tp1_cluster) %>% 
-                                 summarise(avg_tp1_longitude = mean(avg_tp1_longitude), 
-                                           avg_tp1_latitude = mean(avg_tp1_latitude)),
+
+            # tp1 cluster markers
+            addCircleMarkers(data = tp1_clust,
                              lat = ~avg_tp1_latitude,
                              lng = ~avg_tp1_longitude,
-                             radius = 20,
-                             fillColor = "red", 
-                             fillOpacity = .50,
+                             radius = ~log10(tp1_cluster_size_2)*10,
+                             fillColor = ~pal(tp1_cluster),
+                             fillOpacity = input$centroid_transparency/100,
                              stroke = T,
-                             opacity = .50,
+                             opacity = input$centroid_transparency/100,
                              weight = 1,
                              color = "white",
-                             group = "TP1 centroids") %>% 
+                             label = lapply(seq(nrow(tp1_clust)), function(i) {
+                                 ~HTML(paste("<b>", tp1_cluster[i],"</b>", "<br/>",
+                                             "Num of strains:",tp1_cluster_size_2[i]-1,"<br/>",
+                                             "Temporal ECC:", tp1_t0_ecc_0.0.1[i],"<br/>",
+                                             "Geo ECC:",tp1_t0_ecc_0.1.0[i],"<br/>",
+                                             "Avg date:", avg_tp1_date[i],"<br/>", sep=" ")) 
+                             }),
+                             group = "TP1 clusters") %>% 
             
-            # tp2 centroids
-            addCircleMarkers(data = shared_ecc_all$data(withSelection = TRUE, withFilter = TRUE) %>% 
-                                 subset(selected_ == T) %>% 
-                                 group_by(tp2_cluster) %>% 
-                                 summarise(avg_tp2_longitude_2 = mean(avg_tp2_longitude), 
-                                           avg_tp2_latitude_2 = mean(avg_tp2_latitude)),
-                             lat = ~avg_tp2_latitude_2,
-                             lng = ~avg_tp2_longitude_2,
-                             radius = 20,
-                             fillColor = "blue", 
-                             fillOpacity = .50,
+            # tp2 cluster markers
+            addCircleMarkers(data = tp2_clust,
+                             lat = ~avg_tp2_latitude,
+                             lng = ~avg_tp2_longitude,
+                             radius = ~log10(tp2_cluster_size_2)*10,
+                             fillColor = ~pal(tp1_cluster),
+                             fillOpacity = input$centroid_transparency/100,
                              stroke = T,
-                             opacity = .50,
+                             opacity = input$centroid_transparency/100,
                              weight = 1,
                              color = "black",
-                             group = "TP2 centroids")
+                             lapply(seq(nrow(tp2_clust)), function(i) {
+                                 ~HTML(paste("<b>",  tp2_cluster[i], "</b>", "<br/>",
+                                             "Num of strains:",tp2_cluster_size_2[i]-1,"<br/>",
+                                             "Num novel strains:",num_novel_tp2_strains[i],"<br/>",
+                                             "Temporal ECC:", tp2_t0_ecc_0.0.1[i],"<br/>",
+                                             "Geo ECC:",tp2_t0_ecc_0.1.0[i],"<br/>",
+                                             "Avg date:", avg_tp2_date,"<br/>", sep=" ")) 
+                             }),
+                             group = "TP2 clusters") %>%             
+
+            # tp1 strain markers
+            addCircleMarkers(data = tp1_strain,
+                             lat = ~strain_latitude_jit,
+                             lng = ~strain_longitude_jit,
+                             radius = 5,
+                             fillColor = ~pal(tp1_cluster),
+                             fillOpacity = input$strain_transparency/100,
+                             stroke = T,
+                             opacity = input$strain_transparency/100,
+                             weight = 1,
+                             color = "white",
+                             label = lapply(seq(nrow(tp1_strain)), function(i) {
+                                 ~HTML(paste("Strain:", "<b>", strain[i], "</b>", "<br/>",
+                                             "Cluster:", tp1_cluster[i], "<br/>",
+                                             "Country:", country[i], "<br/>",
+                                             "Province:",province[i],"<br/>",
+                                             "Date:", strain_date[i],"<br/>", sep=" ")) 
+                             }),
+                             group = "TP1 strains") %>% 
+            
+            # tp2 strain markers
+            addCircleMarkers(data = tp2_strain,
+                             lat = ~strain_latitude_jit,
+                             lng = ~strain_longitude_jit,
+                             radius = 5,
+                             fillColor = ~pal(tp1_cluster),
+                             fillOpacity = input$strain_transparency/100,
+                             stroke = T,
+                             opacity = input$strain_transparency/100,
+                             weight = 1,
+                             color = "black",
+                             label = lapply(seq(nrow(tp2_strain)), function(i) {
+                                 ~HTML(paste("Strain:", "<b>", strain[i], "</b>", "<br/>",
+                                             "Cluster:", tp2_cluster[i], "<br/>",
+                                             "Country:", country[i], "<br/>",
+                                             "Province:",province[i],"<br/>",
+                                             "Date:", strain_date[i],"<br/>", sep=" ")) 
+                             }),
+                             group = "TP2 strains",
+                             ) 
     })
     
     
@@ -451,13 +448,15 @@ server <- function(input, output, session) {
     # ridgeline plots #
     ###################
     
-    
     output$ridgeplot <- renderPlotly({
-        
+       
+        # base plot
         ridge <- plot_ly(type = 'violin')
 
+        # tp2 ridges
         ridge <- ridge %>%
-            add_trace(data = shared_ecc_tp2$data(withSelection = TRUE, withFilter = TRUE) %>% subset(selected_ == T), 
+            add_trace(data = shared_ecc_tp2$data(withSelection = TRUE, withFilter = TRUE) %>% 
+                          subset(selected_ == T),
                       x = ~tp2_stain_time_diff,
                       y = ~tp1_cluster,
                       split = ~tp1_cluster,
@@ -465,6 +464,7 @@ server <- function(input, output, session) {
                       side = 'positive',
                       orientation = "h",
                       scalemode = "count",
+                      color = ~I(pal(tp1_cluster)),
                       name =  ~tp2_cluster,
                       meanline = list(
                           visible = F
@@ -475,11 +475,12 @@ server <- function(input, output, session) {
                       marker = list(opacity = 0.4,
                                     size = 10,
                                     line = list(color = "black",
-                                                width = 1))
-            )
+                                                width = 1)))
         
+        #tp1 ridges
         ridge <- ridge %>%
-            add_trace(data = shared_ecc_tp1$data(withSelection = TRUE, withFilter = TRUE) %>% subset(selected_ == T),
+            add_trace(data = shared_ecc_tp1$data(withSelection = TRUE, withFilter = TRUE) %>% 
+                          subset(selected_ == T),
                 x = ~tp1_stain_time_diff,
                 y = ~tp1_cluster,
                 split = ~tp1_cluster,
@@ -487,18 +488,115 @@ server <- function(input, output, session) {
                 side = 'positive',
                 orientation = "h",
                 scalemode = "count",
+                color = ~I(pal(tp1_cluster)),
                 meanline = list(
                     visible = F
                 ),
                 points = "all",
                 marker = list(opacity = 0.4,
-                              size = 10)
-            )
+                              size = 10))
 
+        # write out plot
         ridge
-
     })
     
+    
+    #############################
+    # bubble plots for ECC data #
+    #############################
+
+
+    output$bubbleplot <- renderPlotly({
+
+        # sub-setting shard data for selections and filters for plotting#
+        
+        # tp1 cluster data
+        tp1_clust <- shared_ecc_all$data(withSelection = TRUE, 
+                                         withFilter = TRUE) %>% 
+            subset(selected_ == T) %>%
+            group_by(tp1_cluster) %>%
+            summarise(avg_tp1_longitude = mean(avg_tp1_longitude),
+                      avg_tp1_latitude = mean(avg_tp1_latitude),
+                      tp1_cluster_size_2 = mean(tp1_cluster_size_2),
+                      tp1_t0_ecc_0.0.1 = mean(tp1_t0_ecc_0.0.1),
+                      tp1_t0_ecc_0.1.0 = mean(tp1_t0_ecc_0.1.0),
+                      avg_tp1_date = mean(avg_tp1_date))
+        
+        # tp2 cluster data
+        tp2_clust <- shared_ecc_all$data(withSelection = TRUE, 
+                                         withFilter = TRUE) %>% 
+            subset(selected_ == T) %>%
+            group_by(tp2_cluster) %>%
+            summarise(avg_tp2_longitude = mean(avg_tp2_longitude),
+                      avg_tp2_latitude = mean(avg_tp2_latitude),
+                      tp2_cluster_size_2 = mean(tp2_cluster_size_2),
+                      tp1_cluster = unique(tp1_cluster)[1],
+                      num_novel_tp2_strains = mean(num_novel_tp2_strains),
+                      tp2_t0_ecc_0.0.1 = mean(tp2_t0_ecc_0.0.1),
+                      tp2_t0_ecc_0.1.0 = mean(tp2_t0_ecc_0.1.0),
+                      avg_tp2_date = mean(avg_tp2_date))
+        
+        bubble <-  ggplot() +
+            
+            # tp2 clusters
+            geom_point(data = tp2_clust,
+                       shape = 21,
+                       color = "black",
+                       alpha = input$centroid_transparency/100,
+                       aes(x = tp2_t0_ecc_0.0.1,
+                           y = tp2_t0_ecc_0.1.0,
+                           size = tp2_cluster_size_2,
+                           fill = as.factor(tp1_cluster))) +
+
+            # tp1 clusters
+            geom_point(data = tp1_clust,
+                       shape=19,
+                       alpha = input$centroid_transparency/100,
+                       inherit.aes = FALSE, 
+                       aes(x = tp1_t0_ecc_0.0.1, 
+                                     y=tp1_t0_ecc_0.1.0, 
+                           alpha = input$centroid_transparency/100,
+                                     size = tp1_cluster_size_2, 
+                                     color = as.factor(tp1_cluster))) + 
+            
+            scale_color_manual(values = pal(tp1_clust$tp1_cluster)) + 
+            scale_fill_manual(values = pal(tp1_clust$tp1_cluster)) + 
+            labs(y= "Geographical ECC", x = "Temporal ECC") + 
+            scale_size_area() + 
+            xlim(0,1) +
+            ylim(0,1) + 
+            theme_bw()
+        
+        ggplotly(bubble)
+    })
+    
+    
+    #############
+    # histogram #
+    #############
+    
+    output$histogram <- renderPlotly({ 
+        
+        histo <- ggplot() +
+            geom_bar(data = shared_ecc_all$data(withSelection = TRUE, 
+                                                withFilter = TRUE) %>% 
+                         subset(selected_ == T) %>% 
+                         mutate(month = as.factor(month(strain_date))),
+                     aes(x=month,
+                         fill=present_at_tp1),
+                     colour = "black",
+                     position = position_dodge2(preserve = "single")) +
+            scale_fill_manual(values = c("grey10", "grey80")) + 
+            facet_wrap(~country, ncol = 3) + 
+            labs(x="Month", y = "Genome count") +
+            theme_bw() +
+            theme(panel.grid.major = element_blank(),
+                  panel.grid.minor = element_blank())
+        
+        ggplotly(histo)
+        
+        })
+        
 
     ####################################################
     # raw data filtered table to be displayed in a tab #
@@ -546,3 +644,7 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
+
+
+
+
