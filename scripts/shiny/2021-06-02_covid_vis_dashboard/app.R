@@ -31,6 +31,11 @@ library(crosstalk) # for shazred data
 library(DT) # data table
 library(htmltools) # for html input
 library(lubridate) # for dates 
+library(geosphere) # for directions between points 
+library(shinydashboardPlus) # for collapsable boxes
+# library(shinyjqui) # for resizable/movable boxes
+
+
 
 #######################
 # load and clean data #
@@ -119,6 +124,53 @@ eccdata$present_at_tp1 <- as.factor(eccdata$present_at_tp1)
 eccdata$present_at_tp2 <- as.factor(eccdata$present_at_tp2)
 
 
+################################################
+# change in latitude and longitude of clusters #
+################################################
+
+eccdata$delta_avg_longitude <- eccdata$avg_tp1_longitude - eccdata$avg_tp2_longitude
+eccdata$delta_avg_latitude <- eccdata$avg_tp1_latitude - eccdata$avg_tp2_latitude
+
+# get bearing (direction of change)
+eccdata$bear_dir <- bearing(as.matrix(eccdata[,c("avg_tp1_longitude", "avg_tp1_latitude")]),
+                            as.matrix(eccdata[,c("avg_tp2_longitude", "avg_tp2_latitude")]))
+
+# convert bearing to compass direction
+# centre on directions 
+eccdata$compass_dir <- sapply(eccdata$bear_dir, function(x){
+    
+    if(x <= 11.25 & x >= 0) {return("N")}
+    if(x > 11.25 & x <= 33.75) {return("NNE")}
+    if(x > 33.75 & x <= 56.25) {return("NE")}
+    if(x > 56.25 & x <= 78.75) {return("ENE")}
+    if(x > 78.75 & x <= 101.25) {return("E")}
+    if(x > 101.25 & x <= 123.75) {return("ESE")}
+    if(x > 123.75 & x <= 146.25) {return("SE")}
+    if(x > 146.25 & x <= 168.75) {return("SSE")}
+    if(x > 168.5 & x <= 180) {return("S")}
+    
+    if(x < -168.5 & x >= -180) {return("S")}
+    if(x < -146.25 & x >= -168.5) {return("SSW")}
+    if(x < -123.75 & x >= -146.25) {return("SW")}
+    if(x < -101.25 & x >= -123.75) {return("WSW")}
+    if(x < -78.75 & x >= -101.25) {return("W")}
+    if(x < -56.25 & x >= -78.75) {return("WNW")}
+    if(x < -33.75 & x >= -56.25) {return("NW")}
+    if(x < -11.25 & x >= -33.75) {return("NNW")}
+    if(x < 0 & x >= -11.25) {return("N")}
+    
+})  
+
+# Latitude (North of equator) · Longitude (West of Greenwich).
+# If the Latitude (Longitude) degrees are S (W) 
+# use a minus sign ("-") in front.   
+# in geosphere package directions are expressed in degrees 
+# (North = 0 and 360, East = 90, Sout = 180, and West = 270  degrees).
+# negative bearings means being measaured counterclockwise from north
+# 8 wind compass rose each direction is 45° from the next. 
+# 16 wind compass rose points at a 22+1⁄2° angle from its two neighbours
+
+
 #################
 # crosstalk key #
 #################
@@ -133,36 +185,13 @@ eccdata$key <- as.numeric(rownames(eccdata))
 
 header <- dashboardHeader(title = "ECC Vis")
 
+# the dashboard side bar
 sidebar <- dashboardSidebar(
     sidebarMenu(id = 'sidebarmenu',
                 
                 # Visualization tab
                 menuItem("Visualizations", tabName = "visualizations"),
-                
-                # Visulization controls
-                menuItem("Map controls", tabName = "visualizationControls",
-                         
-                         # cluster transparency 
-                         sliderInput("centroid_transparency",
-                                     "Cluster transparency:",
-                                     min = 0,
-                                     max = 100,
-                                     step = 1,
-                                     value = 50),
-                         
-                         # strain transparency
-                         sliderInput("strain_transparency",
-                                     "Strain transparency:",
-                                     min = 0,
-                                     max = 100,
-                                     step = 1,
-                                     value = 50),
-                         
-                         checkboxInput("legend", "Show legend", TRUE)
-                         
-                ),
-                
-         
+            
                 # filtered data using in visualizations
                 menuItem("Filtered data", tabName = "filteredData"),
                 
@@ -170,6 +199,7 @@ sidebar <- dashboardSidebar(
                 menuItem("Raw data", tabName = "rawData"))
 )
 
+# the dashboard body
 body <- dashboardBody(
     tabItems(
         tabItem(tabName = "visualizations",
@@ -177,35 +207,83 @@ body <- dashboardBody(
                 # tab title
                 h2("ECC Visualizations"),
                 
-                # row 1 box for map and ridgeline plot
+                # row 1 box for map and bubble plot
                 fluidRow(
                     box(title = "Map plot", 
                         width = 6, 
-                        leafletOutput("map")),
+                        leafletOutput("map"),
+                        collapsible = TRUE,
+                        sidebar = boxSidebar(
+                            id = "mapsidebar",
+                            title = "Map controls",
+                            # cluster transparency 
+                            sliderInput("centroid_transparency",
+                                        "Cluster transparency:",
+                                        min = 0,
+                                        max = 100,
+                                        step = 1,
+                                        value = 50),
+                            
+                            # strain transparency
+                            sliderInput("strain_transparency",
+                                        "Strain transparency:",
+                                        min = 0,
+                                        max = 100,
+                                        step = 1,
+                                        value = 50),
+                            
+                            # legend checkbox for map 
+                            checkboxInput("legend", "Show legend", TRUE)
+                        )),
                     
-                    box(title = "Ridgeline plot", 
-                        width = 6, 
-                        plotlyOutput("ridgeplot"))
-                ),
-                
-                # row 2 for histogram and bubble plot
-                fluidRow(
                     box(title = "Bubble plot", 
                         width = 6, 
-                        plotlyOutput("bubbleplot")),
-                    
-                    box(title = "Histogram", 
-                        width = 6, 
-                        plotlyOutput("histogram", width = "100%", height = "100%"))
+                        plotlyOutput("bubbleplot"),
+                        collapsible = TRUE)
                 ),
                 
-                # row 3 for cluster and strain data
+                # row 2 for change vectors and cluster movement
+                fluidRow(
+
+                    # change vector plot
+                    box(title = "Change vector", 
+                        width = 6,
+                        plotlyOutput("change_vect", width = "100%", height = "100%"),
+                        collapsible = TRUE), 
+                    
+                    # cardinal movement of clusters 
+                    box(title = "Cardinal movement of clusters", 
+                        width = 6, 
+                        plotlyOutput("histogram_d", width = "100%", height = "100%"),
+                        collapsible = TRUE)
+                ),
+                
+                # row 3 for strain histogram and ridgeline plot 
+                fluidRow(
+                    box(title = "Strain histogram", 
+                        width = 6,
+                        plotlyOutput("histogram", width = "100%", height = "100%"),
+                        collapsible = TRUE),
+                    
+                    # ridgeline plot 
+                    box(title = "Ridgeline plot", 
+                        width = 6, 
+                        plotlyOutput("ridgeplot"),
+                        collapsible = TRUE,
+                        sidebar = boxSidebar(
+                            id = "ridgesidebar",
+                            
+                            # legend checkbox for map 
+                            checkboxInput("ridgelegend", "Show legend", TRUE)
+                        ))
+                ),
+                
+                # row 4 for cluster and strain data
                 fluidRow(
                     box(title = "Cluster data", 
                         width = 12, 
-                        #reactableOutput("clustertable")
-                        dataTableOutput("dt")
-                        )
+                        dataTableOutput("dt"),
+                        collapsible = TRUE)
                 )
         ),
         
@@ -214,7 +292,7 @@ body <- dashboardBody(
                 h2("Filtered data"),
                 fluidRow(
                     box(width = 12, 
-                        reactableOutput("filtered_data"))
+                        dataTableOutput("filtered_data"))
                 )
         ),
         
@@ -223,7 +301,7 @@ body <- dashboardBody(
                 h2("Raw data"),
                 fluidRow(
                     box(width = 12,
-                        reactableOutput("raw_data")
+                        dataTableOutput("raw_data")
                         )
                 )
         )
@@ -496,7 +574,10 @@ server <- function(input, output, session) {
                 marker = list(opacity = 0.4,
                               size = 10))
 
-        # write out plot
+        # remove legend if we dont want it 
+        {if(input$ridgelegend==FALSE) ridge <- ridge %>% layout(showlegend = FALSE) else ridge <- ridge}
+       
+         # write out plot
         ridge
     })
     
@@ -571,9 +652,9 @@ server <- function(input, output, session) {
     })
     
     
-    #############
-    # histogram #
-    #############
+    ##############################
+    # histogram for strain counts#
+    ##############################
     
     output$histogram <- renderPlotly({ 
         
@@ -581,65 +662,113 @@ server <- function(input, output, session) {
             geom_bar(data = shared_ecc_all$data(withSelection = TRUE, 
                                                 withFilter = TRUE) %>% 
                          subset(selected_ == T) %>% 
-                         mutate(month = as.factor(month(strain_date))),
+                         mutate(month = as.factor(month(strain_date))) %>%
+                         mutate(., present_at_tp1 = plyr::revalue(present_at_tp1, c("1" = "TP1 strains",
+                                                                                    "0" = "Novel TP2 strains"))),
                      aes(x=month,
-                         fill=present_at_tp1),
+                         fill=as.factor(present_at_tp1)),
                      colour = "black",
                      position = position_dodge2(preserve = "single")) +
-            scale_fill_manual(values = c("grey10", "grey80")) + 
+            scale_fill_manual(values = c("grey10", "grey80"),
+                              labels = c("TP1 strains", "Novel TP2 strains")) + 
             facet_wrap(~country, ncol = 3) + 
             labs(x="Month", y = "Genome count") +
             theme_bw() +
             theme(panel.grid.major = element_blank(),
-                  panel.grid.minor = element_blank())
+                  panel.grid.minor = element_blank(),
+                  legend.title = element_blank())
         
         ggplotly(histo)
         
         })
-        
-
-    ####################################################
-    # raw data filtered table to be displayed in a tab #
-    #####################################################
     
-    output$raw_data <- renderReactable({
-        reactable(data = eccdata,
-                  filterable = TRUE,
-                  searchable = TRUE,
-                  sortable = TRUE,
-                  showSortIcon = TRUE,
-                  showSortable = TRUE,
-                  pagination = TRUE,
-                  highlight = T,
-                  wrap = FALSE, 
-                  defaultPageSize = 10,
-                  showPageSizeOptions = TRUE,
-                  pageSizeOptions = c(10, 25, 50, 100),
-                  paginationType = "numbers")
+    
+    #####################################
+    # histogram for change in direction #
+    #####################################
+    
+
+    output$histogram_d <- renderPlotly({ 
+        
+        # tp2 cluster data
+        tp2_clust <- shared_ecc_all$data(withSelection = TRUE, 
+                                         withFilter = TRUE) %>% 
+            subset(selected_ == T) %>%
+            group_by(tp2_cluster) %>%
+            summarise(tp2_cluster_size_2 = mean(tp2_cluster_size_2),
+                      tp1_cluster = unique(tp1_cluster)[1],
+                      num_novel_tp2_strains = mean(num_novel_tp2_strains),
+                      compass_dir = unique(compass_dir)[1],
+                      n=n())
+        
+        # plot the data 
+        histo_d <- ggplot() +
+            geom_bar(data = tp2_clust, 
+                     aes(x=compass_dir),
+                     fill = "grey80",
+                     colour="black") + 
+            labs(x="Cardinal direction", y = "Cluster count") +
+            xlim("E", "ENE", "ESE", "N", "NE", "NNE", "NNW", "NW", "S", "SE", 
+              "SSE", "SSW", "SW", "W", "WNW", "WSW") + 
+            theme_bw() +
+            theme(panel.grid.major = element_blank(),
+                  panel.grid.minor = element_blank())
+        
+        ggplotly(histo_d)
+        
     })
     
     
-    ##############################################
-    # filtered data to be displayed in a new tab #
-    ##############################################
+    #######################
+    # change vector graph #
+    #######################
+    
+    output$change_vect <- renderPlotly({ 
+        
+        # tp2 cluster data
+        tp1_clust <- shared_ecc_all$data(withSelection = TRUE, 
+                                         withFilter = TRUE) %>% 
+            subset(selected_ == T) %>%
+            group_by(tp1_cluster) %>%
+            summarise(delta_ecc_0.0.1 = mean(delta_ecc_0.0.1),
+                      delta_ecc_0.1.0 = mean(delta_ecc_0.1.0)) 
+         
+        # plot the data 
+        change_vector <- ggplot(tp1_clust) +
+            geom_segment(aes(x =0, xend=delta_ecc_0.0.1, y=0, yend = delta_ecc_0.1.0, color = tp1_cluster), 
+                         arrow=arrow(length = unit(0.25, "cm"),
+                                     type = "closed")) +
+            geom_point(aes(x=delta_ecc_0.0.1, y=delta_ecc_0.1.0, color = tp1_cluster)) + 
+            scale_color_manual(values = pal(tp1_clust$tp1_cluster)) + 
+            xlim(-1, 1) +
+            ylim(-1, 1) +
+            theme_bw() + 
+            theme(panel.grid.minor = element_blank())
+        
+        ggplotly(change_vector)
+    })
+        
+    
+    ###########################################
+    # filtered table to be displayed in a tab #
+    ###########################################
+    
+    output$filtered_data <- renderDataTable({
+        datatable(shared_ecc_all,
+                  filter = "top")
+        },  server=FALSE)
+
+    
+    #########################################
+    # raw data to be displayed in a new tab #
+    #########################################
     
     # displayed in new tab without grouping
-    output$filtered_data <- renderReactable({
-        reactable(data = shared_ecc_all,  
-                  filterable = TRUE,
-                  searchable = TRUE,
-                  sortable = TRUE,
-                  highlight = T,
-                  showSortIcon = TRUE,
-                  showSortable = TRUE,
-                  pagination = TRUE,
-                  wrap = FALSE,
-                  defaultPageSize = 10,
-                  showPageSizeOptions = TRUE,
-                  pageSizeOptions = c(10, 25, 50, 100),
-                  paginationType = "numbers")
+    output$raw_data <- renderDataTable({
+        datatable(eccdata, 
+                  filter = "top"
+        )
     })
-    
     
 }
 
