@@ -3,7 +3,7 @@
 ################
 
 # COVID VIS SHINY DASHBOARD
-# June 2, 2021
+# June 16, 2021
 # Samantha Lee
 
 # The purpose of this script is to generate a map of epi-cluster cohesian data
@@ -130,6 +130,26 @@ clusters <- eccdata %>%
               overall_cluster_growth_rate = mean(overall_cluster_growth_rate),
               cluster_novel_growth_rate = mean(cluster_novel_growth_rate))
 
+
+
+
+# # now reshape the data for tp1 and tp2 info
+# clusters_long <- melt(setDT(clusters), 
+#                       measure.vars=list(c("avg_tp1_longitude", "avg_tp2_longitude"), 
+#                                         c("avg_tp1_latitude", "avg_tp2_latitude"),
+#                                         c("tp1_t0_ecc_0.0.1", "tp2_t0_ecc_0.0.1"),
+#                                         c("tp1_t0_ecc_0.1.0", "tp2_t0_ecc_0.1.0"),
+#                                         c("avg_tp1_date", "avg_tp2_date"),
+#                                         c("tp1_cluster_size_2", "tp2_cluster_size_2"),
+#                                         c("avg_tp1_temporal_dist_days", "avg_tp2_temporal_dist_days"),
+#                                         c("avg_tp1_geo_dist_km", "avg_tp2_geo_dist_km"),
+#                                         c("tp1_cluster_size", "tp2_cluster_size")),
+#                       variable.name='var', value.name=c('avg_latitude', 'avg_longitude', 
+#                                                         "ecc_0.0.1", "ecc_0.1.0",
+#                                                         "avg_date", "cluster_size_2", 
+#                                                         "avg_temporal_dist", "avg_geo_dist",
+#                                                         "cluster_size"))
+
 # tp1 clusters summarized by novel tp2 strains
 clusters_0 <- eccdata %>% 
     group_by(tp1_cluster) %>%
@@ -207,29 +227,6 @@ clusters$cardinal <- as.factor(clusters$cardinal)
 levels(clusters$cardinal) <- c("N", "NNE","NE", "ENE", "E", "ESE", "SE", "SSE", "S",  
                                "SSW", "SW", "WSW", "W", "WNW",  "NW","NNW")
 
-
-#######################################
-# convert cluster info to long format #
-#######################################
-
-# now reshape the data for tp1 and tp2 info
-clusters_long <- melt(setDT(clusters), 
-                      measure.vars=list(c("avg_tp1_longitude", "avg_tp2_longitude"), 
-                                        c("avg_tp1_latitude", "avg_tp2_latitude"),
-                                        c("tp1_t0_ecc_0.0.1", "tp2_t0_ecc_0.0.1"),
-                                        c("tp1_t0_ecc_0.1.0", "tp2_t0_ecc_0.1.0"),
-                                        c("avg_tp1_date", "avg_tp2_date"),
-                                        c("tp1_cluster_size_2", "tp2_cluster_size_2"),
-                                        c("avg_tp1_temporal_dist_days", "avg_tp2_temporal_dist_days"),
-                                        c("avg_tp1_geo_dist_km", "avg_tp2_geo_dist_km"),
-                                        c("tp1_cluster_size", "tp2_cluster_size")),
-                      variable.name='timepoint', value.name=c('avg_longitude', 'avg_latitude', 
-                                                        "ecc_0.0.1", "ecc_0.1.0",
-                                                        "avg_date", "cluster_size_2", 
-                                                        "avg_temporal_dist", "avg_geo_dist",
-                                                        "cluster_size"))
-
-
 ##########################################
 # subset out strain specific infomation  #
 ##########################################
@@ -274,7 +271,6 @@ strains <- strains %>% mutate(tp2_stain_time_diff = as.numeric(abs(as.Date("01-0
 
 # create unique row ids for shared cluster and strain data
 clusters$key <- as.numeric(rownames(clusters))
-clusters_long$key <- as.numeric(rownames(clusters_long))
 strains$key <- as.numeric(rownames(strains))
 
 
@@ -558,15 +554,13 @@ server <- function(input, output, session) {
     })
     
     
-
     #########################################################
     # create shared data frames for cluster and strain info #
     #########################################################
     
     # shared dfs with all data
-   # clusters_sh <- SharedData$new(clusters_r, key = ~key, group = "clusters")
-    clusters_long_sh <- SharedData$new(clusters_long, key = ~key, group = "clusters_long")
-    #strains_sh <- SharedData$new(strains_r, key = ~key, group = "strains")
+    clusters_sh <- SharedData$new(clusters_r, key = ~key, group = "clusters")
+    strains_sh <- SharedData$new(strains_r, key = ~key, group = "strains")
     
     ################################
     # cluster and strain DT tables #
@@ -611,138 +605,133 @@ server <- function(input, output, session) {
     #     )
     # }, server=F)
     
-
+    
     ####################
     # base leaflet map #
     ####################
     
     # leaflet built in color function
     pal <-  colorFactor(
-      palette = rep(cols25(n=25), 
-                    length.out=length(unique(clusters_long$tp1_cluster))),
-      domain = unique(clusters_long$tp1_cluster))
-    
-    tp_pal <-  colorFactor(
-      palette = c("black", "white"),
-      domain = unique(clusters_long$timepoint))
+        palette = rep(cols25(n=25), 
+                      length.out=length(unique(clusters$tp1_cluster))),
+        domain = unique(eccdata$tp1_cluster))
     
     # leaflet map
     output$map <- renderLeaflet({
-      
-      # # tp1 strain data
-      # tp1_strains <- strains_sh$data() %>% subset(present_at_tp1==1)
-      # # tp2 strain data
-      # tp2_strains <- strains_sh$data() %>% subset(present_at_tp1==0)
-      
-      # leaflet map
-      leaflet() %>%
         
-        # load tile for selected region
-        addTiles("http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}") %>%
+        # tp1 strain data
+        tp1_strains <- strains_sh$data() %>% subset(present_at_tp1==1)
+        # tp2 strain data
+        tp2_strains <- strains_sh$data() %>% subset(present_at_tp1==0)
         
-        # set base zoom over mid asia/europe
-        setView(lng = 60, lat = 50, zoom = 2) %>%
-        
-        # # control layer for toggling strains and centroids on/off
-        # # never changes so can be part of base map
-        # addLayersControl(overlayGroups = c("TP1 clusters", "TP1 strains",
-        #                                    "TP2 clusters", "TP2 strains"),
-        #                  options = layersControlOptions(collapsed = TRUE)) %>%
-        # 
-        # hideGroup(c("TP1 strains", "TP2 strains")) %>%         
-        
-        # tp1 cluster markers
-        addCircleMarkers(data = clusters_long_sh,
-                         lat = ~avg_latitude,
-                         lng = ~avg_longitude,
-                         radius = ~log10(cluster_size_2)*10,
-                         fillColor = ~pal(tp1_cluster),
-                         fillOpacity = input$centroid_transparency/100,
-                         stroke = T,
-                         opacity = input$centroid_transparency/100,
-                         weight = 1,
-                         color = ~tp_pal(timepoint),
-                         label = lapply(seq(nrow(clusters_long_sh$data())), function(i) {
-                           ~HTML(paste("<b>", tp1_cluster,"</b>", " (", tp1_cluster[i], ")", "<br/>",
-                                       "Time point: ", timepoint[i],"<br/>",
-                                       "Total strains: ", cluster_size_2[i]-1,"<br/>",
-                                       "Temporal ECC: ", ecc_0.0.1[i],"<br/>",
-                                       "Geo ECC: ", ecc_0.1.0[i],"<br/>",
-                                       "Avg date: ", avg_date[i],"<br/>", sep=""))
-                         }),
-                         group = "Clusters") #%>%
-        # 
-        # # tp2 cluster markers
-        # addCircleMarkers(data = clusters_long_sh$data(withSelection = T) %>% filter(timepoint==2),
-        #                  lat = ~avg_latitude,
-        #                  lng = ~avg_longitude,
-        #                  radius = ~log10(cluster_size_2)*10,
-        #                  fillColor = ~pal(tp1_cluster),
-        #                  fillOpacity = input$centroid_transparency/100,
-        #                  stroke = T,
-        #                  opacity = input$centroid_transparency/100,
-        #                  weight = 1,
+        # leaflet map
+        leaflet() %>%
+            
+            # load tile for selected region
+            addTiles("http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}") %>%
+            
+            # set base zoom over mid asia/europe
+            setView(lng = 60, lat = 50, zoom = 2) %>%
+            
+            # control layer for toggling strains and centroids on/off
+            # never changes so can be part of base map
+            addLayersControl(overlayGroups = c("TP1 clusters", "TP1 strains",
+                                               "TP2 clusters", "TP2 strains"),
+                             options = layersControlOptions(collapsed = TRUE)) %>%
+            
+            hideGroup(c("TP1 strains", "TP2 strains")) %>%         
+            
+            # tp1 cluster markers
+            addCircleMarkers(data = clusters_sh,
+                             lat = ~avg_tp1_latitude,
+                             lng = ~avg_tp1_longitude,
+                             radius = ~log10(tp1_cluster_size_2)*10,
+                             fillColor = ~pal(tp1_cluster),
+                             fillOpacity = input$centroid_transparency/100,
+                             stroke = T,
+                             opacity = input$centroid_transparency/100,
+                             weight = 1,
+                             color = "white",
+                             label = lapply(seq(nrow(clusters_sh$data())), function(i) {
+                                 ~HTML(paste("<b>", tp1_cluster[i],"</b>", "<br/>",
+                                             "Total strains:",tp1_cluster_size_2[i]-1,"<br/>",
+                                             "Temporal ECC:", tp1_t0_ecc_0.0.1[i],"<br/>",
+                                             "Geo ECC:",tp1_t0_ecc_0.1.0[i],"<br/>",
+                                             "Avg date:", avg_tp1_date[i],"<br/>", sep=" "))
+                             }),
+                             group = "TP1 clusters") %>%
+            
+            # # tp2 cluster markers
+            # addCircleMarkers(data = clusters_sh,
+            #                  lat = ~avg_tp2_latitude,
+            #                  lng = ~avg_tp2_longitude,
+            #                  radius = ~log10(tp2_cluster_size_2)*10,
+            #                  fillColor = ~pal(tp1_cluster),
+            #                  fillOpacity = input$centroid_transparency/100,
+            #                  stroke = T,
+            #                  opacity = input$centroid_transparency/100,
+            #                  weight = 1,
         #                  color = "black",
-        #                  label = lapply(seq(nrow(clusters_long_sh$data())), function(i) {
+        #                  label = lapply(seq(nrow(clusters_sh$data())), function(i) {
         #                    ~HTML(paste("<b>", tp2_cluster[i],"</b>", " (", tp1_cluster[i], ")", "<br/>",
-        #                                "Total strains: ", cluster_size_2[i]-1,"<br/>",
+        #                                "Total strains: ", tp2_cluster_size_2[i]-1,"<br/>",
         #                                "Novel strains: ", num_novel_tp2_strains[i],"<br/>",
-        #                                "Temporal ECC: ", ecc_0.0.1[i],"<br/>",
-        #                                "Geo ECC: ", ecc_0.1.0[i],"<br/>",
-        #                                "Avg date: ", avg_date[i],"<br/>", sep=""))
+        #                                "Temporal ECC: ", tp2_t0_ecc_0.0.1[i],"<br/>",
+        #                                "Geo ECC: ",tp2_t0_ecc_0.1.0[i],"<br/>",
+        #                                "Avg date: ", avg_tp2_date[i],"<br/>", sep=""))
         #                  }),
         #                  group = "TP2 clusters") %>%
-
-        # # tp1 strains
-        # addCircleMarkers(data = tp1_strains,
-        #                  lat = ~strain_latitude_jit,
-        #                  lng = ~strain_longitude_jit,
-        #                  radius = 5,
-        #                  fillColor = ~pal(tp1_cluster),
-        #                  fillOpacity = input$strain_transparency/100,
-        #                  stroke = T,
-        #                  opacity = input$strain_transparency/100,
-        #                  weight = 1,
-        #                  color = "white",
-        #                  label = lapply(seq(nrow(tp1_strains)), function(i) {
-        #                    ~HTML(paste("Strain:", "<b>", strain[i] , "</b>", "<br/>",
-        #                                "Cluster:", tp1_cluster[i], "<br/>",
-        #                                "Country:", country[i], "<br/>",
-        #                                "Province:", province[i],"<br/>",
-        #                                "Date:", strain_date[i],"<br/>", sep=" "))
-        #                  }),
-        #                  group="TP1 strains") %>%
-        # 
-        # # tp2 strains
-        # addCircleMarkers(data = tp2_strains,
-        #                  lat = ~strain_latitude_jit,
-        #                  lng = ~strain_longitude_jit,
-        #                  radius = 5,
-        #                  fillColor = ~pal(tp1_cluster),
-        #                  fillOpacity = input$strain_transparency/100,
-        #                  stroke = T,
-        #                  opacity = input$strain_transparency/100,
-        #                  weight = 1,
-        #                  color = "black",
-        #                  label = lapply(seq(nrow(tp2_strains)), function(i) {
-        #                    ~HTML(paste("Strain: ", "<b>", strain[i] , "</b>", "<br/>",
-        #                                "Cluster: ", tp2_cluster[i], " (", tp1_cluster[i], ")", "<br/>",
-        #                                "Country: ", country[i], "<br/>",
-        #                                "Province: ", province[i],"<br/>",
-        #                                "Date: ", strain_date[i],"<br/>", sep=""))
-        #                  }),
-        #                  group="TP2 strains")
-        # 
-
-
+        
+        # tp1 strains
+        addCircleMarkers(data = tp1_strains,
+                         lat = ~strain_latitude_jit,
+                         lng = ~strain_longitude_jit,
+                         radius = 5,
+                         fillColor = ~pal(tp1_cluster),
+                         fillOpacity = input$strain_transparency/100,
+                         stroke = T,
+                         opacity = input$strain_transparency/100,
+                         weight = 1,
+                         color = "white",
+                         label = lapply(seq(nrow(tp1_strains)), function(i) {
+                             ~HTML(paste("Strain:", "<b>", strain[i] , "</b>", "<br/>",
+                                         "Cluster:", tp1_cluster[i], "<br/>",
+                                         "Country:", country[i], "<br/>",
+                                         "Province:", province[i],"<br/>",
+                                         "Date:", strain_date[i],"<br/>", sep=" "))
+                         }),
+                         group="TP1 strains") %>%
+            
+            # tp2 strains
+            addCircleMarkers(data = tp2_strains,
+                             lat = ~strain_latitude_jit,
+                             lng = ~strain_longitude_jit,
+                             radius = 5,
+                             fillColor = ~pal(tp1_cluster),
+                             fillOpacity = input$strain_transparency/100,
+                             stroke = T,
+                             opacity = input$strain_transparency/100,
+                             weight = 1,
+                             color = "black",
+                             label = lapply(seq(nrow(tp2_strains)), function(i) {
+                                 ~HTML(paste("Strain: ", "<b>", strain[i] , "</b>", "<br/>",
+                                             "Cluster: ", tp2_cluster[i], " (", tp1_cluster[i], ")", "<br/>",
+                                             "Country: ", country[i], "<br/>",
+                                             "Province: ", province[i],"<br/>",
+                                             "Date: ", strain_date[i],"<br/>", sep=""))
+                             }),
+                             group="TP2 strains")
+        
+        
+        
     })
-
-
-
+    
+    
+    
     ###################
     # ridgeline plots #
     ###################
-  
+    
     # output$ridgeplot <- renderPlotly({
     # 
     #     # base plot
@@ -787,49 +776,47 @@ server <- function(input, output, session) {
     #############################
     # bubble plots for ECC data #
     #############################
-
+    
     output$bubbleplot <- renderPlotly({
         
-      #add tp1 trace
-      plot_ly(clusters_long_sh,
-              x = ~ecc_0.0.1,
-              y = ~ecc_0.1.0,
-              type = 'scatter',
-              mode = 'markers',
-              color = ~tp1_cluster,
-              colors = ~pal(tp1_cluster),
-              size = ~cluster_size_2,
-              sizes = c(1, 1000),
-              hovertemplate = ~paste('<b>', tp1_cluster, '</b>','<br>',
-                                     'Time point: ', timepoint, '<br>',
-                                     'Temporal ECC: ', ecc_0.0.1, '<br>',
-                                     'Geospatial ECC: ', ecc_0.1.0, '<extra></extra>', sep=""),
-              marker = list(sizemode = "area")
-              ) #%>%
-        
-        # # add tp2 trace
-        # add_trace(data = clusters_long_sh$data(withSelection = T) %>% filter(timepoint==2),
-        #           x = ~ecc_0.0.1,
-        #           y = ~ ecc_0.1.0,
-        #           type = 'scatter',
-        #           mode = 'markers',
-        #           name = ~tp2_cluster,
-        #           color = ~tp1_cluster,
-        #           colors = ~pal(tp1_cluster),
-        #           size = ~cluster_size_2,
-        #           sizes = c(1, 1000),
-        #           text = ~tp1_cluster,
-        #           hovertemplate = ~paste('<b>', tp2_cluster, '</b>', ' (', tp1_cluster, ')', '<br>',
-        #                                  'Temporal ECC: ',ecc_0.0.1, '<br>',
-        #                                  'Geospatial ECC: ', ecc_0.1.0, '<extra></extra>', sep=""),
-        #           marker = list(sizemode = "area",
-        #                         line = list(color = "black"))) %>%
-        # # format layout
-        # layout(xaxis = list(title = "ecc_0.0.1", range = c(0,1)),
-        #        yaxis = list(title = "ecc_0.1.0", range = c(0,1))) %>%
-        # #highlighting options
-        # highlight(on="plotly_click",
-        #           off="plotly_doubleclick")
+        #add tp1 trace
+        plot_ly(clusters_sh,
+                x = ~tp1_t0_ecc_0.0.1,
+                y = ~tp1_t0_ecc_0.1.0,
+                type = 'scatter',
+                mode = 'markers',
+                color = ~tp1_cluster,
+                colors = ~pal(tp1_cluster),
+                size = ~tp1_cluster_size_2,
+                sizes = c(1, 1000),
+                hovertemplate = ~paste('<b>', tp1_cluster, '</b>','<br>',
+                                       'Temporal ECC: ',tp1_t0_ecc_0.0.1, '<br>',
+                                       'Geospatial ECC: ', tp1_t0_ecc_0.1.0, '<extra></extra>'),
+                marker = list(sizemode = "area")) %>%
+            
+            # add tp2 trace
+            add_trace(data = clusters_sh,
+                      x = ~tp2_t0_ecc_0.0.1,
+                      y = ~tp2_t0_ecc_0.1.0,
+                      type = 'scatter',
+                      mode = 'markers',
+                      name = ~tp2_cluster,
+                      color = ~tp1_cluster,
+                      colors = ~pal(tp1_cluster),
+                      size = ~tp2_cluster_size_2,
+                      sizes = c(1, 1000),
+                      text = ~tp1_cluster,
+                      hovertemplate = ~paste('<b>', tp2_cluster, '</b>', ' (', tp1_cluster, ')', '<br>',
+                                             'Temporal ECC: ',tp2_t0_ecc_0.0.1, '<br>',
+                                             'Geospatial ECC: ', tp2_t0_ecc_0.1.0, '<extra></extra>', sep=""),
+                      marker = list(sizemode = "area",
+                                    line = list(color = "black"))) %>%
+            # format layout
+            layout(xaxis = list(title = "ecc_0.0.1", range = c(0,1)),
+                   yaxis = list(title = "ecc_0.1.0", range = c(0,1))) %>%
+            #highlighting options
+            highlight(on="plotly_click",
+                      off="plotly_doubleclick")
     })
     
     
@@ -855,123 +842,122 @@ server <- function(input, output, session) {
     ######################################
     # polar plot for change in direction #
     ######################################
-    # 
-    # # color pal for polar plot
-    # polarpal <-  colorFactor(
-    #     palette = ocean.phase(n=16),
-    #     domain = unique(clusters$cardinal))
-    # 
-    # # render polar plot 
-    # output$cardinal_polar <- renderPlotly({ 
-    # 
-    #     # format data
-    #     clusters_sh$data(withSelection = TRUE ) %>%
-    #         filter(selected_ | is.na(selected_)) %>%
-    #         count(cardinal, .drop=FALSE) %>%
-    #         mutate(theta = (as.numeric(rownames(.))-1) * 22.5,
-    #                direction = c("North", "North/Northeast", "Northeast",
-    #                              "East/Northeast", "East", "East/Southeast",
-    #                              "Southeast", "South/Southeast", "South",
-    #                              "South/Southwest", "Southwest",
-    #                              "West/Southwest", "West",
-    #                              "West/Northwest", "Northwest",
-    #                              "North/Northwest")) %>%
-    #     # initialize plot
-    #     plot_ly(type="barpolar",
-    #             r = ~n,
-    #             theta = ~theta,
-    #             opacity = 0.7,
-    #             name = ~cardinal,
-    #             hovertemplate = ~paste('<b>', direction, '</b><br>',
-    #                                    'Count: ', n, '<br>',
-    #                                    '<extra></extra>', sep=""),
-    #             marker = list(color = ~polarpal(cardinal),
-    #                           line = list(color="black"))) %>%
-    #         layout(showlegend = F,
-    #                polar = list(
-    #                    angularaxis = list(
-    #                        rotation = 90,
-    #                        direction = 'clockwise',
-    #                        tickmode = 'array',
-    #                        tickvals = c(0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5,180,
-    #                                     202.5, 225, 247.5, 270, 292.5, 315, 337.5),
-    #                        ticktext = c("N", "NNE", "NE", "ENE", "E", "ESE", "SE",
-    #                                     "SSE", "S", "SSW", "SW", "WSW", "W", "WNW",
-    #                                     "NW", "NNW")))) %>%
-    #     
-    #     highlight(on="plotly_click",
-    #               off="plotly_doubleclick")
-    # })
-    # 
-    # 
+    
+    # color pal for polar plot
+    polarpal <-  colorFactor(
+        palette = ocean.phase(n=16),
+        domain = unique(clusters$cardinal))
+    
+    # render polar plot 
+    output$cardinal_polar <- renderPlotly({ 
+        
+        # format data
+        clusters_sh$data(withSelection = TRUE ) %>%
+            filter(selected_ | is.na(selected_)) %>%
+            count(cardinal, .drop=FALSE) %>%
+            mutate(theta = (as.numeric(rownames(.))-1) * 22.5,
+                   direction = c("North", "North/Northeast", "Northeast",
+                                 "East/Northeast", "East", "East/Southeast",
+                                 "Southeast", "South/Southeast", "South",
+                                 "South/Southwest", "Southwest",
+                                 "West/Southwest", "West",
+                                 "West/Northwest", "Northwest",
+                                 "North/Northwest")) %>%
+            # initialize plot
+            plot_ly(type="barpolar",
+                    r = ~n,
+                    theta = ~theta,
+                    opacity = 0.7,
+                    name = ~cardinal,
+                    hovertemplate = ~paste('<b>', direction, '</b><br>',
+                                           'Count: ', n, '<br>',
+                                           '<extra></extra>', sep=""),
+                    marker = list(color = ~polarpal(cardinal),
+                                  line = list(color="black"))) %>%
+            layout(showlegend = F,
+                   polar = list(
+                       angularaxis = list(
+                           rotation = 90,
+                           direction = 'clockwise',
+                           tickmode = 'array',
+                           tickvals = c(0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5,180,
+                                        202.5, 225, 247.5, 270, 292.5, 315, 337.5),
+                           ticktext = c("N", "NNE", "NE", "ENE", "E", "ESE", "SE",
+                                        "SSE", "S", "SSW", "SW", "WSW", "W", "WNW",
+                                        "NW", "NNW")))) %>%
+            
+            highlight(on="plotly_click",
+                      off="plotly_doubleclick")
+    })
+    
+    
     #######################
     # change vector graph #
     #######################
-    # 
-    # output$change_vector <- renderPlotly({ 
-    # 
-    #     # change vector plot
-    #     plot_ly(type = 'scatter', 
-    #             mode="lines+markers",
-    #             data = clusters_sh,
-    #             x = c(0, ~delta_ecc_0.0.1), 
-    #             y = c(0, ~delta_ecc_0.1.0),
-    #             color = ~tp1_cluster, 
-    #             colors = ~pal(tp1_cluster), 
-    #             opacity = 1,
-    #             hovertemplate = ~paste('<b>', tp1_cluster, '</b><br>',
-    #                                    'Delta temporal ECC: ', delta_ecc_0.0.1, '<br>',
-    #                                    'Delta geospatial ECC: ', delta_ecc_0.1.0, '<extra></extra>', sep="")) %>%
-    #         layout(xaxis = list(title = "delta_ecc_0.0.1", range = c(-1,1)), 
-    #                yaxis = list(title = "delta_ecc_0.1.0", range = c(-1,1))) %>%
-    #     # highlighting/selection options
-    #     highlight(on="plotly_click",
-    #               off="plotly_doubleclick")
-    #     
-    # })
-    # 
+    
+    output$change_vector <- renderPlotly({ 
+        
+        # change vector plot
+        plot_ly(type = 'scatter', 
+                mode="lines+markers",
+                data = clusters_sh,
+                x = c(0, ~delta_ecc_0.0.1), 
+                y = c(0, ~delta_ecc_0.1.0),
+                color = ~tp1_cluster, 
+                colors = ~pal(tp1_cluster), 
+                opacity = 1,
+                hovertemplate = ~paste('<b>', tp1_cluster, '</b><br>',
+                                       'Delta temporal ECC: ', delta_ecc_0.0.1, '<br>',
+                                       'Delta geospatial ECC: ', delta_ecc_0.1.0, '<extra></extra>', sep="")) %>%
+            layout(xaxis = list(title = "delta_ecc_0.0.1", range = c(-1,1)), 
+                   yaxis = list(title = "delta_ecc_0.1.0", range = c(-1,1))) %>%
+            # highlighting/selection options
+            highlight(on="plotly_click",
+                      off="plotly_doubleclick")
+        
+    })
+    
     
     ###########################################
     # filtered table to be displayed in a tab #
     ###########################################
     
-    # # filtered data
-    # output$filtered_data <- renderDataTable({
-    #     
-    #     datatable(eccdata_r(), 
-    #               extensions = c('Buttons','Scroller'), 
-    #               options = list(
-    #                   dom = 'Blfrtip',
-    #                   rowId = 0,
-    #                   buttons = list('csv', 'excel'),
-    #                   deferRender = TRUE,
-    #                   scrollY = 500,
-    #                   scrollX = 600,
-    #                   scroller = TRUE),
-    #               selection = 'none')
-    # }, server=F)
-    # 
-    # 
+    # filtered data
+    output$filtered_data <- renderDataTable({
+        
+        datatable(eccdata_r(), 
+                  extensions = c('Buttons','Scroller'), 
+                  options = list(
+                      dom = 'Blfrtip',
+                      rowId = 0,
+                      buttons = list('csv', 'excel'),
+                      deferRender = TRUE,
+                      scrollY = 500,
+                      scrollX = 600,
+                      scroller = TRUE),
+                  selection = 'none')
+    }, server=F)
+    
+    
     #########################################
     # raw data to be displayed in a new tab #
     #########################################
     
-    # # input/raw data 
-    # output$raw_data <- renderDataTable({
-    #     
-    #     datatable(eccdata, 
-    #               extensions = c('Buttons','Scroller'), 
-    #               options = list(
-    #                   dom = 'Blfrtip',
-    #                   rowId = 0,
-    #                   buttons = list('csv', 'excel'),
-    #                   deferRender = TRUE,
-    #                   scrollY = 500,
-    #                   scrollX = 600,
-    #                   scroller = TRUE),
-    #               selection = 'none')
-    # })
+    # input/raw data 
+    output$raw_data <- renderDataTable({
+        
+        datatable(eccdata, 
+                  extensions = c('Buttons','Scroller'), 
+                  options = list(
+                      dom = 'Blfrtip',
+                      rowId = 0,
+                      buttons = list('csv', 'excel'),
+                      deferRender = TRUE,
+                      scrollY = 500,
+                      scrollX = 600,
+                      scroller = TRUE),
+                  selection = 'none')
+    })
 }
 
 shinyApp(ui, server)
-
