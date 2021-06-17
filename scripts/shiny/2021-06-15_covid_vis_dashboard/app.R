@@ -347,7 +347,7 @@ body <- dashboardBody(
               # map
               box(title = "Map plot", 
                   width = 6, 
-                  leafletOutput("map"),
+                  plotlyOutput("map"),
                   collapsible = TRUE,
                   sidebar = boxSidebar(
                     id = "mapsidebar",
@@ -630,7 +630,9 @@ server <- function(input, output, session) {
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
       {if (!is.null(input$present_at_tp1)) filter(., present_at_tp1 %in% input$province)  else . } %>%
       filter(present_at_tp1==1) %>%
-      filter(tp1_cluster %in% clusters_rall()$tp1_cluster)
+      filter(tp1_cluster %in% clusters_rall()$tp1_cluster) %>%
+      filter(tp1_cluster %in% (clusters_long_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
+    
   })
   
   # tp2 strain reactive filtering
@@ -640,7 +642,9 @@ server <- function(input, output, session) {
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
       {if (!is.null(input$present_at_tp1)) filter(., present_at_tp1 %in% input$province)  else . } %>%
       filter(present_at_tp1==0) %>%
-      filter(tp1_cluster %in% clusters_rall()$tp1_cluster) 
+      filter(tp1_cluster %in% clusters_rall()$tp1_cluster) %>%
+      filter(tp1_cluster %in% (clusters_long_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
+    
   })
   
   
@@ -692,9 +696,9 @@ server <- function(input, output, session) {
   }, server=F)
   
   
-  ####################
-  # base leaflet map #
-  ####################
+  ###############
+  # cluster map #
+  ###############
   
   # leaflet built in color function
   pal <-  colorFactor(
@@ -702,61 +706,49 @@ server <- function(input, output, session) {
                   length.out=length(unique(clusters_long$tp1_cluster))),
     domain = unique(clusters_long$tp1_cluster))
   
-  # leaflet map
-  output$map <- renderLeaflet({
-    # leaflet map
-    leaflet() %>%
-      # load tile for selected region
-      addTiles("http://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}") %>%
-      # set base zoom over mid asia/europe
-      setView(lng = 60, lat = 50, zoom = 2) %>%
-      # control layer for toggling strains and centroids on/off
-      addLayersControl(overlayGroups = c("TP1 clusters", "TP2 clusters", "TP1 strains", "TP2 strains"),
-                       options = layersControlOptions(collapsed = TRUE)) %>%
-      # hide strains until user says otherwise
-      hideGroup(c("TP1 strains", "TP2 strains")) %>%
-      # tp1 cluster markers
-      addCircleMarkers(data = clusters_long_sh,
-                       lat = ~avg_latitude,
-                       lng = ~avg_longitude,
-                       radius = ~log10(cluster_size_2)*10,
-                       fillColor = ~pal(tp1_cluster),
-                       fillOpacity = input$centroid_transparency/100,
-                       stroke = T,
-                       opacity = input$centroid_transparency/100,
-                       weight = 1,
-                       color = ~pal(tp1_cluster),
-                       label =  ~maptext,
-                       group = "TP1 clusters") %>%
 
-      # tp1 strains
-      addCircleMarkers(data = strains_sh1,
-                       lat = ~strain_latitude_jit,
-                       lng = ~strain_longitude_jit,
-                       radius = 5,
-                       fillColor = ~pal(tp1_cluster),
-                       fillOpacity = input$strain_transparency/100,
-                       stroke = T,
-                       opacity = input$strain_transparency/100,
-                       weight = 1,
-                       color = "white",
-                       label = ~maptext, 
-                       group="TP1 strains") %>%
-      # tp2 strains
-      addCircleMarkers(data = strains_sh2,
-                       lat = ~strain_latitude_jit,
-                       lng = ~strain_longitude_jit,
-                       radius = 5,
-                       fillColor = ~pal(tp1_cluster),
-                       fillOpacity = input$strain_transparency/100,
-                       stroke = T,
-                       opacity = input$strain_transparency/100,
-                       weight = 1,
-                       color = "black",
-                       label = ~maptext, 
-                       group="TP2 strains")
-  })
+  mapboxToken <- "pk.eyJ1Ijoic2FtLWEtbGVlIiwiYSI6ImNrb2s0bXVpbzFhMGkybm5zeHI1dHR1aTgifQ.1K8o7OaSOWo_y5UdVH348w"    # You need your own token
+  Sys.setenv("MAPBOX_TOKEN" = mapboxToken) # for Orca
   
+  
+  
+  output$map <- renderPlotly({
+    
+    plot_mapbox(mode = 'scattermapbox') %>% 
+      add_markers(data = clusters_long_sh, 
+                  x = ~avg_longitude, 
+                  y = ~avg_latitude, 
+                  legendGroup = ~tp1_cluster,
+                  color= ~I(pal(tp1_cluster)),
+                  name = ~paste(tp1_cluster, timepoint, sep="_"), 
+                  marker =list(size = ~log10(cluster_size_2)*10),
+                  alpha = 0.8) 
+  })
+
+  
+
+  
+  
+  
+  #####################
+  # map click trigger #
+  #####################
+  
+  observe({
+    
+    click <- input$map_marker_click
+    # cur <- clusters_long_sh$selection()
+    # print(cur)
+
+    # selected_points <- seq(nrow(clusters_long))
+    # 
+    # nrow_log <- rep(TRUE, (nrow(clusters_long)))
+    # nrow_log[as.numeric(click$id)] <- FALSE
+    # 
+    # print(  clusters_long_sh$selection())
+    # print(clusters_long_sh$selection(value = click$id, ownerId = "map"))
+ 
+    })
   
   ###################
   # ridgeline plots #
@@ -806,7 +798,7 @@ server <- function(input, output, session) {
   #############################
   
   output$bubbleplot <- renderPlotly({
-    plot_ly() %>% 
+    plot_ly(source="test") %>% 
       #add tp1 trace
       add_trace(data = clusters_long_sh,
                 x = ~ecc_0.0.1,
@@ -819,13 +811,12 @@ server <- function(input, output, session) {
                 name = ~paste(tp1_cluster, timepoint, sep="_"),
                 size = ~cluster_size_2,
                 sizes = c(1, 1000),
-                marker = list(sizemode = "area")) %>%
-      highlight(on = "plotly_click",
-                off = "plotly_doubleclick")
-    
+                opacity = 0.8, 
+                marker = list(sizemode = "area"))
+
   })
   
-  
+ 
   ##############################
   # histogram for strain counts#
   ##############################
