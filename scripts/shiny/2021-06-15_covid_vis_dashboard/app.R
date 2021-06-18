@@ -282,9 +282,7 @@ strains$strain_date <- paste(strains$day,
 strains$strain_date <- as.Date(strains$strain_date, format = "%d-%m-%y")
 
 # create time difference for ridgeline plots 
-strains <- strains %>% mutate(tp1_stain_time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y"))))
-strains <- strains %>% mutate(tp2_stain_time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y"))))
-
+strains <- strains %>% mutate(stain_time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y"))))
 
 ################################
 # create strain labels for map #
@@ -324,11 +322,54 @@ header <- dashboardHeader(title = "ECC Vis")
 sidebar <- dashboardSidebar(
   sidebarMenu(id = 'sidebarmenu',
               
-              # Visualization tab
+               # Visualization tab
               menuItem("Visualizations", tabName = "visualizations"),
               
+              # Data exploration tab
+              menuItem("Explore the data", tabName = "exploreData",
+                       radioButtons("exploreData", "'Top 10' data subsets",
+                                    choices = list("Largest clusters" = 1, "Largest geo delta ECC" = 2,
+                                                   "Largest temp delta ECC" = 3), selected = 1)),
+              
+              # Data filters
+              menuItem("Data filters", tabName = "dataFilters",
+                       
+                       # cluster filters
+                       menuItem('Cluster filters', tabName = "clusterFilters",
+                                selectizeInput("tp1_cluster", "TP1 cluster", unique(clusters_long$tp1_cluster),  selected = NULL, multiple = T),
+                                selectizeInput("timepoint", "Timepoint", unique(clusters_long$timepoint), selected = NULL, multiple = T),
+                                sliderInput(inputId = "cluster_size_2", label = "Cluster size", min = min(clusters_long$cluster_size_2)-1, max = max(clusters_long$cluster_size_2)-1, value = c(min(clusters_long$cluster_size_2)-1, max(clusters_long$cluster_size_2)-1)),
+                                sliderInput(inputId = "avg_date", label = "Avg date", min = min(clusters_long$avg_date), max = max(clusters_long$avg_date), value = c(min(clusters_long$avg_date), max(clusters_long$avg_date))),
+                                sliderInput(inputId = "ecc_0.0.1", label = "ecc_0.0.1", min = min(clusters_long$ecc_0.0.1, na.rm = T), max = max(clusters_long$ecc_0.0.1, na.rm = T), value = c(min(clusters_long$ecc_0.0.1, na.rm = T), max(clusters_long$ecc_0.0.1, na.rm = T))),
+                                sliderInput(inputId = "ecc_0.1.0", label = "ecc_0.1.0", min = min(clusters_long$ecc_0.1.0, na.rm = T), max = max(clusters_long$ecc_0.1.0, na.rm = T), value = c(min(clusters_long$ecc_0.1.0, na.rm = T), max(clusters_long$ecc_0.1.0, na.rm = T))),
+                                sliderInput(inputId = "avg_latitude", label = "Avg latitude", min = min(clusters_long$avg_latitude), max = max(clusters_long$avg_latitude), value = c(min(clusters_long$avg_latitude), max(clusters_long$avg_latitude))),
+                                sliderInput(inputId = "avg_longitude", label = "Avg longitude", min = min(clusters_long$avg_longitude), max = max(clusters_long$avg_longitude), value = c(min(clusters_long$avg_longitude), max(clusters_long$avg_longitude))),
+                                # delta filters
+                                sliderInput(inputId = "delta_cluster_size", label = "Delta cluster size", min = min(clusters_long$delta_cluster_size), max = max(clusters_long$delta_cluster_size), value = c(min(clusters_long$delta_cluster_size), max(clusters_long$delta_cluster_size))),
+                                sliderInput(inputId = "num_novel_tp2_strains", label = "Novel TP2 strains", min = min(clusters_long$num_novel_tp2_strains), max = max(clusters_long$num_novel_tp2_strains), value = c(min(clusters_long$num_novel_tp2_strains), max(clusters_long$num_novel_tp2_strains))),
+                                sliderInput(inputId = "overall_cluster_growth_rate", label = "Overall growth rate", min = min(clusters_long$overall_cluster_growth_rate), max = max(clusters_long$overall_cluster_growth_rate), value = c(min(clusters_long$overall_cluster_growth_rate), max(clusters_long$overall_cluster_growth_rate))),
+                                sliderInput(inputId = "cluster_novel_growth_rate", label = "Novel growth rate", min = min(clusters_long$delta_cluster_size), max = max(clusters_long$delta_cluster_size), value = c(min(clusters_long$delta_cluster_size), max(clusters_long$delta_cluster_size))),
+                                sliderInput(inputId = "delta_ecc_0.0.1", label = "delta ecc_0.0.1", min = min(clusters_long$delta_ecc_0.0.1, na.rm = T), max = max(clusters_long$delta_ecc_0.0.1, na.rm = T), value = c(min(clusters_long$delta_ecc_0.0.1, na.rm = T), max(clusters_long$delta_ecc_0.0.1, na.rm = T))),
+                                sliderInput(inputId = "delta_ecc_0.1.0", label = "delta ecc_0.1.0", min = min(clusters_long$delta_ecc_0.1.0, na.rm = T), max = max(clusters_long$delta_ecc_0.1.0, na.rm = T), value = c(min(clusters_long$delta_ecc_0.1.0, na.rm = T), max(clusters_long$delta_ecc_0.1.0, na.rm = T))),
+                                selectizeInput("cardinal", "Avg cluster movement direction", unique(clusters_long$cardinal), selected = NULL, multiple = T)),
+                       
+                       #strain filters
+                       menuItem('Strain filters', tabName = "strainFilters",
+                                # strain filters
+                                selectizeInput("country", "Country", unique(strains$country),  selected = NULL, multiple = T),
+                                selectizeInput("province", "Province", unique(strains$province),  selected = NULL, multiple = T),
+                                selectizeInput("present_at_tp1", "Present at TP1", unique(strains$present_at_tp1),  selected = NULL, multiple = T),
+                                sliderInput(inputId = "strain_date", label = "Strain date", min = min(strains$strain_date), max = max(strains$strain_date), value = c(min(strains$strain_date), max(strains$strain_date)))
+                       )),
+
+              # Cluster data tab
+              menuItem("Cluster data", tabName = "clusterData"),
+              
+              # Strain data tab
+              menuItem("Strain data", tabName = "strainData"),
+              
               # filtered data using in visualizations
-              menuItem("Filtered data", tabName = "filteredData"),
+              menuItem("Filtered raw data", tabName = "filteredData"),
               
               # raw data used to generate visualizations
               menuItem("Raw data", tabName = "rawData"))
@@ -406,62 +447,6 @@ body <- dashboardBody(
                   width = 6,
                   plotlyOutput("strain_histogram", width = "100%", height = "100%"),
                   collapsible = TRUE)
-            ),
-            
-            # row 4 for cluster data and filters
-            fluidRow(
-              
-              # cluster filters 
-              box(title = "Cluster filters", 
-                  width = 3,
-                  
-                  # tp1 filters
-                  selectizeInput("tp1_cluster", "TP1 cluster", unique(clusters_long$tp1_cluster),  selected = NULL, multiple = T),
-                  sliderInput(inputId = "cluster_size_2", label = "Cluster size", min = min(clusters_long$cluster_size_2)-1, max = max(clusters_long$cluster_size_2)-1, value = c(min(clusters_long$cluster_size_2)-1, max(clusters_long$cluster_size_2)-1)),
-                  sliderInput(inputId = "avg_date", label = "Avg date", min = min(clusters_long$avg_date), max = max(clusters_long$avg_date), value = c(min(clusters_long$avg_date), max(clusters_long$avg_date))),
-                  sliderInput(inputId = "ecc_0.0.1", label = "ecc_0.0.1", min = min(clusters_long$ecc_0.0.1, na.rm = T), max = max(clusters_long$ecc_0.0.1, na.rm = T), value = c(min(clusters_long$ecc_0.0.1, na.rm = T), max(clusters_long$ecc_0.0.1, na.rm = T))),
-                  sliderInput(inputId = "ecc_0.1.0", label = "ecc_0.1.0", min = min(clusters_long$ecc_0.1.0, na.rm = T), max = max(clusters_long$ecc_0.1.0, na.rm = T), value = c(min(clusters_long$ecc_0.1.0, na.rm = T), max(clusters_long$ecc_0.1.0, na.rm = T))),
-                  sliderInput(inputId = "avg_latitude", label = "Avg latitude", min = min(clusters_long$avg_latitude), max = max(clusters_long$avg_latitude), value = c(min(clusters_long$avg_latitude), max(clusters_long$avg_latitude))),
-                  sliderInput(inputId = "avg_longitude", label = "Avg longitude", min = min(clusters_long$avg_longitude), max = max(clusters_long$avg_longitude), value = c(min(clusters_long$avg_longitude), max(clusters_long$avg_longitude))),
-                  
-                  # delta filters
-                  sliderInput(inputId = "delta_cluster_size", label = "Delta cluster size", min = min(clusters_long$delta_cluster_size), max = max(clusters_long$delta_cluster_size), value = c(min(clusters_long$delta_cluster_size), max(clusters_long$delta_cluster_size))),
-                  sliderInput(inputId = "num_novel_tp2_strains", label = "Novel TP2 strains", min = min(clusters_long$num_novel_tp2_strains), max = max(clusters_long$num_novel_tp2_strains), value = c(min(clusters_long$num_novel_tp2_strains), max(clusters_long$num_novel_tp2_strains))),
-                  sliderInput(inputId = "overall_cluster_growth_rate", label = "Overall growth rate", min = min(clusters_long$overall_cluster_growth_rate), max = max(clusters_long$overall_cluster_growth_rate), value = c(min(clusters_long$overall_cluster_growth_rate), max(clusters_long$overall_cluster_growth_rate))),
-                  sliderInput(inputId = "cluster_novel_growth_rate", label = "Novel growth rate", min = min(clusters_long$delta_cluster_size), max = max(clusters_long$delta_cluster_size), value = c(min(clusters_long$delta_cluster_size), max(clusters_long$delta_cluster_size))),
-                  sliderInput(inputId = "delta_ecc_0.0.1", label = "delta ecc_0.0.1", min = min(clusters_long$delta_ecc_0.0.1, na.rm = T), max = max(clusters_long$delta_ecc_0.0.1, na.rm = T), value = c(min(clusters_long$delta_ecc_0.0.1, na.rm = T), max(clusters_long$delta_ecc_0.0.1, na.rm = T))),
-                  sliderInput(inputId = "delta_ecc_0.1.0", label = "delta ecc_0.1.0", min = min(clusters_long$delta_ecc_0.1.0, na.rm = T), max = max(clusters_long$delta_ecc_0.1.0, na.rm = T), value = c(min(clusters_long$delta_ecc_0.1.0, na.rm = T), max(clusters_long$delta_ecc_0.1.0, na.rm = T))),
-                  selectizeInput("cardinal", "Avg cluster movement direction", unique(clusters_long$cardinal), selected = NULL, multiple = T),
-                  
-                  # make collapsible 
-                  collapsible = TRUE),
-              
-              # cluster data
-              box(title = "Cluster data", 
-                  width = 9, 
-                  dataTableOutput("clusters_dt"),
-                  #reactableOutput("clusters_dt"),
-                  collapsible = TRUE)   
-            ),
-            
-            # fluid row for strain data and filters
-            fluidRow(
-              box(title = "Strain filters", 
-                  width = 3,
-                  
-                  # strain filters
-                  selectizeInput("country", "Country", unique(strains$country),  selected = NULL, multiple = T),
-                  selectizeInput("province", "Province", unique(strains$province),  selected = NULL, multiple = T),
-                  selectizeInput("present_at_tp1", "Present at TP1", unique(strains$present_at_tp1),  selected = NULL, multiple = T),
-                  sliderInput(inputId = "strain_date", label = "Strain date", min = min(strains$strain_date), max = max(strains$strain_date), value = c(min(strains$strain_date), max(strains$strain_date)))
-              ),
-              
-              # strain data
-              box(title = "Strain data", 
-                  width = 9, 
-                  dataTableOutput("strains_dt"),
-                  collapsible = TRUE)   
-              
             )
     ),
     
@@ -480,6 +465,24 @@ body <- dashboardBody(
             fluidRow(
               box(width = 12,
                   dataTableOutput("raw_data"))
+            )
+    ),
+    
+    # table for cluster data
+    tabItem(tabName = "clusterData",
+            h2("Cluster data"),
+            fluidRow(
+              box(width = 12,
+                  dataTableOutput("clusters_dt"))
+            )
+    ),
+
+    # table for strain data
+    tabItem(tabName = "strainData",
+            h2("Strain data"),
+            fluidRow(
+              box(width = 12,
+                  dataTableOutput("strains_dt"))
             )
     )
   )
@@ -657,6 +660,7 @@ server <- function(input, output, session) {
   strains_sh1 <- SharedData$new(strains_r1, key = ~key, group = "strains")
   strains_sh2 <- SharedData$new(strains_r2, key = ~key, group = "strains")
   
+  
   ################################
   # cluster and strain DT tables #
   ################################
@@ -706,50 +710,39 @@ server <- function(input, output, session) {
                   length.out=length(unique(clusters_long$tp1_cluster))),
     domain = unique(clusters_long$tp1_cluster))
   
-
-  mapboxToken <- "pk.eyJ1Ijoic2FtLWEtbGVlIiwiYSI6ImNrb2s0bXVpbzFhMGkybm5zeHI1dHR1aTgifQ.1K8o7OaSOWo_y5UdVH348w"    # You need your own token
-  Sys.setenv("MAPBOX_TOKEN" = mapboxToken) # for Orca
-  
-  
-  
+  # plotly map using mapbox
   output$map <- renderPlotly({
     
+    mapboxToken <- "pk.eyJ1Ijoic2FtLWEtbGVlIiwiYSI6ImNrb2s0bXVpbzFhMGkybm5zeHI1dHR1aTgifQ.1K8o7OaSOWo_y5UdVH348w"    # You need your own token
+    Sys.setenv("MAPBOX_TOKEN" = mapboxToken) # for Orca
+    
     plot_mapbox(mode = 'scattermapbox') %>% 
+      # cluster markers
       add_markers(data = clusters_long_sh, 
                   x = ~avg_longitude, 
                   y = ~avg_latitude, 
-                  legendGroup = ~tp1_cluster,
+                  legendgroup = ~timepoint,
                   color= ~I(pal(tp1_cluster)),
                   name = ~paste(tp1_cluster, timepoint, sep="_"), 
                   marker =list(size = ~log10(cluster_size_2)*10),
-                  alpha = 0.8) 
+                  hovertext = ~maptext, 
+                  opacity = 0.8) %>%
+      # strain markers
+      # add_markers(data = strains_sh,
+      #             x = ~strain_longitude_jit,
+      #             y = ~strain_latitude_jit,
+      #             legendgroup = ~timepoint,
+      #             color= ~I(pal(tp1_cluster)),
+      #             name = ~paste(tp1_cluster, "strains", timepoint, sep="_"),
+      #             marker =list(size = 5),
+      #             hovertext = ~maptext,
+      #             opacity = 0.8,
+      #             visible = FALSE,
+      #             inherit = F) %>%
+      config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN"))
   })
 
-  
 
-  
-  
-  
-  #####################
-  # map click trigger #
-  #####################
-  
-  observe({
-    
-    click <- input$map_marker_click
-    # cur <- clusters_long_sh$selection()
-    # print(cur)
-
-    # selected_points <- seq(nrow(clusters_long))
-    # 
-    # nrow_log <- rep(TRUE, (nrow(clusters_long)))
-    # nrow_log[as.numeric(click$id)] <- FALSE
-    # 
-    # print(  clusters_long_sh$selection())
-    # print(clusters_long_sh$selection(value = click$id, ownerId = "map"))
- 
-    })
-  
   ###################
   # ridgeline plots #
   ###################
@@ -757,30 +750,12 @@ server <- function(input, output, session) {
   output$ridgeplot <- renderPlotly({
     # base plot
     plot_ly(type = 'violin') %>%
-      # tp2 traces
-      add_trace(data = strains_sh1,
-                x = ~tp2_stain_time_diff,
-                y = ~tp1_cluster,
-                split = ~tp1_cluster,
-                type = 'violin',
-                side = 'positive',
-                orientation = "h",
-                scalemode = "count",
-                color = ~I(pal(tp1_cluster)),
-                name =  ~tp2_cluster,
-                points = "all",
-                line = list(color = "black",
-                            width = 1),
-                marker = list(opacity = 0.4,
-                              size = 10,
-                              line = list(color = "black",
-                                          width = 1)),
-                hoveron = "violins+points") %>%
       # tp1 traces
-      add_trace(data = strains_sh2,
-                x = ~tp1_stain_time_diff,
+      add_trace(data = strains_sh1,
                 y = ~tp1_cluster,
+                x = ~strain_date,
                 split = ~tp1_cluster,
+                name =  ~paste(tp1_cluster,1, sep="_"),
                 type = 'violin',
                 side = 'positive',
                 orientation = "h",
@@ -789,7 +764,30 @@ server <- function(input, output, session) {
                 points = "all",
                 marker = list(opacity = 0.4,
                               size = 10),
-                hoveron = "violins+points")
+                hoveron = "violins+points") %>%  
+      # tp2 traces
+      add_trace(data = strains_sh2,
+                y = ~tp1_cluster,
+                x = ~strain_date,
+                split = ~tp1_cluster,
+                type = 'violin',
+                side = 'positive',
+                orientation = "h",
+                scalemode = "count",
+                color = ~I(pal(tp1_cluster)),
+                name =  ~paste(tp1_cluster,2, sep="_"),
+                points = "all",
+                line = list(color = "black",
+                            width = 1),
+                marker = list(opacity = 0.4,
+                              size = 10,
+                              line = list(color = "black",
+                                          width = 1)),
+                hoveron = "violins+points") %>%
+      layout(yaxis= list(showticklabels = FALSE,
+                         title = "Relative strain count density"),
+             xaxis = list(title = "Date of strain identification"))
+    
   })
   
   
@@ -806,14 +804,15 @@ server <- function(input, output, session) {
                 type = 'scatter',
                 mode = 'markers',
                 legendgroup = ~tp1_cluster,
-                color = ~tp1_cluster,
-                colors = ~pal(tp1_cluster),
+                color = ~I(pal(tp1_cluster)),
                 name = ~paste(tp1_cluster, timepoint, sep="_"),
                 size = ~cluster_size_2,
                 sizes = c(1, 1000),
                 opacity = 0.8, 
-                marker = list(sizemode = "area"))
-
+                marker = list(sizemode = "area")) %>%
+      # # highlighting/selection options
+      highlight(on= "plotly_click",
+                off="plotly_doubleclick")
   })
   
  
@@ -822,16 +821,32 @@ server <- function(input, output, session) {
   ##############################
   
   output$strain_histogram <- renderPlotly({
+
     # strain count by country histogram
     plot_ly(type = "histogram",
             data = strains_sh,
             histfunc = "count",
-            x = ~month,
+            x = ~month.name[month],
             split = ~country,
             colors = "Set1",
             hovertemplate = ~paste('<b>', country, '</b><br>',
                                    'Count: %{y}', '<extra></extra>', sep=" ")) %>%
-      layout(barmode = "stack")
+      layout(barmode = "stack",
+             xaxis = list(categoryorder = "array",
+                          categoryarray = c(month.name[1], 
+                                            month.name[2], 
+                                            month.name[3],
+                                            month.name[4],
+                                            month.name[5],
+                                            month.name[6],
+                                            month.name[7],
+                                            month.name[8],
+                                            month.name[9],
+                                            month.name[10],
+                                            month.name[11],
+                                            month.name[12]),
+                          title = "Month"),
+             yaxis = list(title = "Strain count"))
   })
   
   
@@ -892,24 +907,78 @@ server <- function(input, output, session) {
   
   output$change_vector <- renderPlotly({
     
-    # change vector plot
-    plot_ly(type = 'scatter',
-            mode= "lines+markers",
-            data = clusters_long_sh,
-            x = ~delta_ecc_0.0.1,
-            y = ~delta_ecc_0.1.0,
-            color = ~tp1_cluster,
-            colors = ~pal(tp1_cluster),
-            opacity = 1,
-            legendgroup = ~timepoint,
-            name = ~paste(tp1_cluster, timepoint, sep="_"),
-            hovertemplate = ~paste('<b>', tp1_cluster, '</b><br>',
-                                   'Delta temporal ECC: ', delta_ecc_0.0.1, '<br>',
-                                   'Delta geospatial ECC: ', delta_ecc_0.1.0, '<extra></extra>', sep="")) %>%
-      # highlighting/selection options
-      highlight(on= "plotly_click",
-                off="plotly_doubleclick")
+    test <- clusters_long_sh$data(withSelection = T)
+    test$opacity <- ifelse(test$selected_ | is.na(test$selected_), 1, 0.1)
+    
+    plot_ly(type = "scatter", mode="markers") %>% 
+      #add segment to connect each point to origin
+      add_trace(data = clusters_long_sh,
+                x = ~delta_ecc_0.0.1,
+                y = ~delta_ecc_0.1.0,
+                legendgroup = ~timepoint,
+                opacity = 1,
+                size=I(0), 
+                name = ~paste(tp1_cluster, timepoint, sep="_"),
+                color = ~I(pal(tp1_cluster)),
+                hovertemplate = ~paste('<b>', tp1_cluster, '</b><br>',
+                                       'Delta temporal ECC: ', delta_ecc_0.0.1, '<br>',
+                                       'Delta geospatial ECC: ', delta_ecc_0.1.0, '<extra></extra>', sep="")) %>%
+      # set range and overlay arrow annotations
+      layout(xaxis = list(range = c(-1, 1.5)),
+             yaxis = list(range = c(-1, 1.5)),
+             annotations = list(ax = 0, ay = 0,
+                                axref='x', ayref='y',
+                                x = ~delta_ecc_0.0.1,
+                                y = ~delta_ecc_0.1.0,
+                                opacity = I(test$opacity),
+                                name = ~paste(tp1_cluster, timepoint, sep="_"),
+                                arrowcolor = ~I(pal(tp1_cluster)),
+                                xref='x', yref='y', text = "")) %>%
+      # add inset plot for average vector 
+      add_trace(data = clusters_long_sh,              
+                x = ~sum(delta_ecc_0.0.1),
+                y = ~sum(delta_ecc_0.1.0),
+                name = "Avg change vector",
+                xaxis='x2',
+                yaxis='y2',
+                opacity = 0.3,
+                size=I(0.1), 
+                #inherit = FALSE,
+                color = I("black"),
+                hovertemplate = ~paste('<b>', 'Average change vector', '</b><br>',
+                                       'Avg delta temporal ECC: ', sum(delta_ecc_0.0.1), '<br>',
+                                       'Avg delta geospatial ECC: ', sum(delta_ecc_0.1.0), '<extra></extra>', sep=""))  %>%
+    #add arrow to inset
+    layout(annotations = list(ax = 0, ay = 0,
+                              axref='x2', ayref='y2',
+                              x = ~sum(delta_ecc_0.0.1),
+                              y = ~sum(delta_ecc_0.1.0),
+                              arrowcolor = I("black"),
+                              arrowwidth = I(4),
+                              arrowsize = I(0.6),
+                               xref='x2', yref='y2',
+                              text = "")) %>%
+      # specify the domain (size) and range of inset plot
+    layout(xaxis2 = list(domain = c(0.75, 0.95),
+                         range = ~c(-abs(sum(delta_ecc_0.0.1)) - 0.1*abs(sum(delta_ecc_0.0.1)),
+                                   abs(sum(delta_ecc_0.0.1)) + 0.1*abs(sum(delta_ecc_0.0.1))),
+                         anchor='y2'),
+           yaxis2 = list(domain = c(0.75, 0.95),
+                         range = ~c(-abs(sum(delta_ecc_0.1.0)) - 0.1*abs(sum(delta_ecc_0.1.0)),
+                                   abs(sum(delta_ecc_0.1.0)) + 0.1*abs(sum(delta_ecc_0.1.0))),
+                         anchor='x2'))  %>%
+    # # # highlighting/selection options
+    highlight(on= "plotly_click",
+              off="plotly_doubleclick")
+    
   })
+  
+  
+  ###############################################
+  # observe radio button click for data subsets #
+  ###############################################
+  
+  
   
   
   ###########################################
@@ -950,29 +1019,18 @@ server <- function(input, output, session) {
                     scroller = TRUE),
                 selection = 'none')
   })
-  
 }
 
 shinyApp(ui, server)
 
+#################
+# things to add #
+#################
 
-######################################
-# brushing problems that need fixing #
-######################################
-
-# when no filters or selections applied, can click a point on the bubble plot (or change vector plot) and the corresponding point
-# will be brushed in the map, change vector plot, and data table. however, if filters/selections are applied
-# the user is no longer able to do this
-
-# if brushing is applied and then filters are applied, then removed, brushing seems to be slow
-# can only remove brushing if double clicking on bubble or change vector plot
-
-# clicking on a map cluster doesn't result in the brushing of other plots
-
-# there is no brushing associated with the radial plot as it is aggregated data
-# and has lost "key" information required for plotting 
-
-# change vector plot only responds to brushing of time point 1 
-
-# selecting a row in data table on applies brushing to map (and cardinal plot)
-
+# buttons for 3-4 "go-to" situations/problems
+# move data table to separate tab 
+# move sliders to tab 
+# cardinal plot reservered for bearing of clusters
+# rename axis for cardina l plot for humans to understand how 
+# clusters are spreading 
+# heat map (later)
