@@ -16,23 +16,19 @@
 # load the required libraries #
 ###############################
 
-library(shinydashboard)
+library(shinydashboard) # the shiny dashboard
 library(readxl) # for reading xlsx files 
 library(shiny) # for running shiny apps
 library(shinyWidgets) # for better slider/dropdown options
 library(here) # for clear dir calling
 library(tidyverse) # tidy data/ kind of used
-library(leaflet) # for map visualizations
-library(maps) # for drawing maps/getting map data
-library(RColorBrewer) # for prettier colours
 library(pals) # for large colour palettes (similar to brewer)
 library(plotly) # for interactive ggplots
-library(crosstalk) # for shazred data
+library(crosstalk) # for shared data
 library(DT) # data table
 library(htmltools) # for html input
 library(lubridate) # for dates 
 library(geosphere) # for directions between points 
-library(reactable)
 library(shinydashboardPlus) # for collapsable boxes
 library(data.table) # for melting
 # library(shinyjqui) # for resizable/movable boxes
@@ -94,7 +90,7 @@ eccdata$avg_tp2_date <- as.Date(eccdata$avg_tp2_date, format = "%d-%m-%y")
 ###########################################
 
 # users of this app more interested in cluster info
-# avg tp1 lng and lat is different for present_at_tp1 == 1 and present_at_tp1 == 1 
+# avg tp1 lng and lat is different for present_at_tp1 == 1 and present_at_tp1 == 0 
 # avg tp2 lng and lat is the same for everything
 # since we are interested in clusters
 # take average tp1 lng and at of present_at_tp1 (only tp1 strains) 
@@ -247,7 +243,6 @@ clusters_long$maptext <-
 clusters_long <- as.data.frame(clusters_long)
 
 
-
 ##########################################
 # subset out strain specific infomation  #
 ##########################################
@@ -307,7 +302,6 @@ strains$maptext <-
 ##################
 
 # create unique row ids for shared cluster and strain data
-clusters$key <- as.numeric(rownames(clusters))
 clusters_long$key <- as.numeric(rownames(clusters_long))
 strains$key <- as.numeric(rownames(strains))
 
@@ -322,14 +316,17 @@ header <- dashboardHeader(title = "ECC Vis")
 sidebar <- dashboardSidebar(
   sidebarMenu(id = 'sidebarmenu',
               
-               # Visualization tab
-              menuItem("Visualizations", tabName = "visualizations"),
+              # Cluster visualization tab
+              menuItem("Cluster visualizations", tabName = "clusterVis"),
+              
+              # Strain visualization tab
+              menuItem("Strain visualizations", tabName = "strainVis"),
               
               # Data exploration tab
               menuItem("Explore the data", tabName = "exploreData",
                        radioButtons("exploreData", "'Top 10' data subsets",
                                     choices = list("Largest clusters" = 1, "Largest geo delta ECC" = 2,
-                                                   "Largest temp delta ECC" = 3), selected = 1)),
+                                                   "Largest temp delta ECC" = 3, "None" = 4), selected = 4)),
               
               # Data filters
               menuItem("Data filters", tabName = "dataFilters",
@@ -368,7 +365,7 @@ sidebar <- dashboardSidebar(
               # Strain data tab
               menuItem("Strain data", tabName = "strainData"),
               
-              # filtered data using in visualizations
+              # filtered data used in visualizations in wide format
               menuItem("Filtered raw data", tabName = "filteredData"),
               
               # raw data used to generate visualizations
@@ -378,23 +375,23 @@ sidebar <- dashboardSidebar(
 # the dashboard body
 body <- dashboardBody(
   tabItems(
-    tabItem(tabName = "visualizations",
+    tabItem(tabName = "clusterVis",
             
             # tab title
-            h2("ECC Visualizations"),
+            h2("Cluster visualizations"),
             
             # row 1 box for map and bubble plot
             fluidRow(
               # map
               box(title = "Map plot", 
-                  width = 6, 
-                  plotlyOutput("map"),
+                  width = 12, 
+                  plotlyOutput("cluster_map"),
                   collapsible = TRUE,
                   sidebar = boxSidebar(
                     id = "mapsidebar",
                     title = "Map controls",
                     # cluster transparency 
-                    sliderInput("centroid_transparency",
+                    sliderInput("cluster_transparency",
                                 "Cluster transparency:",
                                 min = 0,
                                 max = 100,
@@ -410,36 +407,70 @@ body <- dashboardBody(
                                 value = 50),
                     
                     # legend checkbox for map 
-                    checkboxInput("legend", "Show legend", TRUE))),
+                    checkboxInput("legend", "Show legend", TRUE)))
+            ),
+            
+            # row 2 for change vectors and bubble plot
+            fluidRow(
+              
               
               #bubble plot
               box(title = "Bubble plot", 
                   width = 6, 
                   plotlyOutput("bubbleplot"),
-                  collapsible = TRUE)
-            ),
-            
-            # row 2 for change vectors and ridgle plot
-            fluidRow(
+                  collapsible = TRUE), 
+              
               # change vector plot
               box(title = "Change vector", 
                   width = 6,
                   plotlyOutput("change_vector", width = "100%", height = "100%"),
-                  collapsible = TRUE), 
-              
-              # ridgeline plot 
-              box(title = "Ridgeline plot", 
-                  width = 6, 
-                  plotlyOutput("ridgeplot"),
                   collapsible = TRUE)
             ),
             
-            # row 3 for cardinal cluster movement strain histogram
+            
+            # row cardinal 3
             fluidRow(
+              
               # cardinal movement of clusters 
               box(title = "Cardinal movement of clusters", 
                   width = 6, 
                   plotlyOutput("cardinal_polar", width = "100%", height = "100%"),
+                  collapsible = TRUE)
+            )
+    ),
+    
+    # strain visualizations 
+    tabItem(tabName = "strainVis",
+            h2("Strain visualizations"),
+            
+            # row 1 for map
+            fluidRow(
+              
+              # map
+              box(title = "Map plot", 
+                  width = 12, 
+                  plotlyOutput("strain_map"),
+                  collapsible = TRUE,
+                  sidebar = boxSidebar(
+                    id = "mapsidebar",
+                    title = "Map controls",
+                    # strain transparency
+                    sliderInput("strain_transparency",
+                                "Strain transparency:",
+                                min = 0,
+                                max = 100,
+                                step = 1,
+                                value = 50),
+                    # legend checkbox for map 
+                    checkboxInput("legend", "Show legend", TRUE)))
+            ),
+            
+            # row 2 ridgeline and histogram
+            fluidRow( 
+              # strain ridgeline plot (denisty by date)
+              box(title = "Ridgeline plot", 
+                  width = 6, 
+                  plotlyOutput("ridgeplot"),
                   collapsible = TRUE),
               
               #strain histogram 
@@ -447,6 +478,7 @@ body <- dashboardBody(
                   width = 6,
                   plotlyOutput("strain_histogram", width = "100%", height = "100%"),
                   collapsible = TRUE)
+
             )
     ),
     
@@ -497,6 +529,8 @@ ui <- dashboardPage(header, sidebar, body)
 
 server <- function(input, output, session) { 
   
+
+  
   ###########################################
   # filter cluster data based on user input #
   ###########################################
@@ -522,60 +556,13 @@ server <- function(input, output, session) {
       filter(cluster_novel_growth_rate >= input$cluster_novel_growth_rate[1] & cluster_novel_growth_rate <= input$cluster_novel_growth_rate[2]) %>%
       filter(delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2]) %>%
       filter(delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2]) %>%
-      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . }  
+      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . }  %>%
+      # slice chooses top 10
+      # if multiple values are the same within the top 10, then all instances are included 
+      {if (input$exploreData==1) slice_max(., cluster_size_2, n=10)  else . }  %>%
+      {if (input$exploreData==2) slice_max(., delta_ecc_0.0.1, n=10)  else . }  %>%
+      {if (input$exploreData==3) slice_max(., delta_ecc_0.1.0, n=10)  else . }
   })
-  
-  # tp1 cluster reactive filtering
-  clusters_r1 <- reactive({
-    clusters_long %>%
-      # subset tp1 clusters
-      filter(timepoint==1) %>%
-      # tp1 filters
-      # also filter for tp2 clusters since they are linked?
-      {if (!is.null(input$tp1_cluster)) filter(., tp1_cluster %in% input$tp1_cluster)  else . } %>%
-      filter(cluster_size_2 >= input$cluster_size_2[1]+1 & cluster_size_2 <= input$cluster_size_2[2]+1 ) %>%
-      filter(avg_date >= input$avg_date[1]) %>% filter(avg_date <= input$avg_date[2]) %>%
-      filter(ecc_0.0.1 >= input$ecc_0.0.1[1] & ecc_0.0.1 <= input$ecc_0.0.1[2]) %>%
-      filter(ecc_0.1.0 >= input$ecc_0.1.0[1] & ecc_0.1.0 <= input$ecc_0.1.0[2]) %>%
-      filter(avg_latitude >= input$avg_latitude[1] & avg_latitude <= input$avg_latitude[2]) %>%
-      filter(avg_longitude >= input$avg_longitude[1] & avg_longitude <= input$avg_longitude[2]) %>%
-      
-      # delta filters
-      filter(delta_cluster_size >= input$delta_cluster_size[1] & delta_cluster_size <= input$delta_cluster_size[2]) %>%
-      filter(num_novel_tp2_strains >= input$num_novel_tp2_strains[1] & num_novel_tp2_strains <= input$num_novel_tp2_strains[2]) %>%
-      filter(overall_cluster_growth_rate >= input$overall_cluster_growth_rate[1] & overall_cluster_growth_rate <= input$overall_cluster_growth_rate[2]) %>%
-      filter(cluster_novel_growth_rate >= input$cluster_novel_growth_rate[1] & cluster_novel_growth_rate <= input$cluster_novel_growth_rate[2]) %>%
-      filter(delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2]) %>%
-      filter(delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2]) %>%
-      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . }
-  })
-  
-  # tp1 cluster reactive filtering
-  clusters_r2 <- reactive({
-    
-    clusters_long %>%
-      # subset tp1 clusters
-      filter(timepoint==2) %>%
-      # tp1 filters
-      # also filter for tp2 clusters since they are linked?
-      {if (!is.null(input$tp1_cluster)) filter(., tp1_cluster %in% input$tp1_cluster)  else . } %>%
-      filter(cluster_size_2 >= input$cluster_size_2[1]+1 & cluster_size_2 <= input$cluster_size_2[2]+1 ) %>%
-      filter(avg_date >= input$avg_date[1]) %>% filter(avg_date <= input$avg_date[2]) %>%
-      filter(ecc_0.0.1 >= input$ecc_0.0.1[1] & ecc_0.0.1 <= input$ecc_0.0.1[2]) %>%
-      filter(ecc_0.1.0 >= input$ecc_0.1.0[1] & ecc_0.1.0 <= input$ecc_0.1.0[2]) %>%
-      filter(avg_latitude >= input$avg_latitude[1] & avg_latitude <= input$avg_latitude[2]) %>%
-      filter(avg_longitude >= input$avg_longitude[1] & avg_longitude <= input$avg_longitude[2]) %>%
-      
-      # delta filters
-      filter(delta_cluster_size >= input$delta_cluster_size[1] & delta_cluster_size <= input$delta_cluster_size[2]) %>%
-      filter(num_novel_tp2_strains >= input$num_novel_tp2_strains[1] & num_novel_tp2_strains <= input$num_novel_tp2_strains[2]) %>%
-      filter(overall_cluster_growth_rate >= input$overall_cluster_growth_rate[1] & overall_cluster_growth_rate <= input$overall_cluster_growth_rate[2]) %>%
-      filter(cluster_novel_growth_rate >= input$cluster_novel_growth_rate[1] & cluster_novel_growth_rate <= input$cluster_novel_growth_rate[2]) %>%
-      filter(delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2]) %>%
-      filter(delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2]) %>%
-      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . }
-  })
-  
   
   # all cluster reactive filtering
   eccdata_r <- reactive({
@@ -598,15 +585,16 @@ server <- function(input, output, session) {
       filter(cluster_novel_growth_rate >= input$cluster_novel_growth_rate[1] & cluster_novel_growth_rate <= input$cluster_novel_growth_rate[2]) %>%
       filter(delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2]) %>%
       filter(delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2]) %>%
-      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . }  
+      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . }  %>%
+      {if (input$exploreData==1) slice_max(., cluster_size_2, n=10)  else . }  %>%
+      {if (input$exploreData==2) slice_max(., delta_ecc_0.0.1, n=10)  else . }  %>%
+      {if (input$exploreData==3) slice_max(., delta_ecc_0.1.0, n=10)  else . }
   })
   
   # shared cluster data frames
   clusters_long_sh <- SharedData$new(clusters_rall, key = ~key, group = "clusters_long")
-  clusters_long_sh1 <- SharedData$new(clusters_r1, key = ~key, group = "clusters_long")
-  clusters_long_sh2 <- SharedData$new(clusters_r2, key = ~key, group = "clusters_long")
   
-  
+
   ##########################################
   # filter strain data based on user input #
   ##########################################
@@ -617,13 +605,8 @@ server <- function(input, output, session) {
       {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
       {if (!is.null(input$present_at_tp1)) filter(., present_at_tp1 %in% input$province)  else . } %>%
-      # filter by cluster info
-      filter(tp1_cluster %in% clusters_r1()$tp1_cluster) %>% 
     # filter by shared cluster selections
       filter(tp1_cluster %in% (clusters_long_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
-
-   
-    
   })
   
   # tp1 strain reactive filtering
@@ -633,9 +616,7 @@ server <- function(input, output, session) {
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
       {if (!is.null(input$present_at_tp1)) filter(., present_at_tp1 %in% input$province)  else . } %>%
       filter(present_at_tp1==1) %>%
-      filter(tp1_cluster %in% clusters_rall()$tp1_cluster) %>%
       filter(tp1_cluster %in% (clusters_long_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
-    
   })
   
   # tp2 strain reactive filtering
@@ -645,9 +626,7 @@ server <- function(input, output, session) {
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
       {if (!is.null(input$present_at_tp1)) filter(., present_at_tp1 %in% input$province)  else . } %>%
       filter(present_at_tp1==0) %>%
-      filter(tp1_cluster %in% clusters_rall()$tp1_cluster) %>%
       filter(tp1_cluster %in% (clusters_long_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
-    
   })
   
   
@@ -669,6 +648,7 @@ server <- function(input, output, session) {
   output$clusters_dt <- renderDataTable({
     datatable(clusters_long_sh,
               extensions = c('Select', 'Buttons','Scroller'),
+              #extension = 'Scroller', 
               options = list(
                 select = list(style = 'os', items = 'row'),
                 dom = 'Blfrtip',
@@ -680,7 +660,6 @@ server <- function(input, output, session) {
                 scroller = TRUE),
               selection = 'none')
   }, server=F)
-  
   
   # strains
   output$strains_dt <- renderDataTable({
@@ -699,7 +678,7 @@ server <- function(input, output, session) {
     )
   }, server=F)
   
-  
+
   ###############
   # cluster map #
   ###############
@@ -711,7 +690,7 @@ server <- function(input, output, session) {
     domain = unique(clusters_long$tp1_cluster))
   
   # plotly map using mapbox
-  output$map <- renderPlotly({
+  output$cluster_map <- renderPlotly({
     
     mapboxToken <- "pk.eyJ1Ijoic2FtLWEtbGVlIiwiYSI6ImNrb2s0bXVpbzFhMGkybm5zeHI1dHR1aTgifQ.1K8o7OaSOWo_y5UdVH348w"    # You need your own token
     Sys.setenv("MAPBOX_TOKEN" = mapboxToken) # for Orca
@@ -721,27 +700,36 @@ server <- function(input, output, session) {
       add_markers(data = clusters_long_sh, 
                   x = ~avg_longitude, 
                   y = ~avg_latitude, 
-                  legendgroup = ~timepoint,
+                  legendgroup = ~tp1_cluster,
                   color= ~I(pal(tp1_cluster)),
                   name = ~paste(tp1_cluster, timepoint, sep="_"), 
-                  marker =list(size = ~log10(cluster_size_2)*10),
-                  hovertext = ~maptext, 
-                  opacity = 0.8) %>%
-      # strain markers
-      # add_markers(data = strains_sh,
-      #             x = ~strain_longitude_jit,
-      #             y = ~strain_latitude_jit,
-      #             legendgroup = ~timepoint,
-      #             color= ~I(pal(tp1_cluster)),
-      #             name = ~paste(tp1_cluster, "strains", timepoint, sep="_"),
-      #             marker =list(size = 5),
-      #             hovertext = ~maptext,
-      #             opacity = 0.8,
-      #             visible = FALSE,
-      #             inherit = F) %>%
-      config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN"))
+                  marker =list(size = ~log10(cluster_size_2)*10,
+                               opacity = 0.5),
+                  hovertext = ~maptext) %>%
+      config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
+      layout(mapbox = list(zoom =1.5,
+                           center = list(lon = 80, lat = 40))) 
+    
   })
 
+  
+  
+  # plotly map using mapbox
+  output$strain_map <- renderPlotly({
+
+    plot_mapbox(mode = 'scattermapbox') %>%
+    # strain markers
+    add_markers(data = strains_sh,
+                x = ~strain_longitude_jit,
+                y = ~strain_latitude_jit,
+                name = ~tp1_cluster,
+                color= ~I(pal(tp1_cluster)),
+                marker =list(size = 10,
+                             opacity = 0.5),
+                hovertext = ~maptext) %>%
+      layout(mapbox = list(zoom =1.5,
+                           center = list(lon = 80, lat = 40)))
+  })
 
   ###################
   # ridgeline plots #
@@ -754,7 +742,7 @@ server <- function(input, output, session) {
       add_trace(data = strains_sh1,
                 y = ~tp1_cluster,
                 x = ~strain_date,
-                split = ~tp1_cluster,
+                legendgroup = ~tp1_cluster,
                 name =  ~paste(tp1_cluster,1, sep="_"),
                 type = 'violin',
                 side = 'positive',
@@ -769,7 +757,7 @@ server <- function(input, output, session) {
       add_trace(data = strains_sh2,
                 y = ~tp1_cluster,
                 x = ~strain_date,
-                split = ~tp1_cluster,
+                legendgroup = ~tp1_cluster,
                 type = 'violin',
                 side = 'positive',
                 orientation = "h",
@@ -796,7 +784,7 @@ server <- function(input, output, session) {
   #############################
   
   output$bubbleplot <- renderPlotly({
-    plot_ly(source="test") %>% 
+    plot_ly() %>% 
       #add tp1 trace
       add_trace(data = clusters_long_sh,
                 x = ~ecc_0.0.1,
@@ -814,8 +802,8 @@ server <- function(input, output, session) {
       highlight(on= "plotly_click",
                 off="plotly_doubleclick")
   })
-  
- 
+
+
   ##############################
   # histogram for strain counts#
   ##############################
@@ -862,8 +850,9 @@ server <- function(input, output, session) {
   # render polar plot
   output$cardinal_polar <- renderPlotly({
     # format data
-    clusters_long_sh1$data(withSelection = TRUE) %>%
-      filter(selected_ | is.na(selected_)) %>%
+    clusters_long_sh$data(withFilter = TRUE) %>%
+      #filter(selected_ | is.na(selected_)) %>%
+      distinct(tp1_cluster, .keep_all = T) %>%
       count(cardinal, .drop=FALSE) %>%
       mutate(theta = (as.numeric(rownames(.))-1) * 22.5,
              direction = c("North", "North/Northeast", "Northeast",
@@ -974,13 +963,6 @@ server <- function(input, output, session) {
   })
   
   
-  ###############################################
-  # observe radio button click for data subsets #
-  ###############################################
-  
-  
-  
-  
   ###########################################
   # filtered table to be displayed in a tab #
   ###########################################
@@ -1028,9 +1010,7 @@ shinyApp(ui, server)
 #################
 
 # buttons for 3-4 "go-to" situations/problems
-# move data table to separate tab 
-# move sliders to tab 
 # cardinal plot reservered for bearing of clusters
-# rename axis for cardina l plot for humans to understand how 
+# rename axis for cardinal plot for humans to understand how 
 # clusters are spreading 
 # heat map (later)
