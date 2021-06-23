@@ -401,12 +401,12 @@ body <- dashboardBody(
                                 value = 50),
                     # legend checkbox for map 
                     checkboxInput("legend", "Show legend", TRUE))),
-                # cardinal movement of clusters 
-                box(title = "Cardinal movement of clusters", 
-                    width = 3, 
-                    plotlyOutput("cardinal_polar", width = "100%", height = "100%"),
-                    collapsible = TRUE)
-          
+              # cardinal movement of clusters 
+              box(title = "Cardinal movement of clusters", 
+                  width = 3, 
+                  plotlyOutput("cardinal_polar", width = "100%", height = "100%"),
+                  collapsible = TRUE)
+              
             ),
             
             # row 2 for bubble plot and change vector plot 
@@ -482,34 +482,37 @@ body <- dashboardBody(
             # row 2 ridgeline and cumulative count
             fluidRow( 
               # strain ridgeline plot (denisty by date)
-              box(title = "Strain identification density by date by country", 
-                  width = 6, 
+              box(title = "Cluster strain identification density by date", 
+                  width = 12, 
                   plotlyOutput("ridgeplot"),
-                  collapsible = TRUE),
-              
+                  collapsible = TRUE)
+            ),
+            
+            # fluid row 3
+            fluidRow(
               #strain histogram 
-              box(title = "Number of new strains identified per month by country", 
-                  width = 6,
-                  plotlyOutput("strain_histogram", width = "100%", height = "100%"),
-                  collapsible = TRUE)
-
-            ),
-            
-            # row 3
-            fluidRow(
-              # cumulative strain identification by time point 
-              box(title = "Cumulative strain identification by country at time point 1", 
-                  width = 12, 
-                  plotlyOutput("cum_strains_tp1"),
+              box(title = "Number of new strains identified per month by country",
+                  width = 12,
+                  box(width = 6,
+                      title = "Time point 1",
+                      plotlyOutput("strain_histogram_tp1", width = "100%", height = "100%")),
+                  box(width = 6,
+                      title = "Time point 2",
+                      plotlyOutput("strain_histogram_tp2", width = "100%", height = "100%")),
                   collapsible = TRUE)
             ),
             
-            # row 3
+            # row 4
             fluidRow(
               # cumulative strain identification by time point 
-              box(title = "Cumulative strain identification by country at time point 2", 
+              box(title = "Cumulative strain identification by country", 
                   width = 12, 
-                  plotlyOutput("cum_strains_tp2"),
+                  box( width = 6, 
+                       title = "Time point 1",
+                       plotlyOutput("cum_strains_tp1")),
+                  box( width = 6, 
+                       title = "Time point 2",
+                       plotlyOutput("cum_strains_tp2")),
                   collapsible = TRUE)
             )
     ),
@@ -727,7 +730,7 @@ server <- function(input, output, session) {
   
   # plotly map using mapbox
   output$cluster_map <- renderPlotly({
-    
+
     plot_mapbox(mode = 'scattermapbox') %>%
       add_markers(data = clusters_long_sh,
                   x = ~avg_longitude,
@@ -741,24 +744,6 @@ server <- function(input, output, session) {
       config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
       layout(mapbox = list(zoom =1.5,
                            center = list(lon = 80, lat = 40)))
-    
-    # no markers needed
-    # doesnt work as well
-    # plot_ly() %>%
-    #   # cluster markers
-    #   add_trace(type="scattermapbox",
-    #             data = clusters_long,
-    #               lon = ~avg_longitude,
-    #               lat = ~avg_latitude,
-    #               legendgroup = ~tp1_cluster,
-    #               color= ~I(pal(tp1_cluster)),
-    #               name = ~paste(tp1_cluster, timepoint, sep="_"),
-    #               marker =list(size = ~log10(cluster_size_2)*10,
-    #                            opacity = 0.5),
-    #               hovertext = ~maptext) %>%
-    #   layout(mapbox = list(zoom =1.5,
-    #                        center = list(lon = 80, lat = 40),
-    #                        style = 'open-street-map'))
   })
   
   
@@ -800,7 +785,7 @@ server <- function(input, output, session) {
                 color = ~I(pal(tp1_cluster)),
                 points = "all",
                 marker = list(opacity = 0.4,
-                              size = 10),
+                              size = 8),
                 hoveron = "violins+points") %>%  
       # tp2 traces
       add_trace(data = strains_sh2,
@@ -817,13 +802,15 @@ server <- function(input, output, session) {
                 line = list(color = "black",
                             width = 1),
                 marker = list(opacity = 0.4,
-                              size = 10,
+                              size = 8,
                               line = list(color = "black",
                                           width = 1)),
                 hoveron = "violins+points") %>%
       layout(yaxis= list(showticklabels = FALSE,
                          title = "Count density"),
-             xaxis = list(title = "Date of strain identification"))
+             xaxis = list(title = "Date of strain identification")) %>%
+      highlight(on= "plotly_selected",
+                off="plotly_deselect")
     
   })
   
@@ -906,10 +893,6 @@ server <- function(input, output, session) {
   })
   
   
-
-  
-  
-  
   #delta temp histogram 
   output$delta_size_histogram <- renderPlotly({
     plot_ly(type = "histogram",
@@ -927,34 +910,74 @@ server <- function(input, output, session) {
   # histogram for strain counts#
   ##############################
   
-  output$strain_histogram <- renderPlotly({
+  output$strain_histogram_tp1 <- renderPlotly({
+
     
     # strain count by country histogram
     plot_ly(type = "histogram",
-            data = strains_sh,
+            data = strains,
             histfunc = "count",
-            # x = c(~timepoint, ~month.name[month]),
-            x = ~month.name[month], 
-            color = ~country,
-            colors = "Set1",
+            x = ~strain_date,
+            color = ~country, 
+            nbinsx = ~length(unique(month(strain_date))),
             hovertemplate = ~paste('<b>', country, '</b><br>',
                                    'Count: %{y}', '<extra></extra>', sep=" ")) %>%
       layout(barmode = "stack",
-             xaxis = list(categoryorder = "array",
-                          categoryarray = c(month.name[1], 
-                                            month.name[2], 
-                                            month.name[3],
-                                            month.name[4],
-                                            month.name[5],
-                                            month.name[6],
-                                            month.name[7],
-                                            month.name[8],
-                                            month.name[9],
-                                            month.name[10],
-                                            month.name[11],
-                                            month.name[12]),
-                          title = "Month by time point"),
-             yaxis = list(title = "Number of new strains identified"))
+             xaxis = list(title = "Date"),
+             yaxis = list(title = "Number of new strains identified"),
+             updatemenus = list( list(
+               active = -1,
+               x= -0.25,
+               type = 'buttons',
+               buttons = list(
+                 list(
+                   label = "By week",
+                   method = "restyle",
+                   args = list(list(nbinsx = ~length(unique(week(strain_date)))))),
+                 list(
+                   label = "By month",
+                   method = "restyle",
+                   args = list(list(nbinsx = ~length(unique(month(strain_date)))))),
+                 list(
+                   label = "By province",
+                   method = "update",
+                   args = list(list(color = ~province))),
+                 list(
+                   label = "By country",
+                   method = "update",
+                   args = list(list(color = ~country))) 
+               ))))
+  })
+  
+  output$strain_histogram_tp2 <- renderPlotly({
+    
+    # strain count by country histogram
+    plot_ly(type = "histogram",
+            data = strains_sh2,
+            histfunc = "count",
+            x = ~strain_date,
+            color = ~country,
+            colors = "Set1",
+            nbinsx = ~length(unique(month(strain_date))),
+            hovertemplate = ~paste('<b>', country, '</b><br>',
+                                   'Count: %{y}', '<extra></extra>', sep=" ")) %>%
+      layout(barmode = "stack",
+             xaxis = list(title = "Date"),
+             yaxis = list(title = "Number of new strains identified"),
+             updatemenus = list( list(
+               active = -1,
+               x= -0.25,
+               type = 'buttons',
+               buttons = list(
+                 list(
+                   label = "By week",
+                   method = "restyle",
+                   args = list(list(nbinsx = ~length(unique(week(strain_date)))))),
+                 list(
+                   label = "By month",
+                   method = "restyle",
+                   args = list(list(nbinsx = ~length(unique(month(strain_date))))))
+               ))))
   })
   
   
@@ -963,85 +986,45 @@ server <- function(input, output, session) {
   ################################
   
   output$cum_strains_tp1 <- renderPlotly({
-    # plot_ly(type = 'scatter', mode = 'lines') %>%
-    #   add_trace(data = strains %>%
-    #               group_by(tp1_cluster, strain_date) %>% 
-    #               tally(!is.na(strain)) %>% 
-    #               mutate(cumsum = cumsum(n)),
-    #             x = ~strain_date,
-    #             y = ~cumsum,
-    #             split = ~tp1_cluster) %>% 
-    #   layout(xaxis = list(title = "Cumulative number of strains identified"),
-    #          yaxis = list(title = "Date"))
     
     strains_sh1_cumsum <- strains_sh$data(withSelection = T) %>%
+      subset(timepoint == 1) %>%
       filter(selected_ | is.na(selected_)) %>%
       group_by(tp1_cluster, timepoint, country, strain_date) %>% 
       tally(!is.na(strain)) %>% 
       mutate(cumsum = cumsum(n))
     
-    one_plot <- function(d) {
-      plot_ly(d, 
-              x = ~strain_date, y=~cumsum, 
-              split = ~tp1_cluster, 
-              color = ~I(pal(tp1_cluster)),
-              legendgroup = ~tp1_cluster,
-              type = 'scatter', mode = 'lines')  %>%
-        add_annotations(
-          ~unique(country), x = 0.25, y = 1, 
-          xref = "paper", yref = "paper", showarrow = FALSE
-        ) %>% 
-        layout(yaxis = list(range = c(0,max(strains_sh1_cumsum$cumsum))))
-    }
     
-    # plot cumulative number of strains identified b
-    strains_sh1_cumsum %>%
-      subset(timepoint == 1) %>%
-      split(.$country) %>%
-      lapply(one_plot) %>% 
-      subplot(nrows = 3, shareX = TRUE, titleX = FALSE) 
+    ggplotly(ggplot(data = strains_sh1_cumsum,
+                    aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+               scale_color_manual(values = pal(unique(strains_sh1_cumsum$tp1_cluster)),
+                                  name = "Cluster") +
+               geom_line() +
+               facet_wrap(~country) +
+               labs(y="Cumulative strain count", x = "Date")  + 
+               theme_bw() +
+               theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)))
   })
   
   
   output$cum_strains_tp2 <- renderPlotly({
-    # plot_ly(type = 'scatter', mode = 'lines') %>%
-    #   add_trace(data = strains %>%
-    #               group_by(tp1_cluster, strain_date) %>% 
-    #               tally(!is.na(strain)) %>% 
-    #               mutate(cumsum = cumsum(n)),
-    #             x = ~strain_date,
-    #             y = ~cumsum,
-    #             split = ~tp1_cluster) %>% 
-    #   layout(xaxis = list(title = "Cumulative number of strains identified"),
-    #          yaxis = list(title = "Date"))
     
     strains_sh1_cumsum <- strains_sh$data(withSelection = T) %>%
+      subset(timepoint == 2) %>% 
       filter(selected_ | is.na(selected_)) %>%
-      group_by(tp1_cluster, timepoint, country, strain_date) %>% 
+      group_by(tp1_cluster, country, strain_date) %>% 
       tally(!is.na(strain)) %>% 
       mutate(cumsum = cumsum(n))
     
-    one_plot <- function(d) {
-      plot_ly(d, 
-              x = ~strain_date, y=~cumsum, 
-              split = ~tp1_cluster, 
-              color = ~I(pal(tp1_cluster)),
-              type = 'scatter', mode = 'lines',
-              legendgroup = ~tp1_cluster)  %>%
-        add_annotations(~unique(country), 
-                        x = 0.25, y = 1, 
-                        xref = "paper", yref = "paper", showarrow = FALSE) %>% 
-        layout(yaxis = list(range = c(0,max(strains_sh1_cumsum$cumsum))))
-      
-    }
-    
-    # plot cumulative number of strains identified b
-    plots <- strains_sh1_cumsum %>%
-      subset(timepoint == 2) %>%
-      split(.$country) %>%
-      lapply(one_plot) %>% 
-      subplot(nrows = 3, shareX = TRUE,  titleX = FALSE) 
-    
+    ggplotly(ggplot(data = strains_sh1_cumsum,
+                    aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+               scale_color_manual(values = pal(unique(strains_sh1_cumsum$tp1_cluster)),
+                                  name = "Cluster") +
+               geom_line() +
+               facet_wrap(~country) +
+               labs(y="Cumulative strain count", x = "Date")  + 
+               theme_bw() +
+               theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)))
   })
   
   
