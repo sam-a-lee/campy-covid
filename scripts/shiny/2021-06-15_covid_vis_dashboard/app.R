@@ -126,7 +126,8 @@ clusters <- eccdata %>%
             num_additional_tp1_strains_tp2 = mean(num_additional_tp1_strains_tp2),
             num_novel_tp2_strains = mean(num_novel_tp2_strains),
             overall_cluster_growth_rate = mean(overall_cluster_growth_rate),
-            cluster_novel_growth_rate = mean(cluster_novel_growth_rate))
+            cluster_novel_growth_rate = mean(cluster_novel_growth_rate),
+            type = mean(type))
 
 # tp1 clusters summarized by novel tp2 strains
 clusters_0 <- eccdata %>% 
@@ -158,7 +159,8 @@ clusters_0 <- eccdata %>%
             num_additional_tp1_strains_tp2 = mean(num_additional_tp1_strains_tp2),
             num_novel_tp2_strains = mean(num_novel_tp2_strains),
             overall_cluster_growth_rate = mean(overall_cluster_growth_rate),
-            cluster_novel_growth_rate = mean(cluster_novel_growth_rate))
+            cluster_novel_growth_rate = mean(cluster_novel_growth_rate),
+            type = mean(type))
 
 
 ################################################
@@ -253,7 +255,9 @@ clusters_long <- as.data.frame(clusters_long)
 strains <- eccdata %>%
   select(strain, country, province, city, year, month, day,
          strain_latitude, strain_longitude, present_at_tp1, 
-         tp1_cluster, present_at_tp2, tp2_cluster)
+         tp1_cluster, present_at_tp2, tp2_cluster, tp1_t0_ecc_0.1.0, 
+         tp2_t0_ecc_0.1.0, tp1_t0_ecc_0.0.1, tp2_t0_ecc_0.0.1,
+         delta_ecc_0.1.0, delta_ecc_0.0.1, type)
 
 
 #################################################
@@ -278,6 +282,7 @@ strains$strain_date <- as.Date(strains$strain_date, format = "%d-%m-%y")
 
 # create time difference for ridgeline plots 
 strains <- strains %>% mutate(stain_time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y"))))
+
 
 ################################
 # create strain labels for map #
@@ -326,9 +331,12 @@ sidebar <- dashboardSidebar(
               
               # Data exploration tab
               menuItem("Explore the data", tabName = "exploreData",
-                       radioButtons("exploreData", "'Top 10' data subsets",
-                                    choices = list("Largest clusters" = 1, "Largest geo delta ECC" = 2,
-                                                   "Largest temp delta ECC" = 3, "None" = 4), selected = 1)),
+                       radioButtons("number", "Number of clusters",
+                                    choices = list("5" = 5, "10" = 10,
+                                                   "20" = 20, "All" = 99), selected = 10),
+                       radioButtons("subsets", "Top 'n' data subsets",
+                                    choices = list("Largest cluster size" = 1, "Largest delta geospatial ECC" = 2,
+                                                   "Largest delta temporal ECC" = 3, "None" = 4), selected = 1)),
               
               # Data filters
               menuItem("Data filters", tabName = "dataFilters",
@@ -337,6 +345,7 @@ sidebar <- dashboardSidebar(
                        menuItem('Cluster filters', tabName = "clusterFilters",
                                 selectizeInput("tp1_cluster", "TP1 cluster", unique(clusters_long$tp1_cluster),  selected = NULL, multiple = T),
                                 selectizeInput("timepoint", "Timepoint", unique(clusters_long$timepoint), selected = NULL, multiple = T),
+                                selectizeInput("type", "Type", unique(clusters_long$type), selected = NULL, multiple = T),
                                 sliderInput(inputId = "cluster_size_2", label = "Cluster size", min = min(clusters_long$cluster_size_2)-1, max = max(clusters_long$cluster_size_2)-1, value = c(min(clusters_long$cluster_size_2)-1, max(clusters_long$cluster_size_2)-1)),
                                 sliderInput(inputId = "avg_date", label = "Avg date", min = min(clusters_long$avg_date), max = max(clusters_long$avg_date), value = c(min(clusters_long$avg_date), max(clusters_long$avg_date))),
                                 sliderInput(inputId = "ecc_0.0.1", label = "ecc_0.0.1", min = min(clusters_long$ecc_0.0.1, na.rm = T), max = max(clusters_long$ecc_0.0.1, na.rm = T), value = c(min(clusters_long$ecc_0.0.1, na.rm = T), max(clusters_long$ecc_0.0.1, na.rm = T))),
@@ -384,71 +393,78 @@ body <- dashboardBody(
             
             # row 1 for map of clusters and cardinal movement
             fluidRow(
-              # map
-              box(title = "Map plot", 
-                  width = 9, 
-                  plotlyOutput("cluster_map"),
-                  collapsible = TRUE,
-                  sidebar = boxSidebar(
-                    id = "mapsidebar",
-                    title = "Map controls",
-                    # cluster transparency 
-                    sliderInput("cluster_transparency",
-                                "Cluster transparency:",
-                                min = 0,
-                                max = 100,
-                                step = 1,
-                                value = 50),
-                    # legend checkbox for map 
-                    checkboxInput("legend", "Show legend", TRUE))),
-              # cardinal movement of clusters 
-              box(title = "Cardinal movement of clusters", 
-                  width = 3, 
-                  plotlyOutput("cardinal_polar", width = "100%", height = "100%"),
-                  collapsible = TRUE)
-              
+              box(title = "Cluster movement",
+                  width = 12,
+                  # map
+                  box(title = "Cluster map", 
+                      width = 9, 
+                      plotlyOutput("cluster_map"),
+                      collapsible = TRUE,
+                      sidebar = boxSidebar(
+                        id = "mapsidebar",
+                        title = "Map controls",
+                        # cluster transparency 
+                        sliderInput("cluster_transparency",
+                                    "Cluster transparency:",
+                                    min = 0,
+                                    max = 100,
+                                    step = 1,
+                                    value = 50),
+                        # legend checkbox for map 
+                        checkboxInput("legend", "Show legend", TRUE))),
+                  # cardinal movement of clusters 
+                  box(title = "Cardinal movement of clusters", 
+                      width = 3, 
+                      plotlyOutput("cardinal_polar", width = "100%", height = "100%")),
+                  collapsible = T)
             ),
             
             # row 2 for bubble plot and change vector plot 
             fluidRow(
-              #bubble plot
-              box(title = "Bubble plot", 
-                  width = 6, 
-                  plotlyOutput("bubbleplot"),
-                  collapsible = TRUE), 
-              # change vector plot
-              box(title = "Change vector", 
-                  width = 6,
-                  plotlyOutput("change_vector", width = "100%", height = "100%"),
-                  collapsible = TRUE)
+              box(title = "",
+                  width = 12,
+                  #bubble plot
+                  box(title = "Bubble plot", 
+                      width = 6, 
+                      plotlyOutput("bubbleplot")),
+                  # change vector plot
+                  box(title = "Change vector", 
+                      width = 6,
+                      plotlyOutput("change_vector", width = "100%", height = "100%")),
+                  collapsible = TRUE
+              )
             ),
             
             # row 3 for histograms
             fluidRow(
-              # geo ecc histogram by time point
-              box(title = "Geospatial ECC histogram", 
-                  width = 6, 
-                  plotlyOutput("geo_histogram"),
-                  collapsible = TRUE), 
-              # temp ecc histogram by time point
-              box(title = "Temporal ECC histogram", 
-                  width = 6, 
-                  plotlyOutput("temp_histogram"),
-                  collapsible = TRUE), 
+              box(title ="Geospatial and temporal ECC indices",
+                  width = 12,
+                  # geo ecc histogram by time point
+                  box(title = "Geospatial ECC histogram", 
+                      width = 6, 
+                      plotlyOutput("geo_histogram")),
+                  # temp ecc histogram by time point
+                  box(title = "Temporal ECC histogram", 
+                      width = 6, 
+                      plotlyOutput("temp_histogram")),
+                  collapsible = TRUE
+              )
             ), 
             
             # row 4 for delta histograms
             fluidRow(
-              # delta geo ecc histogram 
-              box(title = "Delta geospatial ECC histogram", 
-                  width = 6, 
-                  plotlyOutput("delta_geo_histogram"),
-                  collapsible = TRUE), 
-              # delta temp ecc histogram 
-              box(title = "Delta temporal ECC histogram", 
-                  width = 6, 
-                  plotlyOutput("delta_temp_histogram"),
-                  collapsible = TRUE), 
+              box(title = "Delta geospatial and temporal ECC indices",
+                  width = 12,
+                  # delta geo ecc histogram 
+                  box(title = "Delta geospatial ECC", 
+                      width = 6, 
+                      plotlyOutput("delta_geo_histogram")),
+                  # delta temp ecc histogram 
+                  box(title = "Delta temporal ECC ", 
+                      width = 6, 
+                      plotlyOutput("delta_temp_histogram")),
+                  collapsible = TRUE
+              )
             )
     ),
     
@@ -459,9 +475,8 @@ body <- dashboardBody(
             
             # row 1 for map
             fluidRow(
-              
               # map
-              box(title = "Map plot", 
+              box(title = "Strain map", 
                   width = 12, 
                   plotlyOutput("strain_map"),
                   collapsible = TRUE,
@@ -479,7 +494,39 @@ body <- dashboardBody(
                     checkboxInput("legend", "Show legend", TRUE)))
             ),
             
-            # row 2 ridgeline and cumulative count
+            # row 2 for strain ecc data 
+            fluidRow(
+              box(title ="Geospatial and temporal ECC indices",
+                  width = 12,
+                  # geo ecc histogram by time point
+                  box(title = "Geospatial ECC histogram", 
+                      width = 6, 
+                      plotlyOutput("strain_geo_histogram")),
+                  # temp ecc histogram by time point
+                  box(title = "Temporal ECC histogram", 
+                      width = 6, 
+                      plotlyOutput("strain_temp_histogram")),
+                  collapsible = TRUE
+              )
+            ), 
+            
+            # row 2 for delta strain ecc data 
+            fluidRow(
+              box(title ="Delta geospatial and temporal ECC indices",
+                  width = 12,
+                  # geo ecc histogram by time point
+                  box(title = "Geospatial ECC histogram", 
+                      width = 6, 
+                      plotlyOutput("strain_delta_geo_histogram")),
+                  # temp ecc histogram by time point
+                  box(title = "Temporal ECC histogram", 
+                      width = 6, 
+                      plotlyOutput("strain_delta_temp_histogram")),
+                  collapsible = TRUE
+              )
+            ), 
+            
+            # row 4 ridgeline and cumulative count
             fluidRow( 
               # strain ridgeline plot (denisty by date)
               box(title = "Cluster strain identification density by date", 
@@ -488,7 +535,7 @@ body <- dashboardBody(
                   collapsible = TRUE)
             ),
             
-            # fluid row 3
+            # fluid row 5
             fluidRow(
               #strain histogram 
               box(title = "Number of new strains identified per month by country",
@@ -502,7 +549,7 @@ body <- dashboardBody(
                   collapsible = TRUE)
             ),
             
-            # row 4
+            # row 6
             fluidRow(
               # cumulative strain identification by time point 
               box(title = "Cumulative strain identification by country", 
@@ -564,8 +611,6 @@ ui <- dashboardPage(header, sidebar, body)
 
 server <- function(input, output, session) { 
   
-  
-  
   ###########################################
   # filter cluster data based on user input #
   ###########################################
@@ -573,16 +618,18 @@ server <- function(input, output, session) {
   # all cluster reactive filtering
   clusters_rall <- reactive({
     
-    clusters_long %>%
+    clusters_filt <- clusters_long %>%
       # tp1 filters
       # also filter for tp2 clusters since they are linked?
       {if (!is.null(input$tp1_cluster)) filter(., tp1_cluster %in% input$tp1_cluster)  else . } %>%
+      {if (!is.null(input$timepoint)) filter(., timepoint %in% input$timepoint)  else . } %>%
+      {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
       filter(cluster_size_2 >= input$cluster_size_2[1]+1 & cluster_size_2 <= input$cluster_size_2[2]+1 ) %>%
       filter(avg_date >= input$avg_date[1]) %>% filter(avg_date <= input$avg_date[2]) %>%
       filter(ecc_0.0.1 >= input$ecc_0.0.1[1] & ecc_0.0.1 <= input$ecc_0.0.1[2]) %>%
       filter(ecc_0.1.0 >= input$ecc_0.1.0[1] & ecc_0.1.0 <= input$ecc_0.1.0[2]) %>%
       filter(avg_latitude >= input$avg_latitude[1] & avg_latitude <= input$avg_latitude[2]) %>%
-      filter(avg_longitude >= input$avg_longitude[1] & avg_longitude <= input$avg_longitude[2]) %>%
+      filter(avg_longitude >= input$avg_longitude[1] & avg_longitude <= input$avg_longitude[2])  %>%
       
       # delta filters
       filter(delta_cluster_size >= input$delta_cluster_size[1] & delta_cluster_size <= input$delta_cluster_size[2]) %>%
@@ -591,21 +638,36 @@ server <- function(input, output, session) {
       filter(cluster_novel_growth_rate >= input$cluster_novel_growth_rate[1] & cluster_novel_growth_rate <= input$cluster_novel_growth_rate[2]) %>%
       filter(delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2]) %>%
       filter(delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2]) %>%
-      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . }  %>%
-      # slice chooses top 10
-      # if multiple values are the same within the top 10, then all instances are included 
-      {if (input$exploreData==1) slice_max(., cluster_size_2, n=10)  else . }  %>%
-      {if (input$exploreData==2) slice_max(., delta_ecc_0.0.1, n=10)  else . }  %>%
-      {if (input$exploreData==3) slice_max(., delta_ecc_0.1.0, n=10)  else . }
+      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . } %>%
+      
+      # data subsetting 
+      {if (input$subsets==1) arrange(., desc(abs(cluster_size_2))) else . }  %>%
+      {if (input$subsets==2) arrange(., desc(abs(delta_ecc_0.0.1))) else . }  %>%
+      {if (input$subsets==3) arrange(., desc(abs(delta_ecc_0.1.0))) else . } 
+    
+    # grab n rows according to input
+    if (input$number != 99){
+      topn <- as.numeric(input$number)
+      unique_clust <- head(unique(clusters_filt$tp1_cluster),topn)
+      return(clusters_filt %>% subset(tp1_cluster %in% unique_clust))
+    } else{  
+      return(clusters_filt)
+    }
+    
   })
   
   # all cluster reactive filtering
   eccdata_r <- reactive({
     
+    # get top n
+    topn <- {if (input$number != "all") as.numeric(input$number) else nrow(clusters_long)}
+    
     eccdata %>%
       # currently filtering only tp1 data
       # based on filters should also be filtering tp2 data on same criteria?
       {if (!is.null(input$tp1_cluster)) filter(., tp1_cluster %in% input$tp1_cluster)  else . } %>% 
+      {if (!is.null(input$timepoint)) filter(., present_at_tp1 %in% as.numeric(input$timepoint)-1)  else . } %>%
+      {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
       filter(tp1_cluster_size_2 >= input$cluster_size_2[1] & tp1_cluster_size_2 <= input$cluster_size_2[2]) %>%
       filter(avg_tp1_date >= input$avg_date[1] & avg_tp1_date <= input$avg_date[2]) %>%
       filter(tp1_t0_ecc_0.0.1 >= input$ecc_0.0.1[1] & tp1_t0_ecc_0.0.1 <= input$ecc_0.0.1[2]) %>%
@@ -620,10 +682,13 @@ server <- function(input, output, session) {
       filter(cluster_novel_growth_rate >= input$cluster_novel_growth_rate[1] & cluster_novel_growth_rate <= input$cluster_novel_growth_rate[2]) %>%
       filter(delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2]) %>%
       filter(delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2]) %>%
-      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . }  %>%
-      {if (input$exploreData==1) slice_max(., cluster_size_2, n=10)  else . }  %>%
-      {if (input$exploreData==2) slice_max(., delta_ecc_0.0.1, n=10)  else . }  %>%
-      {if (input$exploreData==3) slice_max(., delta_ecc_0.1.0, n=10)  else . }
+      {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . } #%>%
+    
+    # #data subsetting
+    # {if (input$subsets==1) arrange(., desc(abs(cluster_size_2))) else . }  %>%
+    # {if (input$subsets==2) arrange(., desc(abs(delta_ecc_0.0.1))) else . }  %>%
+    # {if (input$subsets==3) arrange(., desc(abs(delta_ecc_0.1.0))) else . } %>%
+    # slice_head(n=topn)
   })
   
   # shared cluster data frames
@@ -730,7 +795,7 @@ server <- function(input, output, session) {
   
   # plotly map using mapbox
   output$cluster_map <- renderPlotly({
-
+    
     plot_mapbox(mode = 'scattermapbox') %>%
       add_markers(data = clusters_long_sh,
                   x = ~avg_longitude,
@@ -764,269 +829,6 @@ server <- function(input, output, session) {
       layout(mapbox = list(zoom =1.5,
                            center = list(lon = 80, lat = 40)))
   })
-  
-  ###################
-  # ridgeline plots #
-  ###################
-  
-  output$ridgeplot <- renderPlotly({
-    # base plot
-    plot_ly(type = 'violin') %>%
-      # tp1 traces
-      add_trace(data = strains_sh1,
-                y = ~tp1_cluster,
-                x = ~strain_date,
-                legendgroup = ~tp1_cluster,
-                name =  ~paste(tp1_cluster,1, sep="_"),
-                type = 'violin',
-                side = 'positive',
-                orientation = "h",
-                scalemode = "count",
-                color = ~I(pal(tp1_cluster)),
-                points = "all",
-                marker = list(opacity = 0.4,
-                              size = 8),
-                hoveron = "violins+points") %>%  
-      # tp2 traces
-      add_trace(data = strains_sh2,
-                y = ~tp1_cluster,
-                x = ~strain_date,
-                legendgroup = ~tp1_cluster,
-                type = 'violin',
-                side = 'positive',
-                orientation = "h",
-                scalemode = "count",
-                color = ~I(pal(tp1_cluster)),
-                name =  ~paste(tp1_cluster,2, sep="_"),
-                points = "all",
-                line = list(color = "black",
-                            width = 1),
-                marker = list(opacity = 0.4,
-                              size = 8,
-                              line = list(color = "black",
-                                          width = 1)),
-                hoveron = "violins+points") %>%
-      layout(yaxis= list(showticklabels = FALSE,
-                         title = "Count density"),
-             xaxis = list(title = "Date of strain identification")) %>%
-      highlight(on= "plotly_selected",
-                off="plotly_deselect")
-    
-  })
-  
-  
-  #############################
-  # bubble plots for ECC data #
-  #############################
-  
-  output$bubbleplot <- renderPlotly({
-    plot_ly() %>% 
-      #add tp1 trace
-      add_trace(data = clusters_long_sh,
-                x = ~ecc_0.0.1,
-                y = ~ecc_0.1.0,
-                type = 'scatter',
-                mode = 'markers',
-                legendgroup = ~tp1_cluster,
-                color = ~I(pal(tp1_cluster)),
-                name = ~paste(tp1_cluster, timepoint, sep="_"),
-                size = ~cluster_size_2,
-                sizes = c(1, 1000),
-                opacity = 0.8, 
-                marker = list(sizemode = "area")) %>%
-      # # highlighting/selection options
-      highlight(on= "plotly_click",
-                off="plotly_doubleclick")
-  })
-  
-  
-  ##################
-  # ECC Histograms #
-  ##################
-  
-  # geo ecc histogram by time point
-  output$geo_histogram <- renderPlotly({
-    plot_ly(type = "histogram",
-            data = clusters_long_sh,
-            histfunc = "count",
-            opacity = 0.5,
-            x = ~ecc_0.0.1,
-            split = ~timepoint,
-            color = ~timepoint,
-            colors = c("red", "blue")) %>%
-      layout(barmode = "overlay")
-    
-  })
-  
-  # temp ecc histogram by time point
-  output$temp_histogram <- renderPlotly({
-    plot_ly(type = "histogram",
-            data = clusters_long_sh,
-            histfunc = "count",
-            opacity = 0.5,
-            x = ~ecc_0.1.0,
-            split = ~timepoint,
-            color = ~timepoint,
-            colors = c("red", "blue")) %>%
-      layout(barmode = "overlay")
-    
-  })
-  
-  # delta geo histogram
-  output$delta_geo_histogram <- renderPlotly({
-    plot_ly(type = "histogram",
-            data = clusters_long_sh,
-            histfunc = "count",
-            opacity = 0.5,
-            x = ~delta_ecc_0.0.1) %>%
-      layout(barmode = "overlay")
-  })
-  
-  #delta temp histogram 
-  output$delta_temp_histogram <- renderPlotly({
-    plot_ly(type = "histogram",
-            data = clusters_long_sh,
-            histfunc = "count",
-            opacity = 0.5,
-            x = ~delta_ecc_0.1.0) %>%
-      layout(barmode = "overlay")
-  })
-  
-  
-  #delta temp histogram 
-  output$delta_size_histogram <- renderPlotly({
-    plot_ly(type = "histogram",
-            xbins = list(size = 10),
-            data = clusters_long_sh,
-            histfunc = "count",
-            opacity = 0.5,
-            x = ~delta_cluster_size) %>%
-      layout(barmode = "overlay")
-  })
-  
-  
-  
-  ##############################
-  # histogram for strain counts#
-  ##############################
-  
-  output$strain_histogram_tp1 <- renderPlotly({
-
-    
-    # strain count by country histogram
-    plot_ly(type = "histogram",
-            data = strains,
-            histfunc = "count",
-            x = ~strain_date,
-            color = ~country, 
-            nbinsx = ~length(unique(month(strain_date))),
-            hovertemplate = ~paste('<b>', country, '</b><br>',
-                                   'Count: %{y}', '<extra></extra>', sep=" ")) %>%
-      layout(barmode = "stack",
-             xaxis = list(title = "Date"),
-             yaxis = list(title = "Number of new strains identified"),
-             updatemenus = list( list(
-               active = -1,
-               x= -0.25,
-               type = 'buttons',
-               buttons = list(
-                 list(
-                   label = "By week",
-                   method = "restyle",
-                   args = list(list(nbinsx = ~length(unique(week(strain_date)))))),
-                 list(
-                   label = "By month",
-                   method = "restyle",
-                   args = list(list(nbinsx = ~length(unique(month(strain_date)))))),
-                 list(
-                   label = "By province",
-                   method = "update",
-                   args = list(list(color = ~province))),
-                 list(
-                   label = "By country",
-                   method = "update",
-                   args = list(list(color = ~country))) 
-               ))))
-  })
-  
-  output$strain_histogram_tp2 <- renderPlotly({
-    
-    # strain count by country histogram
-    plot_ly(type = "histogram",
-            data = strains_sh2,
-            histfunc = "count",
-            x = ~strain_date,
-            color = ~country,
-            colors = "Set1",
-            nbinsx = ~length(unique(month(strain_date))),
-            hovertemplate = ~paste('<b>', country, '</b><br>',
-                                   'Count: %{y}', '<extra></extra>', sep=" ")) %>%
-      layout(barmode = "stack",
-             xaxis = list(title = "Date"),
-             yaxis = list(title = "Number of new strains identified"),
-             updatemenus = list( list(
-               active = -1,
-               x= -0.25,
-               type = 'buttons',
-               buttons = list(
-                 list(
-                   label = "By week",
-                   method = "restyle",
-                   args = list(list(nbinsx = ~length(unique(week(strain_date)))))),
-                 list(
-                   label = "By month",
-                   method = "restyle",
-                   args = list(list(nbinsx = ~length(unique(month(strain_date))))))
-               ))))
-  })
-  
-  
-  ################################
-  # cumulative strains identified#
-  ################################
-  
-  output$cum_strains_tp1 <- renderPlotly({
-    
-    strains_sh1_cumsum <- strains_sh$data(withSelection = T) %>%
-      subset(timepoint == 1) %>%
-      filter(selected_ | is.na(selected_)) %>%
-      group_by(tp1_cluster, timepoint, country, strain_date) %>% 
-      tally(!is.na(strain)) %>% 
-      mutate(cumsum = cumsum(n))
-    
-    
-    ggplotly(ggplot(data = strains_sh1_cumsum,
-                    aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
-               scale_color_manual(values = pal(unique(strains_sh1_cumsum$tp1_cluster)),
-                                  name = "Cluster") +
-               geom_line() +
-               facet_wrap(~country) +
-               labs(y="Cumulative strain count", x = "Date")  + 
-               theme_bw() +
-               theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)))
-  })
-  
-  
-  output$cum_strains_tp2 <- renderPlotly({
-    
-    strains_sh1_cumsum <- strains_sh$data(withSelection = T) %>%
-      subset(timepoint == 2) %>% 
-      filter(selected_ | is.na(selected_)) %>%
-      group_by(tp1_cluster, country, strain_date) %>% 
-      tally(!is.na(strain)) %>% 
-      mutate(cumsum = cumsum(n))
-    
-    ggplotly(ggplot(data = strains_sh1_cumsum,
-                    aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
-               scale_color_manual(values = pal(unique(strains_sh1_cumsum$tp1_cluster)),
-                                  name = "Cluster") +
-               geom_line() +
-               facet_wrap(~country) +
-               labs(y="Cumulative strain count", x = "Date")  + 
-               theme_bw() +
-               theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)))
-  })
-  
   
   
   ######################################
@@ -1087,8 +889,8 @@ server <- function(input, output, session) {
   
   output$change_vector <- renderPlotly({
     
-    test <- clusters_long_sh$data(withSelection = T)
-    test$opacity <- ifelse(test$selected_ | is.na(test$selected_), 1, 0.1)
+    op <- clusters_long_sh$data(withSelection = T)
+    op$opacity <- ifelse(op$selected_ | is.na(op$selected_), 1, 0.1)
     
     plot_ly(type = "scatter", mode="markers") %>% 
       #add segment to connect each point to origin
@@ -1110,7 +912,7 @@ server <- function(input, output, session) {
                                 axref='x', ayref='y',
                                 x = ~delta_ecc_0.0.1,
                                 y = ~delta_ecc_0.1.0,
-                                opacity = I(test$opacity),
+                                opacity = I(op$opacity),
                                 name = ~paste(tp1_cluster, timepoint, sep="_"),
                                 arrowcolor = ~I(pal(tp1_cluster)),
                                 xref='x', yref='y', text = "")) %>%
@@ -1151,6 +953,384 @@ server <- function(input, output, session) {
       highlight(on= "plotly_click",
                 off="plotly_doubleclick")
     
+  })
+  
+  
+  #############################
+  # bubble plots for ECC data #
+  #############################
+  
+  output$bubbleplot <- renderPlotly({
+    plot_ly() %>% 
+      #add tp1 trace
+      add_trace(data = clusters_long_sh,
+                x = ~ecc_0.0.1,
+                y = ~ecc_0.1.0,
+                type = 'scatter',
+                mode = 'markers',
+                legendgroup = ~tp1_cluster,
+                color = ~I(pal(tp1_cluster)),
+                name = ~paste(tp1_cluster, timepoint, sep="_"),
+                size = ~cluster_size_2,
+                sizes = c(1, 1000),
+                opacity = 0.8, 
+                marker = list(sizemode = "area")) %>%
+      # # highlighting/selection options
+      highlight(on= "plotly_click",
+                off="plotly_doubleclick")
+  })
+  
+  
+  ##########################
+  # cluster ECC Histograms #
+  ##########################
+  
+  # geo ecc histogram by time point
+  output$geo_histogram <- renderPlotly({
+    plot_ly(type = "histogram",
+            data = clusters_long_sh,
+            histfunc = "count",
+            x = ~ecc_0.0.1,
+            color = ~timepoint) %>%
+      layout(barmode = "group")
+    
+  })
+  
+  # temp ecc histogram by time point
+  output$temp_histogram <- renderPlotly({
+    plot_ly(type = "histogram",
+            data = clusters_long_sh,
+            histfunc = "count",
+            x = ~ecc_0.1.0,
+            color = ~timepoint) %>%
+      layout(barmode = "group")
+    
+  })
+  
+  # delta geo histogram
+  output$delta_geo_histogram <- renderPlotly({
+    plot_ly(type = "histogram",
+            data = clusters_long_sh,
+            histfunc = "count",
+            x = ~delta_ecc_0.0.1) %>%
+      layout(barmode = "group")
+  })
+  
+  #delta temp histogram 
+  output$delta_temp_histogram <- renderPlotly({
+    plot_ly(type = "histogram",
+            data = clusters_long_sh,
+            histfunc = "count",
+            x = ~delta_ecc_0.1.0) %>%
+      layout(barmode = "group")
+  })
+  
+  #delta temp histogram 
+  output$delta_size_histogram <- renderPlotly({
+    plot_ly(type = "histogram",
+            xbins = list(size = 10),
+            data = clusters_long_sh,
+            histfunc = "count",
+            x = ~delta_cluster_size) %>%
+      layout(barmode = "overlay")
+  })
+  
+  
+  ###################
+  # ridgeline plots #
+  ###################
+  
+  output$ridgeplot <- renderPlotly({
+    # base plot
+    plot_ly(type = 'violin') %>%
+      # tp1 traces
+      add_trace(data = strains_sh1,
+                y = ~tp1_cluster,
+                x = ~strain_date,
+                legendgroup = ~tp1_cluster,
+                name =  ~paste(tp1_cluster,1, sep="_"),
+                type = 'violin',
+                side = 'positive',
+                orientation = "h",
+                scalemode = "count",
+                color = ~I(pal(tp1_cluster)),
+                points = "all",
+                marker = list(opacity = 0.4,
+                              size = 8),
+                hoveron = "violins+points") %>%  
+      # tp2 traces
+      add_trace(data = strains_sh2,
+                y = ~tp1_cluster,
+                x = ~strain_date,
+                legendgroup = ~tp1_cluster,
+                type = 'violin',
+                side = 'positive',
+                orientation = "h",
+                scalemode = "count",
+                color = ~I(pal(tp1_cluster)),
+                name =  ~paste(tp1_cluster,2, sep="_"),
+                points = "all",
+                line = list(color = "black",
+                            width = 1),
+                marker = list(opacity = 0.4,
+                              size = 8,
+                              line = list(color = "black",
+                                          width = 1)),
+                hoveron = "violins+points") %>%
+      layout(yaxis= list(showticklabels = FALSE,
+                         title = "Count density"),
+             xaxis = list(title = "Date of strain identification")) %>%
+      highlight(on= "plotly_selected",
+                off="plotly_deselect")
+    
+  })
+  
+  
+  #########################
+  # strain ECC Histograms #
+  #########################
+  
+  
+  # strain geo ecc histogram by time point
+  output$strain_geo_histogram <- renderPlotly({
+    plot_ly(type = "histogram",
+            data = strains_sh1,
+            histfunc = "count",
+            x = ~tp1_t0_ecc_0.0.1,
+            nbinsx=20, 
+            name = "Time point 1") %>%
+      add_trace(type = "histogram",
+                data = strains_sh2,
+                histfunc = "count",
+                x = ~tp1_t0_ecc_0.0.1,
+                nbinsx=20,
+                name = "Time point 2") %>%
+      layout(barmode = "beside")
+  })
+  
+  # strain geo ecc histogram by time point
+  output$strain_temp_histogram <- renderPlotly({
+    plot_ly(type = "histogram",
+            data = strains_sh1,
+            histfunc = "count",
+            x = ~tp1_t0_ecc_0.1.0,
+            nbinsx=20, 
+            name = "Time point 1") %>%
+      add_trace(type = "histogram",
+                data = strains_sh2,
+                histfunc = "count",
+                x = ~tp1_t0_ecc_0.1.0,
+                nbinsx=20,
+                name = "Time point 2") %>%
+      layout(barmode = "beside")
+  })
+  
+  # strain delta geo ecc histogram by time point
+  output$strain_delta_geo_histogram <- renderPlotly({
+    plot_ly(type = "histogram",
+            data = strains,
+            histfunc = "count",
+            x = ~delta_ecc_0.1.0,
+            nbinsx=20) %>%
+      layout(barmode = "beside")
+  })
+  
+  # strain delta temp ecc histogram by time point
+  output$strain_delta_temp_histogram <- renderPlotly({
+    plot_ly(type = "histogram",
+            data = strains,
+            histfunc = "count",
+            x = ~delta_ecc_0.0.1,
+            nbinsx=20) %>%
+      layout(barmode = "beside")
+  })
+  
+  
+  ##############################
+  # histogram for strain counts#
+  ##############################
+  
+  output$strain_histogram_tp1 <- renderPlotly({
+    
+    # strain count by country histogram
+    plot_ly(type = "histogram",
+            data = strains_sh1,
+            histfunc = "count",
+            x = ~strain_date,
+            color = ~country,
+            colors = "Set1",
+            nbinsx = ~length(unique(month(strain_date))),
+            hovertemplate = ~paste('<b>', country, '</b><br>',
+                                   'Count: %{y}', '<extra></extra>', sep=" ")) %>%
+      layout(barmode = "stack",
+             xaxis = list(title = "Date"),
+             yaxis = list(title = "Number of new strains identified"),
+             updatemenus = list( list(
+               active = -1,
+               x= -0.25,
+               type = 'buttons',
+               buttons = list(
+                 list(
+                   label = "By week",
+                   method = "restyle",
+                   args = list(list(nbinsx = ~length(unique(week(strain_date)))))),
+                 list(
+                   label = "By month",
+                   method = "restyle",
+                   args = list(list(nbinsx = ~length(unique(month(strain_date))))))
+               ))))
+    
+  })
+  
+  output$strain_histogram_tp2 <- renderPlotly({
+    
+    # strain count by country histogram
+    plot_ly(type = "histogram",
+            data = strains_sh2,
+            histfunc = "count",
+            x = ~strain_date,
+            color = ~country,
+            colors = "Set1",
+            nbinsx = ~length(unique(month(strain_date))),
+            hovertemplate = ~paste('<b>', country, '</b><br>',
+                                   'Count: %{y}', '<extra></extra>', sep=" ")) %>%
+      layout(barmode = "stack",
+             xaxis = list(title = "Date"),
+             yaxis = list(title = "Number of new strains identified"),
+             updatemenus = list( list(
+               active = -1,
+               x= -0.25,
+               type = 'buttons',
+               buttons = list(
+                 list(
+                   label = "By week",
+                   method = "restyle",
+                   args = list(list(nbinsx = ~length(unique(week(strain_date)))))),
+                 list(
+                   label = "By month",
+                   method = "restyle",
+                   args = list(list(nbinsx = ~length(unique(month(strain_date))))))
+               ))))
+  })
+  
+  
+  #################################
+  # cumulative strains identified #
+  #################################
+  
+  # time point 1
+  output$cum_strains_tp1 <- renderPlotly({
+    
+    # need to aggregate data
+    strains_sh1_cumsum <- strains_sh$data(withSelection = T) %>%
+      subset(timepoint == 1) %>%
+      filter(selected_ | is.na(selected_)) %>%
+      group_by(tp1_cluster, timepoint, country, strain_date) %>% 
+      tally(!is.na(strain)) %>% 
+      mutate(cumsum = cumsum(n))
+    
+    # # time point 1
+    ggplotly(ggplot(data = strains_sh1_cumsum,
+                    aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+               scale_color_manual(values = pal(unique(strains_sh1_cumsum$tp1_cluster)),
+                                  name = "Cluster") +
+               geom_line() +
+               facet_wrap(~country) +
+               theme_bw() +
+               theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+                     axis.title = element_blank())) %>%
+      add_annotations( text = "Date",
+                       y = 0,
+                       x=0.5, 
+                       yshift=-70,
+                       yref = "paper",
+                       xref = "paper",
+                       xanchor = "middle",
+                       yanchor = "bottom",
+                       showarrow = FALSE,
+                       font = list(size = 14)) %>%
+      add_annotations( text = "Cumulative strain count",
+                       y = 0.5,
+                       x=0, 
+                       xshift = -50,
+                       yref = "paper",
+                       xref = "paper",
+                       xanchor = "left",
+                       yanchor = "middle",
+                       textangle = -90,
+                       showarrow = FALSE,
+                       font = list(size = 14)) 
+
+# 
+#       my_plot <- . %>% 
+#         plot_ly(x = ~strain_date, y = ~cumsum,
+#                 color = ~tp1_cluster,
+#                 type = "scatter", mode="lines") %>%
+#         add_annotations(
+#           text = ~unique(country),
+#           y = 1,
+#           x=0.5, 
+#           yshift=15,
+#           yref = "paper",
+#           xref = "paper",
+#           xanchor = "middle",
+#           yanchor = "top",
+#           showarrow = FALSE,
+#           font = list(size = 14)
+#         ) %>%
+#         layout(xaxis = list(range = c(min(strains_sh1_cumsum$strain_date), max(strains_sh1_cumsum$strain_date))),
+#                yaxis = list(range = c(0, max(strains_sh1_cumsum$cumsum))))
+#   
+#       
+#       strains_sh1_cumsum %>%
+#         group_by(country) %>%
+#         do(p = my_plot(.)) %>%
+#         subplot(nrows = nrow(.), shareX = TRUE, shareY= F)
+  })
+  
+  # time point 2
+  output$cum_strains_tp2 <- renderPlotly({
+    
+    # need to aggregate data
+    strains_sh2_cumsum <- strains_sh$data(withSelection = T) %>%
+      subset(timepoint == 2) %>% 
+      filter(selected_ | is.na(selected_)) %>%
+      group_by(tp1_cluster, country, strain_date) %>% 
+      tally(!is.na(strain)) %>% 
+      mutate(cumsum = cumsum(n))
+    
+    # time point 2
+    ggplotly(ggplot(data = strains_sh2_cumsum,
+                    aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+               scale_color_manual(values = pal(unique(strains_sh1_cumsum$tp1_cluster)),
+                                  name = "Cluster") +
+               geom_line() +
+               facet_wrap(~country) +
+               theme_bw() +
+               theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+                     axis.title = element_blank())) %>%
+      add_annotations( text = "Date",
+                       y = 0,
+                       x=0.5, 
+                       yshift=-70,
+                       yref = "paper",
+                       xref = "paper",
+                       xanchor = "middle",
+                       yanchor = "bottom",
+                       showarrow = FALSE,
+                       font = list(size = 14)) %>%
+      add_annotations( text = "Cumulative strain count",
+                       y = 0.5,
+                       x=0, 
+                       xshift = -50,
+                       yref = "paper",
+                       xref = "paper",
+                       xanchor = "left",
+                       yanchor = "middle",
+                       textangle = -90,
+                       showarrow = FALSE,
+                       font = list(size = 14)) 
+      
   })
   
   
@@ -1205,3 +1385,35 @@ shinyApp(ui, server)
 # rename axis for cardinal plot for humans to understand how 
 # clusters are spreading 
 # heat map (later)
+
+# 
+# 
+# df <- data.frame(x = c(1,2,3,4,5), y1 = c(3,3,3,3,3), y2 = c(6,6,6,6,6))
+# 
+# p <- plot_ly(df, type = 'scatter', mode = 'markers') %>%
+#   add_trace(x = ~x, y = ~y1) %>%
+#   add_trace(x = ~x, y = ~y2)
+# 
+# p <- p %>% layout(
+#   title = "Button Restyle",
+#   xaxis = list(domain = c(0.1, 1)),
+#   yaxis = list(title = "y", range = c(0,10)),
+#   updatemenus = list(
+#     list(
+#       type = "buttons",
+#       y = 0.8,
+#       buttons = list(
+#         
+#         list(method = "restyle",
+#              args = list("visible", c(T,T)),
+#              label = "All"),
+#         
+#         list(method = "restyle",
+#              args = list("visible", c(F,T)),
+#              label = "Trace 0"),
+#         
+#         
+#         list(method = "restyle",
+#              args = list("visible", c(T,F)),
+#              label = "Trace 1")))
+#   ))
