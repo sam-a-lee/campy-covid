@@ -4,7 +4,7 @@
 
 # LONG FORMAT
 # COVID VIS SHINY DASHBOARD
-# June 16, 2021
+# July 05, 2021
 # Samantha Lee
 
 # The purpose of this script is to generate a map of epi-cluster cohesian data
@@ -442,7 +442,10 @@ sidebar <- dashboardSidebar(
               menuItem("Filtered raw data", tabName = "filteredData"),
               
               # raw data used to generate visualizations
-              menuItem("Raw data", tabName = "rawData"))
+              menuItem("Raw data", tabName = "rawData"),
+              
+              # upload user data
+              menuItem("Upload data", tabName = "userData"))
 )
 
 # the dashboard body
@@ -499,7 +502,7 @@ body <- dashboardBody(
                   box(title = "Bubble plot", 
                       width = 6, 
                       solidHeader=TRUE,
-                      plotlyOutput("bubbleplot")),
+                      plotlyOutput("bubbleplot", width = "100%", height = "100%")),
                   # change vector plot
                   box(title = "Change vector", 
                       width = 6,
@@ -690,6 +693,39 @@ body <- dashboardBody(
                   title = "Filtered strain data used for plotting", 
                   dataTableOutput("strains_dt"))
             )
+    ),
+    
+    # user input data
+    tabItem(tabName = "userData",
+            
+            fluidRow(
+              box(width = 12,
+                  title = "Select file for upload",
+                  # prompt to upload file 
+                  fileInput("userFile", "Choose file",
+                            multiple = TRUE,
+                            accept = c("text/csv/xlsx",
+                                       "text/comma-separated-values,text/plain",
+                                       ".csv", ".txt", ".xlsx")),
+                  # check box for header
+                  checkboxInput("header", "Header", TRUE),
+                  
+                  # check box for separator 
+                  radioButtons("separator", "Separator",
+                               inline = TRUE,
+                               choices = c(Comma = ",",
+                                           Semicolon = ";",
+                                           Tab = "\t"),
+                               selected = ","),
+                  # check box for quotes, if applicable
+                  radioButtons("quote", "Quote",
+                               inline = TRUE,
+                               choices = c(None = "",
+                                           "Double Quote" = '"',
+                                           "Single Quote" = "'"),
+                               selected = "")
+              )
+            )
     )
   )
 )
@@ -702,6 +738,24 @@ ui <- dashboardPage(header, sidebar, body)
 ###############
 
 server <- function(input, output, session) { 
+
+  #####################
+  # read in user data #
+  #####################
+  
+  # read in default data
+  # or read in user inputted data
+  data_in <- reactive({
+    
+    if(!is.null(input$userFile)){
+      print("reading in user inputted data")
+      read_xlsx(input$userFile$datapath)
+    } else {
+      print("using default data")
+     read_xlsx(here("input_data", "2021-05-03_0.Europe_1st wave.9000_Merged_strain_results.xlsx"))
+    }
+  })
+
   
   ###########################################
   # filter cluster data based on user input #
@@ -710,6 +764,9 @@ server <- function(input, output, session) {
   # all cluster reactive filtering
   clusters_rall <- reactive({
     
+    # print("TEST TEST TEST TEST TEST TEST TEST TEST TEST ")
+    # test2 <- test() 
+    # 
     clusters_filt <- clusters_long %>%
       # tp1 filters
       # also filter for tp2 clusters since they are linked?
@@ -754,10 +811,10 @@ server <- function(input, output, session) {
     # get top n
     topn <- {if (input$number != "all") as.numeric(input$number) else nrow(clusters_long)}
     
-    eccdata %>%
-      # currently filtering only tp1 data
-      # based on filters should also be filtering tp2 data on same criteria?
-      {if (!is.null(input$tp1_cluster)) filter(., tp1_cluster %in% input$tp1_cluster)  else . } %>% 
+    clusters_filt <- eccdata %>%
+      # filter clusters on what is included in clusters_all
+      # only filter on tp1 info
+      filter(., tp1_cluster %in% clusters_rall()$tp1_cluster) %>% 
       {if (!is.null(input$timepoint)) filter(., present_at_tp1 %in% as.numeric(input$timepoint)-1)  else . } %>%
       {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
       filter(tp1_cluster_size_2 >= input$cluster_size_2[1] & tp1_cluster_size_2 <= input$cluster_size_2[2]) %>%
@@ -777,7 +834,6 @@ server <- function(input, output, session) {
       {if (!is.null(input$cardinal)) filter(., cardinal %in% input$cardinal)  else . } %>%
       
       # data subsetting 
-      {if (input$subsets==1) arrange(., desc(abs(cluster_size_2))) else . }  %>%
       {if (input$subsets==2) arrange(., desc(abs(delta_ecc_0.0.1))) else . }  %>%
       {if (input$subsets==3) arrange(., desc(abs(delta_ecc_0.1.0))) else . } 
     
@@ -1050,7 +1106,7 @@ server <- function(input, output, session) {
   #                       theme_bw() +
   #                       theme(legend.position = "none",
   #                             panel.border = element_blank()))
-
+  
   
   output$change_vector <- renderPlotly({
     
@@ -1160,11 +1216,13 @@ server <- function(input, output, session) {
                  scale_size_area() + 
                  xlim(0,1) +
                  ylim(0,1) +
+                 labs(x="Geospatial ECC value", y = "Temporal ECC value") +
                  facet_wrap(~province) + 
                  theme_bw() +
-                 theme(panel.border = element_blank()))
-
-
+                 theme(panel.border = element_blank())) %>%
+        layout(margin = list(l = 100, r = 100))
+      
+      
     } else if (input$region == 2) {
       
       # clusters faceting by country 
@@ -1196,11 +1254,13 @@ server <- function(input, output, session) {
                  scale_size_area() + 
                  xlim(0,1) +
                  ylim(0,1) +
+                 labs(x="Geospatial ECC value", y = "Temporal ECC value") +
                  facet_wrap(~country) + 
                  theme_bw() +
-                 theme(panel.border = element_blank()))
+                 theme(panel.border = element_blank())) %>%
+        layout(margin = list(l = 100, r = 100))
       
- 
+      
     } else { 
       
       # clusters no faceting 
@@ -1211,8 +1271,11 @@ server <- function(input, output, session) {
                  scale_size_area() + 
                  xlim(0,1) +
                  ylim(0,1) + 
+                 labs(x="Geospatial ECC value", y = "Temporal ECC value") +
                  theme_bw() +
-                 theme(panel.border = element_blank()))
+                 theme(panel.border = element_blank())) %>%
+        layout(margin = list(l = 50, r = 50, t = 50, b = 50),
+               width = 500, height = 450)
     }
   })
   
@@ -1230,7 +1293,9 @@ server <- function(input, output, session) {
             xbins = list(size = 0.05),
             color = ~timepoint) %>%
       layout(barmode = "group",
-             xaxis = list(range = c(0, 1)))
+             xaxis = list(range = c(0, 1),
+                          title = "Temporal ECC value"),
+             yaxis = list(title = "Cluster count"))
     
   })
   
@@ -1243,7 +1308,10 @@ server <- function(input, output, session) {
             xbins = list(size = 0.05),
             color = ~timepoint) %>%
       layout(barmode = "group",
-             xaxis = list(range = c(0, 1)))
+             xaxis = list(range = c(0, 1),
+                          title = "Geospatial ECC value"),
+             yaxis = list(title = "Cluster count"))
+    
     
   })
   
@@ -1255,7 +1323,10 @@ server <- function(input, output, session) {
             xbins = list(size = 0.05),
             x = ~delta_ecc_0.0.1) %>%
       layout(barmode = "group",
-             xaxis = list(range = c(-1, 1)))
+             xaxis = list(range = c(-1, 1),
+                          title = "Delta geospatial ECC value"),
+             yaxis = list(title = "Cluster count"))
+    
   })
   
   #delta temp histogram 
@@ -1266,7 +1337,9 @@ server <- function(input, output, session) {
             xbins = list(size = 0.05),
             x = ~delta_ecc_0.1.0) %>%
       layout(barmode = "group",
-             xaxis = list(range = c(-1, 1)))
+             xaxis = list(range = c(-1, 1),
+                          title = "Delta temporal ECC value"),
+             yaxis = list(title = "Cluster count"))
   })
   
   #delta temp histogram 
