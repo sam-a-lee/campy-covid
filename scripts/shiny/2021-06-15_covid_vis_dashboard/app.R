@@ -738,24 +738,6 @@ ui <- dashboardPage(header, sidebar, body)
 ###############
 
 server <- function(input, output, session) { 
-
-  #####################
-  # read in user data #
-  #####################
-  
-  # read in default data
-  # or read in user inputted data
-  data_in <- reactive({
-    
-    if(!is.null(input$userFile)){
-      print("reading in user inputted data")
-      read_xlsx(input$userFile$datapath)
-    } else {
-      print("using default data")
-     read_xlsx(here("input_data", "2021-05-03_0.Europe_1st wave.9000_Merged_strain_results.xlsx"))
-    }
-  })
-
   
   ###########################################
   # filter cluster data based on user input #
@@ -763,10 +745,7 @@ server <- function(input, output, session) {
   
   # all cluster reactive filtering
   clusters_rall <- reactive({
-    
-    # print("TEST TEST TEST TEST TEST TEST TEST TEST TEST ")
-    # test2 <- test() 
-    # 
+
     clusters_filt <- clusters_long %>%
       # tp1 filters
       # also filter for tp2 clusters since they are linked?
@@ -857,6 +836,7 @@ server <- function(input, output, session) {
   
   # strain reactive filtering
   strains_rall <- reactive({
+    
     strains %>%
       {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
@@ -867,6 +847,7 @@ server <- function(input, output, session) {
   
   # tp1 strain reactive filtering
   strains_r1 <- reactive({
+
     strains %>%
       {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
@@ -877,6 +858,7 @@ server <- function(input, output, session) {
   
   # tp2 strain reactive filtering
   strains_r2 <- reactive({
+
     strains %>%
       {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
@@ -2537,113 +2519,3 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
-
-#################
-# things to add #
-#################
-
-# buttons for 3-4 "go-to" situations/problems
-# cardinal plot reservered for bearing of clusters
-# rename axis for cardinal plot for humans to understand how 
-# clusters are spreading 
-# heat map (later)
-
-# 
-# 
-# df <- data.frame(x = c(1,2,3,4,5), y1 = c(3,3,3,3,3), y2 = c(6,6,6,6,6))
-# 
-# p <- plot_ly(df, type = 'scatter', mode = 'markers') %>%
-#   add_trace(x = ~x, y = ~y1) %>%
-#   add_trace(x = ~x, y = ~y2)
-# 
-# p <- p %>% layout(
-#   title = "Button Restyle",
-#   xaxis = list(domain = c(0.1, 1)),
-#   yaxis = list(title = "y", range = c(0,10)),
-#   updatemenus = list(
-#     list(
-#       type = "buttons",
-#       y = 0.8,
-#       buttons = list(
-#         
-#         list(method = "restyle",
-#              args = list("visible", c(T,T)),
-#              label = "All"),
-#         
-#         list(method = "restyle",
-#              args = list("visible", c(F,T)),
-#              label = "Trace 0"),
-#         
-#         
-#         list(method = "restyle",
-#              args = list("visible", c(T,F)),
-#              label = "Trace 1")))
-#   ))
-
-
-
-# strains %>%
-#   #group_by(country) %>%
-#   plot_ly(data=.,
-#           x = ~tp1_t0_ecc_0.0.1,
-#           split = ~country,
-#           color = ~timepoint,
-#           type = "histogram",
-#           nbinsx=10) %>%
-#   layout(xaxis=list(range = c(0,1)),
-#          barmode = "beside")
-# 
-# 
-# strains %>%
-#   #group_by(country) %>%
-#   group_by(country) %>%
-#   group_map(~ plot_ly(data=.,
-#                       x = ~tp1_t0_ecc_0.0.1,
-#                       split = ~country,
-#                       color = ~timepoint,
-#                       type = "histogram",
-#                       nbinsx=10),
-#             keep=T) %>%
-#   subplot(nrows = 3, shareX = T, shareY=TRUE) %>%
-#   layout(xaxis=list(range = c(0,1)),
-#          barmode = "beside")
-# 
-# 
-
-# panel <- . %>%
-#   plot_ly(x = ~tp1_t0_ecc_0.0.1) %>%
-#   add_trace(type = "histogram",
-#             color = ~timepoint,
-#             x = ~tp1_t0_ecc_0.0.1,
-#             nbinsx=10) %>%
-#   add_annotations(
-#     text = ~unique(country),
-#     x = 0.5,
-#     y = 1,
-#     yref = "paper",
-#     xref = "paper",
-#     yanchor = "bottom",
-#     showarrow = FALSE,
-#     font = list(size = 14)
-#   ) %>%
-#   layout(
-#     shapes = list(
-#       type = "rect",
-#       x0 = 0,
-#       x1 = 1,
-#       xref = "paper",
-#       y0 = 0,
-#       y1 = 16,
-#       yanchor = 1,
-#       yref = "paper",
-#       ysizemode = "pixel",
-#       fillcolor = toRGB("gray80"),
-#       line = list(color = "transparent")
-#     )
-#   )
-# 
-# 
-# strains %>%
-#   group_by(country) %>%
-#   do(p = panel(.)) %>%
-#   subplot(nrows = 3, shareX = TRUE)
