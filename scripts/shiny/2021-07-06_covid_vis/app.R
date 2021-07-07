@@ -89,11 +89,11 @@ sidebar <- dashboardSidebar(
                                                      "Largest delta temporal ECC" = 3, "None" = 4), selected = 1),
                          radioButtons("region", "Regional granularity",
                                       choices = list("No faceting" = 1, "By country" = 2,
-                                                     "By province" = 3), selected = 1),
-                         conditionalPanel(
-                             condition = "input.region == 3",
-                             selectizeInput("regionProvince", "View provinces in: ", unique(strains$country),
-                                            selected = NULL, multiple = FALSE))
+                                                     "By province" = 3), selected = 1)
+                         # conditionalPanel(
+                         #     condition = "input.region == 3",
+                         #     selectizeInput("regionProvince", "View provinces in: ", unique(strains$country),
+                         #                    selected = NULL, multiple = FALSE))
                 ),
                 
                 # Data filters
@@ -101,19 +101,29 @@ sidebar <- dashboardSidebar(
                          
                          # cluster filters
                          menuItem('Cluster filters', tabName = "clusterFilters",
-                                  uiOutput("tp1_cluster_select"),
-                                  uiOutput("timepoint_select"),
-                                  uiOutput("type_select"),
-                                  uiOutput("cluster_size_select"),
-                                  uiOutput("date_select"),
-                                  uiOutput("ecc001_select"),
-                                  uiOutput("ecc010_select"),
-                                  uiOutput("latitude_select"),
-                                  uiOutput("longitude_select")
+                                  #cluster filters
+                                  selectizeInput("tp1_cluster", "TP1 cluster", c(1,2,3,4,5),  selected = NULL, multiple = T),
+                                  selectizeInput("timepoint", "Timepoint", c(1,2), selected = NULL, multiple = T),
+                                  selectizeInput("type", "Type", c(1,2,3,4), selected = NULL, multiple = T),
+                                  sliderInput(inputId = "cluster_size_2", label = "Cluster size", min = 0, max = 10000, value = c(1, 10000)),
+                                  sliderInput(inputId = "avg_date", label = "Avg date", min = as.Date("2020-01-01"), max = as.Date("2025-01-01"), value = c(as.Date("2020-01-01"), as.Date("2025-01-01"))),
+                                  sliderInput(inputId = "ecc_0.0.1", label = "ecc_0.0.1", min = 0, max = 1, value = c(0, 1)),
+                                  sliderInput(inputId = "ecc_0.1.0", label = "ecc_0.1.0", min = 0, max = 1, value = c(0, 1)),
+                                  sliderInput(inputId = "avg_latitude", label = "Avg latitude", min = -90, max = 90, value = c(-90, 90)),
+                                  sliderInput(inputId = "avg_longitude", label = "Avg longitude", min = -180, max = 180, value = c(-180, 180)),
+                                  # delta filters
+                                  sliderInput(inputId = "delta_cluster_size", label = "Delta cluster size", min = -10000, max = 10000, value = c(-10000, 10000)),
+                                  sliderInput(inputId = "num_novel_tp2_strains", label = "Novel TP2 strains", min = 0, max = 10000, value = c(0, 10000)),
+                                  sliderInput(inputId = "cluster_novel_growth_rate", label = "Novel growth rate", min = 0, max = 100, value = c(0, 100)),
+                                  sliderInput(inputId = "overall_cluster_growth_rate", label = "Overall growth rate", min = 0, max = 100, value = c(0, 100)),
+                                  sliderInput(inputId = "delta_ecc_0.0.1", label = "delta ecc_0.0.1", min = -1, max = 1, value = c(-1,1)),
+                                  sliderInput(inputId = "delta_ecc_0.1.0", label = "delta ecc_0.1.0", min = -1, max = 1, value = c(-1,1))
                          ),
                          
                          #strain filters
-                         menuItem('Strain filters', tabName = "strainFilters"
+                         menuItem('Strain filters', tabName = "strainFilters",
+                                  selectizeInput("country", "Country", c("China", "Italy", "France"),  selected = NULL, multiple = T),
+                                  selectizeInput("province", "Province", c("China", "Italy", "France"),  selected = NULL, multiple = T)
                          )
                 ),
                 
@@ -434,7 +444,7 @@ server <- function(input, output, session) {
     
     # read data frame into reactive values
     observeEvent(input$userFile, {
-            vals$data_raw <- read_xlsx(input$userFile$datapath, n_max = 10)
+        vals$data_raw <- read_xlsx(input$userFile$datapath, n_max = 5000)
     }, ignoreNULL = T)
     
     
@@ -444,6 +454,14 @@ server <- function(input, output, session) {
         print("new data!")
         
         eccdata <- vals$data_raw
+        
+        print("ecc data class")
+        print(class(eccdata))
+        
+        print("col class")
+        print(lapply(eccdata, class))
+        
+        
         # remove non-informative cols
         eccdata <- eccdata[,-c(32:35)]
         
@@ -516,7 +534,7 @@ server <- function(input, output, session) {
                       overall_cluster_growth_rate = mean(overall_cluster_growth_rate),
                       cluster_novel_growth_rate = mean(cluster_novel_growth_rate),
                       type = mean(type))
-
+        
         # get bearing (direction of change)
         clusters$bearing <- bearing(as.matrix(clusters[,c("avg_tp1_longitude", "avg_tp1_latitude")]),
                                     as.matrix(clusters[,c("avg_tp2_longitude", "avg_tp2_latitude")]))
@@ -562,7 +580,7 @@ server <- function(input, output, session) {
         # calculate the angle based that delta ECCs form
         clusters <- clusters %>% 
             mutate(ecc_angle = angle(delta_ecc_0.1.0, delta_ecc_0.0.1))
-         
+        
         # use new column to assign directions
         clusters <- clusters %>%
             mutate(ecc_direction = cut(ecc_angle, breaks = c(0, directions$degree_max, 360), labels = c(directions$ecc, 'F')))
@@ -582,7 +600,7 @@ server <- function(input, output, session) {
         clusters_cc <- na.omit(clusters)
         
         # now reshape the data for tp1 and tp2 info
-        vals$clusters <- data.table::melt(setDT(clusters_cc), 
+        clusters_long <- data.table::melt(setDT(clusters_cc), 
                                           measure.vars=list(c("avg_tp1_longitude", "avg_tp2_longitude"), 
                                                             c("avg_tp1_latitude", "avg_tp2_latitude"),
                                                             c("tp1_t0_ecc_0.0.1", "tp2_t0_ecc_0.0.1"),
@@ -599,17 +617,17 @@ server <- function(input, output, session) {
                                                                                   "cluster_size"))
         
         # add in pop text for clusters in map
-        vals$clusters$maptext <-
-            paste0('<strong>', vals$clusters$tp1_cluster, '</strong>','<br/>',
-                   'Timepoint: ', '<strong>', vals$clusters$timepoint, '</strong>', '<br/>',
-                   'Cluster size: ', vals$clusters$cluster_size_2, '<br/>',
-                   'Temporal ECC: ', vals$clusters$ecc_0.0.1, '<br/>',
-                   'Geospatial ECC: ', vals$clusters$ecc_0.1.0, '<br/>') %>%
+        clusters_long$maptext <-
+            paste0('<strong>', clusters_long$tp1_cluster, '</strong>','<br/>',
+                   'Timepoint: ', '<strong>', clusters_long$timepoint, '</strong>', '<br/>',
+                   'Cluster size: ', clusters_long$cluster_size_2, '<br/>',
+                   'Temporal ECC: ', clusters_long$ecc_0.0.1, '<br/>',
+                   'Geospatial ECC: ', clusters_long$ecc_0.1.0, '<br/>') %>%
             lapply(htmltools::HTML) 
         
-        vals$clusters$key <- as.numeric(rownames(vals$clusters))
+        clusters_long$key <- as.numeric(rownames(clusters_long))
         
-        vals$clusters <- vals$clusters
+        vals$clusters <- clusters_long
         
         
         strains <- eccdata %>%
@@ -646,83 +664,119 @@ server <- function(input, output, session) {
                    'Province: ', strains$province, '<br/>',
                    'Date: ', strains$strain_date, '<br/>') %>%
             lapply(htmltools::HTML) 
-
+        
         # create unique row ids for shared cluster and strain data
         strains$key <- as.numeric(rownames(strains))
         
         vals$strains <- strains
+        
+        
+        # update cluster sliders
+        updateSelectInput(inputId = "tp1_cluster", label = "TP1 cluster", choices = unique(vals$clusters$tp1_cluster),  selected = NULL)
+        updateSelectInput(inputId = "timepoint", label = "Timepoint", choices = unique(vals$clusters$timepoint), selected = NULL)
+        updateSelectInput(inputId = "type", label = "Type", choices = unique(vals$clusters$type),  selected = NULL)
+        updateSliderInput(inputId = "cluster_size_2", label = "Cluster size", min = min(vals$clusters$cluster_size_2), max =  max(vals$clusters$cluster_size_2), value = c(min(vals$clusters$cluster_size_2),  max(vals$clusters$cluster_size_2)))
+        updateSliderInput(inputId = "avg_date", label = "Avg date", min = min(vals$clusters$avg_date), max = max(vals$clusters$avg_date), value = c(min(vals$clusters$avg_date), max(vals$clusters$avg_date)))
+        updateSliderInput(inputId = "ecc_0.0.1", label = "ecc_0.0.1", min = min(vals$clusters$ecc_0.0.1, na.rm = T), max = max(vals$clusters$ecc_0.0.1, na.rm = T), value = c(min(vals$clusters$ecc_0.0.1, na.rm = T), max(vals$clusters$ecc_0.0.1, na.rm = T)))
+        updateSliderInput(inputId = "ecc_0.1.0", label = "ecc_0.1.0", min = min(vals$clusters$ecc_0.1.0, na.rm = T), max = max(vals$clusters$ecc_0.1.0, na.rm = T), value = c(min(vals$clusters$ecc_0.1.0, na.rm = T), max(vals$clusters$ecc_0.1.0, na.rm = T)))
+        updateSliderInput(inputId = "avg_latitude", label = "Avg latitude", min = min(vals$clusters$avg_latitude), max = max(vals$clusters$avg_latitude), value = c(min(vals$clusters$avg_latitude), max(vals$clusters$avg_latitude)))
+        updateSliderInput(inputId = "avg_longitude", label = "Avg longitude", min = min(vals$clusters$avg_longitude), max = max(vals$clusters$avg_longitude), value = c(min(vals$clusters$avg_longitude), max(vals$clusters$avg_longitude)))
+        # update cluster delta sliders 
+        sliderInput(inputId = "delta_cluster_size", label = "Delta cluster size", min = min(vals$clusters$delta_cluster_size), max = max(vals$clusters$delta_cluster_size), value = c(min(vals$clusters$delta_cluster_size), max(vals$clusters$delta_cluster_size)))
+        sliderInput(inputId = "num_novel_tp2_strains", label = "Novel TP2 strains", min = min(vals$clusters$num_novel_tp2_strains), max = max(vals$clusters$num_novel_tp2_strains), value = c(min(vals$clusters$num_novel_tp2_strains), max(vals$clusters$num_novel_tp2_strains)))
+        sliderInput(inputId = "overall_cluster_growth_rate", label = "Overall growth rate", min = min(vals$clusters$overall_cluster_growth_rate), max = max(vals$clusters$overall_cluster_growth_rate), value = c(min(vals$clusters$overall_cluster_growth_rate), max(vals$clusters$overall_cluster_growth_rate)))
+        sliderInput(inputId = "cluster_novel_growth_rate", label = "Novel growth rate", min = min(vals$clusters$delta_cluster_size), max = max(vals$clusters$delta_cluster_size), value = c(min(vals$clusters$delta_cluster_size), max(vals$clusters$delta_cluster_size)))
+        sliderInput(inputId = "delta_ecc_0.0.1", label = "delta ecc_0.0.1", min = min(vals$clusters$delta_ecc_0.0.1, na.rm = T), max = max(vals$clusters$delta_ecc_0.0.1, na.rm = T), value = c(min(vals$clusters$delta_ecc_0.0.1, na.rm = T), max(vals$clusters$delta_ecc_0.0.1, na.rm = T)))
+        sliderInput(inputId = "delta_ecc_0.1.0", label = "delta ecc_0.1.0", min = min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max = max(vals$clusters$delta_ecc_0.1.0, na.rm = T), value = c(min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max(vals$clusters$delta_ecc_0.1.0, na.rm = T)))
+        #update stain filters
+        # strain filters
+        updateSelectInput(inputId = "country", label = "Country", choices = unique(vals$strains$country),  selected = NULL)
+        updateSelectInput(inputId = "province", label = "Province", choices = unique(vals$strains$province),  selected = NULL)
     })
     
-    
-    ################################# 
-    # user input for data filtering #
-    #################################
-    
-    output$tp1_cluster_select <- renderUI({
-        selectizeInput("tp1_cluster", "TP1 cluster", unique(vals$clusters$tp1_cluster),  selected = NULL, multiple = T)
-    })
-    
-    output$timepoint_select <- renderUI({
-        selectizeInput("timepoint", "Timepoint", unique(vals$clusters$timepoint), selected = NULL, multiple = T)
-    })
-    
-    output$type_select <- renderUI({
-        selectizeInput("type", "Type",  unique(vals$clusters$type),  selected = NULL, multiple = T)
-    })
-    
-    output$cluster_size_select <- renderUI({
-        sliderInput(inputId = "cluster_size_2", label = "Cluster size", min = min(vals$clusters$cluster_size_2)-1, max = max(vals$clusters$cluster_size_2)-1, value = c(min(vals$clusters$cluster_size_2)-1, max(vals$clusters$cluster_size_2)-1))
-    })
-    
-    output$date_select <- renderUI({
-        sliderInput(inputId = "avg_date", label = "Avg date", min = min(vals$clusters$avg_date), max = max(vals$clusters$avg_date), value = c(min(vals$clusters$avg_date), max(vals$clusters$avg_date)))
-    })
-    
-    output$ecc001_select <- renderUI({
-        sliderInput(inputId = "ecc_0.0.1", label = "ecc_0.0.1", min = min(vals$clusters$ecc_0.0.1, na.rm = T), max = max(vals$clusters$ecc_0.0.1, na.rm = T), value = c(min(vals$clusters$ecc_0.0.1, na.rm = T), max(vals$clusters$ecc_0.0.1, na.rm = T)))
-    })
-    
-    output$ecc010_select <- renderUI({
-        sliderInput(inputId = "ecc_0.1.0", label = "ecc_0.1.0", min = min(vals$clusters$ecc_0.1.0, na.rm = T), max = max(vals$clusters$ecc_0.1.0, na.rm = T), value = c(min(vals$clusters$ecc_0.1.0, na.rm = T), max(vals$clusters$ecc_0.1.0, na.rm = T)))
-    })
-    
-    output$latitude_select <- renderUI({
-        sliderInput(inputId = "avg_latitude", label = "Avg latitude", min = min(vals$clusters$avg_latitude), max = max(vals$clusters$avg_latitude), value = c(min(vals$clusters$avg_latitude), max(vals$clusters$avg_latitude)))
-    })
-    
-    output$longitude_select <- renderUI({
-        sliderInput(inputId = "avg_longitude", label = "Avg longitude", min = min(vals$clusters$avg_longitude), max = max(vals$clusters$avg_longitude), value = c(min(vals$clusters$avg_longitude), max(vals$clusters$avg_longitude)))
-    })
-
     
     ###########################
     # reactive data filtering #
     ###########################
     
     clusters_r <- reactive({
-        vals$clusters 
-    })
-    
-    strains_r <- reactive({
-        vals$strains
-    })
-    
-    observeEvent(input$timepoint_select, input$ecc_0.0.1, {
-        print("selected time point")
-        print(input$timepoint_select)
         
-        print("ecc0.0.1 range")
-        print(input$ecc_0.0.1)
+        req(vals$clusters)
+        data <- vals$clusters 
+        data <- as.data.frame(data)
         
+        print("printing cluster data")
+        print(data)
+        
+        filtered <- data %>%
+            {if (!is.null(input$tp1_cluster)) filter(., tp1_cluster %in% input$tp1_cluster)  else . } %>%
+            {if (!is.null(input$timepoint)) filter(., timepoint %in% input$timepoint)  else . } %>%
+            {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
+            filter(cluster_size_2 >= input$cluster_size_2[1]+1 & cluster_size_2 <= input$cluster_size_2[2]+1 ) %>%
+            filter(avg_date >= input$avg_date[1]) %>% filter(avg_date <= input$avg_date[2]) %>%
+            filter(ecc_0.0.1 >= input$ecc_0.0.1[1] & ecc_0.0.1 <= input$ecc_0.0.1[2]) %>%
+            filter(ecc_0.1.0 >= input$ecc_0.1.0[1] & ecc_0.1.0 <= input$ecc_0.1.0[2]) %>%
+            filter(avg_latitude >= input$avg_latitude[1] & avg_latitude <= input$avg_latitude[2]) %>%
+            filter(avg_longitude >= input$avg_longitude[1] & avg_longitude <= input$avg_longitude[2])  %>%
+            # delta filters
+            filter(delta_cluster_size >= input$delta_cluster_size[1] & delta_cluster_size <= input$delta_cluster_size[2]) %>%
+            filter(num_novel_tp2_strains >= input$num_novel_tp2_strains[1] & num_novel_tp2_strains <= input$num_novel_tp2_strains[2]) %>%
+            filter(overall_cluster_growth_rate >= input$overall_cluster_growth_rate[1] & overall_cluster_growth_rate <= input$overall_cluster_growth_rate[2]) %>%
+            filter(cluster_novel_growth_rate >= input$cluster_novel_growth_rate[1] & cluster_novel_growth_rate <= input$cluster_novel_growth_rate[2]) %>%
+            filter(delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2]) %>%
+            filter(delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2])%>%
+            # data subsetting 
+            {if (input$subsets==2) arrange(., desc(abs(delta_ecc_0.0.1))) else . }  %>%
+            {if (input$subsets==3) arrange(., desc(abs(delta_ecc_0.1.0))) else . } 
+        
+        # grab n rows according to input
+        if (input$number != 99){
+            topn <- as.numeric(input$number)
+            unique_clust <- head(unique(filtered$tp1_cluster),topn)
+            return(filtered %>% subset(tp1_cluster %in% unique_clust))
+        } else{  
+            return(filtered)
+        }
     })
-    ######################
-    # shared data frames #
-    ######################
     
+    # cluster shared data frame 
     clusters_sh <- SharedData$new(clusters_r, key = ~key, group = "clusters")
     
-    strains_sh <- SharedData$new(strains_r, key = ~key, group = "clusters")
+    # all strain filtering 
+    strains_r <- reactive({
+        req(vals$strains,clusters_sh)
+        vals$strains %>%
+            {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
+            {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
+            # filter by shared cluster selections
+            filter(tp1_cluster %in% (clusters_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
+    })
     
+    # tp1 strain reactive filtering
+    strains_r1 <- reactive({
+        req(vals$strains,clusters_sh)
+        vals$strains %>%
+            {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
+            {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
+            filter(present_at_tp1==1) %>%
+            filter(tp1_cluster %in% (clusters_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
+    })
+    
+    # tp2 strain reactive filtering
+    strains_r2 <- reactive({
+        req(vals$strains,clusters_sh)
+        vals$strains %>%
+            {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
+            {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
+            filter(present_at_tp1==0) %>%
+            filter(tp1_cluster %in% (clusters_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
+    })
+    
+    # strain shared data
+    strains_sh <- SharedData$new(strains_r, key = ~key, group = "strains")
+    strains_sh1 <- SharedData$new(strains_r1, key = ~key, group = "strains")
+    strains_sh2 <- SharedData$new(strains_r2, key = ~key, group = "strains")
+
     
     #################################
     # data frames displayed in tabs #
@@ -747,7 +801,7 @@ server <- function(input, output, session) {
     
     # strains
     output$strains_dt <- renderDataTable({
-        datatable(data = vals$strains,
+        datatable(data = strains_sh,
                   extensions = c('Select', 'Buttons','Scroller'),
                   options = list(
                       select = list(style = 'os', items = 'row'),
@@ -776,8 +830,7 @@ server <- function(input, output, session) {
                       scroller = TRUE),
                   selection = 'none')
     })
-    
-    
+
     # raw data table
     output$raw_data <- renderDataTable({
         datatable(vals$data_raw,
@@ -791,6 +844,1546 @@ server <- function(input, output, session) {
                       scrollX = 600,
                       scroller = TRUE),
                   selection = 'none')
+    })
+    
+    
+    ################################
+    # cluster based visualizations #
+    ################################
+    
+    # mapbox token
+    mapboxToken <- "pk.eyJ1Ijoic2FtLWEtbGVlIiwiYSI6ImNrb2s0bXVpbzFhMGkybm5zeHI1dHR1aTgifQ.1K8o7OaSOWo_y5UdVH348w"    # You need your own token
+    Sys.setenv("MAPBOX_TOKEN" = mapboxToken)
+
+    # cluster map
+    # plotly using mapbox
+    output$cluster_map <- renderPlotly({
+
+        # leaflet built in color function
+        pal <-  leaflet::colorFactor(
+            palette = rep(cols25(n=25),
+                          length.out=length(unique(vals$clusters$tp1_cluster))),
+            domain = unique(vals$clusters$tp1_cluster))
+
+        plot_mapbox(mode = 'scattermapbox') %>%
+            add_markers(data = clusters_sh,
+                        x = ~avg_longitude,
+                        y = ~avg_latitude,
+                        legendgroup = ~tp1_cluster,
+                        color= ~I(pal(tp1_cluster)),
+                        name = ~paste(tp1_cluster, timepoint, sep="_"),
+                        marker =list(size = ~log10(cluster_size_2)*10,
+                                     opacity = 0.5),
+                        hovertext = ~maptext) %>%
+            config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
+            layout(mapbox = list(zoom =1.5,
+                                 center = list(lon = 80, lat = 40)))
+    })
+
+    # polar plot describing cardinal direction of change
+    output$cardinal_polar <- renderPlotly({
+
+        # color pal for polar plot
+        polarpal <-  leaflet::colorFactor(
+            palette = ocean.phase(n=16),
+            domain = unique(vals$clusters$cardinal))
+        
+        # format data
+        clusters_sh$data(withSelection = TRUE) %>%
+            filter(selected_ | is.na(selected_)) %>%
+            distinct(tp1_cluster, .keep_all = T) %>%
+            count(cardinal, .drop=FALSE) %>%
+            mutate(theta = (as.numeric(rownames(.))-1) * 22.5,
+                   direction = c("North", "North/Northeast", "Northeast",
+                                 "East/Northeast", "East", "East/Southeast",
+                                 "Southeast", "South/Southeast", "South",
+                                 "South/Southwest", "Southwest",
+                                 "West/Southwest", "West",
+                                 "West/Northwest", "Northwest",
+                                 "North/Northwest")) %>%
+            # initialize plot
+            plot_ly(type="barpolar",
+                    r = ~n,
+                    theta = ~theta,
+                    opacity = 0.7,
+                    name = ~cardinal,
+                    hovertemplate = ~paste('<b>', direction, '</b><br>',
+                                           'Count: ', n, '<br>',
+                                           '<extra></extra>', sep=""),
+                    marker = list(color = ~polarpal(cardinal),
+                                  line = list(color="black"))) %>%
+            layout(showlegend = F,
+                   polar = list(
+                       angularaxis = list(
+                           rotation = 90,
+                           direction = 'clockwise',
+                           tickmode = 'array',
+                           tickvals = c(0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5,180,
+                                        202.5, 225, 247.5, 270, 292.5, 315, 337.5),
+                           ticktext = c("N", "NNE", "NE", "ENE", "E", "ESE", "SE",
+                                        "SSE", "S", "SSW", "SW", "WSW", "W", "WNW",
+                                        "NW", "NNW"))))
+    })
+    
+    
+    # radio plot for ecc explanation of cluster spread
+    output$ecc_radar <- renderPlotly({
+        
+        clusters_sh$data(withSelection = T) %>%
+            filter(selected_ | is.na(selected_)) %>% 
+            distinct(tp1_cluster, .keep_all = T) %>%
+            count(ecc_direction, .drop=FALSE) %>%
+            mutate(theta = (as.numeric(rownames(.))-1) * 22.5,
+                   direction = c("Slower spread", "Slower spread/Slower spread, more concentrated", 
+                                 "Slower spread,  more concentrated",
+                                 "More concentrated/Slower spread, more concentrated", 
+                                 "More concentrated", 
+                                 "More concentrated/Faster spread, more concentrated",
+                                 "Faster spread, more concentrated", 
+                                 "Faster spread/Faster spread, more concentrated ", 
+                                 "Faster spread",
+                                 # FIX BELOW
+                                 "Faster spread/Faster spread, more disperse", 
+                                 "Slower spread, more disperse",
+                                 "More disperse/Faster spread, more disperse", 
+                                 "More disperse",
+                                 "More disperse/Slower spread, more disperse", 
+                                 "Slower spread, more disperse",
+                                 "Slower spread/Slower spread, more concentrated"))  %>%
+            # initialize plot
+            plot_ly(type="scatterpolar",
+                    r = ~n, 
+                    theta = ~theta,
+                    fill = 'toself') %>%
+            layout(showlegend = F,
+                   margin = list(l = 100, r = 100),
+                   polar = list(
+                       angularaxis = list(
+                           rotation = 90,
+                           direction = 'clockwise',
+                           tickmode = 'array',
+                           tickvals = c(0, 45,  90, 135, 180,
+                                        225, 270, 315),
+                           ticktext = c("Slower spread", 
+                                        HTML(paste("Slower spread,", "<br>", "more concentrated")), 
+                                        HTML(paste("More ", "<br>", "concentrated", sep="")), 
+                                        HTML(paste("Faster spread,", "<br>", "more concentrated")),
+                                        "Faster spread",   
+                                        HTML(paste("Faster spread,", "<br>", "more disperse")),
+                                        HTML(paste("More ", "<br>", "disperse", sep="")),
+                                        HTML(paste("Slower spread,", "<br>", "more disperse"))))))
+    })
+    
+    
+    # change vector plot describing delta ECC value changes between tp1 and tp2
+    # these values are translated into human-interpretable changes in radio plot 
+    output$change_vector <- renderPlotly({
+        
+        # leaflet built in color function
+        pal <-  leaflet::colorFactor(
+            palette = rep(cols25(n=25),
+                          length.out=length(unique(vals$clusters$tp1_cluster))),
+            domain = unique(vals$clusters$tp1_cluster))
+        
+        op <- clusters_sh$data(withSelection = T)
+        op$opacity <- ifelse(op$selected_ | is.na(op$selected_), 1, 0.1)
+        
+        plot_ly(type = "scatter", mode="markers") %>% 
+            #add segment to connect each point to origin
+            add_trace(data = clusters_sh,
+                      x = ~delta_ecc_0.1.0, # geographical
+                      y = ~delta_ecc_0.0.1, # temporal 
+                      legendgroup = ~tp1_cluster,
+                      opacity = 1,
+                      size=I(0), 
+                      name = ~paste(tp1_cluster, timepoint, sep="_"),
+                      color = ~I(pal(tp1_cluster)),
+                      hovertemplate = ~paste('<b>', tp1_cluster, '</b><br>',
+                                             'Delta temporal ECC: ', delta_ecc_0.0.1, '<br>',
+                                             'Delta geospatial ECC: ', delta_ecc_0.1.0, '<extra></extra>', sep="")) %>%
+            # set range and overlay arrow annotations
+            layout(xaxis = list(range = c(-1, 1.5), 
+                                title = "Delta geospatial ECC value"),
+                   yaxis = list(range = c(-1, 1.5),
+                                title = "Delta temporal ECC value"),
+                   annotations = list(ax = 0, ay = 0,
+                                      axref='x', ayref='y',
+                                      x = ~delta_ecc_0.1.0, # geospatial
+                                      y = ~delta_ecc_0.0.1, # temporal
+                                      opacity = I(op$opacity),
+                                      name = ~paste(tp1_cluster, timepoint, sep="_"),
+                                      arrowcolor = ~I(pal(tp1_cluster)),
+                                      xref='x', yref='y', text = "")) %>%
+            # add inset plot for average vector
+            add_trace(data = clusters_sh,
+                      x = ~sum(delta_ecc_0.1.0), # geospatial
+                      y = ~sum(delta_ecc_0.0.1), # temporal
+                      name = "Avg change vector",
+                      xaxis='x2',
+                      yaxis='y2',
+                      opacity = 0.3,
+                      size=I(0.1),
+                      #inherit = FALSE,
+                      color = I("black"),
+                      hovertemplate = ~paste('<b>', 'Average change vector', '</b><br>',
+                                             'Avg delta geospatial ECC: ', sum(delta_ecc_0.1.0), '<br>',
+                                             'Avg delta temporal ECC: ', sum(delta_ecc_0.0.1), '<extra></extra>', sep=""))  %>%
+            #add arrow to inset
+            layout(annotations = list(ax = 0, ay = 0,
+                                      axref='x2', ayref='y2',
+                                      x = ~sum(delta_ecc_0.1.0), # sum geospatial
+                                      y = ~sum(delta_ecc_0.0.1), # sum temporal
+                                      arrowcolor = I("black"),
+                                      arrowwidth = I(4),
+                                      arrowsize = I(0.6),
+                                      xref='x2', yref='y2',
+                                      text = "")) %>%
+            
+            # specify the domain (size) and range of inset plot
+            layout(yaxis2 = list(domain = c(0.75, 0.95),
+                                 # temporal
+                                 range = ~c(-abs(sum(delta_ecc_0.0.1)) - 0.1*abs(sum(delta_ecc_0.0.1)),
+                                            abs(sum(delta_ecc_0.0.1)) + 0.1*abs(sum(delta_ecc_0.0.1))),
+                                 anchor='x2'),
+                   xaxis2 = list(domain = c(0.75, 0.95),
+                                 # geospatial
+                                 range = ~c(-abs(sum(delta_ecc_0.1.0)) - 0.1*abs(sum(delta_ecc_0.1.0)),
+                                            abs(sum(delta_ecc_0.1.0)) + 0.1*abs(sum(delta_ecc_0.1.0))),
+                                 anchor='y2'))
+    })
+    
+    # bubble plots for temporal vs ecc values at tp1 and tp2
+    # area of bubbles is proportional to size of cluster
+    output$bubbleplot <- renderPlotly({
+        
+        # leaflet built in color function
+        pal <-  leaflet::colorFactor(
+            palette = rep(cols25(n=25),
+                          length.out=length(unique(vals$clusters$tp1_cluster))),
+            domain = unique(vals$clusters$tp1_cluster))
+        
+        if(input$region == 3) {
+            # clusters faceting by province 
+            strains_sh1_bub <- strains_sh1$data() %>%
+                subset(country == input$regionProvince) %>% 
+                group_by(tp1_cluster, province, timepoint) %>%
+                summarize(size = sum(!is.na(strain)),
+                          tp1_temp_ecc = mean(tp1_t0_ecc_0.0.1),
+                          tp1_geo_ecc = mean(tp1_t0_ecc_0.1.0),
+                          tp2_temp_ecc = mean(tp2_t0_ecc_0.0.1),
+                          tp2_geo_ecc = mean(tp2_t0_ecc_0.1.0))
+            
+            strains_sh2_bub <- strains_sh2$data() %>%
+                subset(country == input$regionProvince) %>% 
+                group_by(tp1_cluster, province,  timepoint) %>%
+                summarize(size = sum(!is.na(strain)),
+                          tp1_temp_ecc = mean(tp1_t0_ecc_0.0.1),
+                          tp1_geo_ecc = mean(tp1_t0_ecc_0.1.0),
+                          tp2_temp_ecc = mean(tp2_t0_ecc_0.0.1),
+                          tp2_geo_ecc = mean(tp2_t0_ecc_0.1.0))
+            
+            ggplotly(ggplot() +
+                         geom_point(data = strains_sh1_bub, 
+                                    aes(y=tp1_temp_ecc, x=tp1_geo_ecc , fill  = tp1_cluster, col = tp1_cluster, size = size), 
+                                    alpha = 0.7) +
+                         geom_point(data = strains_sh2_bub, 
+                                    aes(y=tp2_temp_ecc, x=tp2_geo_ecc , fill  = tp1_cluster, col = tp1_cluster, size = size), 
+                                    alpha = 0.7) +
+                         scale_fill_manual(values =  pal(vals$clusters$tp1_cluster)) +
+                         scale_color_manual(values =  pal(vals$clusters$tp1_cluster)) +
+                         scale_size_area() + 
+                         xlim(0,1) +
+                         ylim(0,1) +
+                         labs(x="Geospatial ECC value", y = "Temporal ECC value") +
+                         facet_wrap(~province) + 
+                         theme_bw() +
+                         theme(panel.border = element_blank())) %>%
+                layout(margin = list(l = 100, r = 100))
+            
+            
+        } else if (input$region == 2) {
+            
+            # clusters faceting by country 
+            strains_sh1_bub <- strains_sh1$data() %>%
+                group_by(tp1_cluster, country, timepoint) %>%
+                summarize(size = sum(!is.na(strain)),
+                          tp1_temp_ecc = mean(tp1_t0_ecc_0.0.1),
+                          tp1_geo_ecc = mean(tp1_t0_ecc_0.1.0),
+                          tp2_temp_ecc = mean(tp2_t0_ecc_0.0.1),
+                          tp2_geo_ecc = mean(tp2_t0_ecc_0.1.0))
+            
+            strains_sh2_bub <- strains_sh2$data() %>%
+                group_by(tp1_cluster, country,  timepoint) %>%
+                summarize(size = sum(!is.na(strain)),
+                          tp1_temp_ecc = mean(tp1_t0_ecc_0.0.1),
+                          tp1_geo_ecc = mean(tp1_t0_ecc_0.1.0),
+                          tp2_temp_ecc = mean(tp2_t0_ecc_0.0.1),
+                          tp2_geo_ecc = mean(tp2_t0_ecc_0.1.0))
+            
+            ggplotly(ggplot() +
+                         geom_point(data = strains_sh1_bub, 
+                                    aes(y=tp1_temp_ecc, x=tp1_geo_ecc , fill  = tp1_cluster, col = tp1_cluster, size = size), 
+                                    alpha = 0.7) +
+                         geom_point(data = strains_sh2_bub, 
+                                    aes(y=tp2_temp_ecc, x=tp2_geo_ecc , fill  = tp1_cluster, col = tp1_cluster, size = size), 
+                                    alpha = 0.7) +
+                         scale_fill_manual(values =  pal(vals$clusters$tp1_cluster)) +
+                         scale_color_manual(values =  pal(vals$clusters$tp1_cluster)) +
+                         scale_size_area() + 
+                         xlim(0,1) +
+                         ylim(0,1) +
+                         labs(x="Geospatial ECC value", y = "Temporal ECC value") +
+                         facet_wrap(~country) + 
+                         theme_bw() +
+                         theme(panel.border = element_blank())) %>%
+                layout(margin = list(l = 100, r = 100))
+            
+            
+        } else { 
+            
+            # clusters no faceting 
+            ggplotly(ggplot(clusters_sh, aes(y=ecc_0.0.1, x=ecc_0.1.0 , fill  = tp1_cluster, col = tp1_cluster)) +
+                         geom_point(aes(size = cluster_size_2), alpha = 0.7) +
+                         scale_fill_manual(values = pal(vals$clusters$tp1_cluster)) +
+                         scale_color_manual(values = pal(vals$clusters$tp1_cluster)) +
+                         scale_size_area() + 
+                         xlim(0,1) +
+                         ylim(0,1) + 
+                         labs(x="Geospatial ECC value", y = "Temporal ECC value") +
+                         theme_bw() +
+                         theme(panel.border = element_blank())) %>%
+                layout(margin = list(l = 50, r = 50, t = 50, b = 50),
+                       width = 500, height = 450)
+        }
+    })
+    
+    
+    # geo ecc histogram by time point
+    output$geo_histogram <- renderPlotly({
+        plot_ly(type = "histogram",
+                data = clusters_sh,
+                histfunc = "count",
+                x = ~ecc_0.0.1,
+                xbins = list(size = 0.05),
+                color = ~timepoint) %>%
+            layout(barmode = "group",
+                   xaxis = list(range = c(0, 1),
+                                title = "Temporal ECC value"),
+                   yaxis = list(title = "Cluster count"))
+        
+    })
+    
+    # temp ecc histogram by time point
+    output$temp_histogram <- renderPlotly({
+        plot_ly(type = "histogram",
+                data = clusters_sh,
+                histfunc = "count",
+                x = ~ecc_0.1.0,
+                xbins = list(size = 0.05),
+                color = ~timepoint) %>%
+            layout(barmode = "group",
+                   xaxis = list(range = c(0, 1),
+                                title = "Geospatial ECC value"),
+                   yaxis = list(title = "Cluster count"))
+        
+        
+    })
+    
+    # delta geo histogram
+    output$delta_geo_histogram <- renderPlotly({
+        plot_ly(type = "histogram",
+                data = clusters_sh,
+                histfunc = "count",
+                xbins = list(size = 0.05),
+                x = ~delta_ecc_0.0.1) %>%
+            layout(barmode = "group",
+                   xaxis = list(range = c(-1, 1),
+                                title = "Delta geospatial ECC value"),
+                   yaxis = list(title = "Cluster count"))
+        
+    })
+    
+    #delta temp histogram 
+    output$delta_temp_histogram <- renderPlotly({
+        plot_ly(type = "histogram",
+                data = clusters_sh,
+                histfunc = "count",
+                xbins = list(size = 0.05),
+                x = ~delta_ecc_0.1.0) %>%
+            layout(barmode = "group",
+                   xaxis = list(range = c(-1, 1),
+                                title = "Delta temporal ECC value"),
+                   yaxis = list(title = "Cluster count"))
+    })
+    
+    #delta temp histogram 
+    output$delta_size_histogram <- renderPlotly({
+        plot_ly(type = "histogram",
+                xbins = list(size = 10),
+                data = clusters_sh,
+                histfunc = "count",
+                x = ~delta_cluster_size) %>%
+            layout(barmode = "overlay")
+    })
+    
+    
+    ###############################
+    # strain based visualizations #
+    ###############################
+    
+    # plotly map for strains using mapbox
+    output$strain_map <- renderPlotly({
+        
+        # leaflet built in color function
+        pal <-  leaflet::colorFactor(
+            palette = rep(cols25(n=25),
+                          length.out=length(unique(vals$clusters$tp1_cluster))),
+            domain = unique(vals$clusters$tp1_cluster))
+        
+        plot_mapbox(mode = 'scattermapbox') %>%
+            # strain markers
+            add_markers(data = strains_sh,
+                        x = ~strain_longitude_jit,
+                        y = ~strain_latitude_jit,
+                        name = ~tp1_cluster,
+                        color= ~I(pal(tp1_cluster)),
+                        marker =list(size = 10,
+                                     opacity = 0.5),
+                        hovertext = ~maptext) %>%
+            config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
+            layout(mapbox = list(zoom =1.5,
+                                 center = list(lon = 80, lat = 40)))
+    })
+    
+    # ridgeline plot
+    output$ridgeplot <- renderPlotly({
+        
+        # leaflet built in color function
+        pal <-  leaflet::colorFactor(
+            palette = rep(cols25(n=25),
+                          length.out=length(unique(vals$clusters$tp1_cluster))),
+            domain = unique(vals$clusters$tp1_cluster))
+        
+        if(input$region == 3) {
+            
+            plot_ly(type = 'violin') %>%
+                # tp1 traces
+                add_trace(data = strains_sh1$data(withSelection=T) %>% 
+                              filter(selected_ | is.na(selected_)) %>%
+                              subset(country %in% input$regionProvince),
+                          y = ~province,
+                          x = ~strain_date,
+                          legendgroup = ~tp1_cluster,
+                          name =  ~paste(tp1_cluster,1, sep="_"),
+                          type = 'violin',
+                          side = 'positive',
+                          orientation = "h",
+                          scalemode = "count",
+                          color = ~I(pal(tp1_cluster)),
+                          points = "all",
+                          line = list(width = 1), 
+                          marker = list(opacity = 0.4,
+                                        size = 8),
+                          hoveron = "violins+points") %>%
+                add_trace(data = strains_sh2$data(withSelection=T) %>% 
+                              filter(selected_ | is.na(selected_)) %>%
+                              subset(country %in% input$regionProvince),
+                          y = ~province,
+                          x = ~strain_date,
+                          legendgroup = ~tp1_cluster,
+                          name =  ~paste(tp1_cluster,2, sep="_"),
+                          color = ~I(pal(tp1_cluster)),
+                          type = 'violin',
+                          side = 'positive',
+                          orientation = "h",
+                          scalemode = "count",
+                          points = "all",
+                          line = list(color = "black",
+                                      width = 1),
+                          marker = list(opacity = 0.4,
+                                        size = 8,
+                                        line = list(color = "black",
+                                                    width = 1)),
+                          hoveron = "violins+points") %>%
+                layout(height = 800,
+                       xaxis = list(title = "Date of strain identification"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.1,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "Show points",
+                                   method = "restyle",
+                                   args = list(list(points = "all"))),
+                               list(
+                                   label = "Remove points",
+                                   method = "restyle",
+                                   args = list(list(points = FALSE)))
+                           )))) %>%
+                highlight(on= "plotly_selected",
+                          off="plotly_deselect")      
+        } else if (input$region == 2) {
+            
+            plot_ly(type = 'violin') %>%
+                # tp1 traces
+                add_trace(data = strains_sh1, 
+                          y = ~country,
+                          x = ~strain_date,
+                          legendgroup = ~tp1_cluster,
+                          name =  ~paste(tp1_cluster,1, sep="_"),
+                          type = 'violin',
+                          side = 'positive',
+                          orientation = "h",
+                          scalemode = "count",
+                          color = ~I(pal(tp1_cluster)),
+                          points = "all",
+                          line = list(width = 1), 
+                          marker = list(opacity = 0.4,
+                                        size = 8),
+                          hoveron = "violins+points") %>%
+                add_trace(data = strains_sh2, 
+                          y = ~country,
+                          x = ~strain_date,
+                          legendgroup = ~tp1_cluster,
+                          name =  ~paste(tp1_cluster,2, sep="_"),
+                          color = ~I(pal(tp1_cluster)),
+                          type = 'violin',
+                          side = 'positive',
+                          orientation = "h",
+                          scalemode = "count",
+                          points = "all",
+                          line = list(color = "black",
+                                      width = 1),
+                          marker = list(opacity = 0.4,
+                                        size = 8,
+                                        line = list(color = "black",
+                                                    width = 1)),
+                          hoveron = "violins+points") %>%
+                layout(height = 800,
+                       xaxis = list(title = "Date of strain identification"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.1,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "Show points",
+                                   method = "restyle",
+                                   args = list(list(points = "all"))),
+                               list(
+                                   label = "Remove points",
+                                   method = "restyle",
+                                   args = list(list(points = FALSE)))
+                           )))) %>%
+                highlight(on= "plotly_selected",
+                          off="plotly_deselect")
+        } else { 
+            
+            plot_ly(type = 'violin') %>%
+                # tp1 traces
+                add_trace(data = strains_sh1,
+                          y = ~tp1_cluster,
+                          x = ~strain_date,
+                          legendgroup = ~tp1_cluster,
+                          name =  ~paste(tp1_cluster,1, sep="_"),
+                          type = 'violin',
+                          side = 'positive',
+                          orientation = "h",
+                          scalemode = "count",
+                          color = ~I(pal(tp1_cluster)),
+                          points = "all",
+                          line = list(width = 1), 
+                          marker = list(opacity = 0.4,
+                                        size = 8),
+                          hoveron = "violins+points") %>%
+                add_trace(data = strains_sh2, 
+                          y = ~tp1_cluster,
+                          x = ~strain_date,
+                          legendgroup = ~tp1_cluster,
+                          name =  ~paste(tp1_cluster,2, sep="_"),
+                          color = ~I(pal(tp1_cluster)),
+                          type = 'violin',
+                          side = 'positive',
+                          orientation = "h",
+                          scalemode = "count", 
+                          points = "all",
+                          line = list(color = "black",
+                                      width = 1),
+                          marker = list(opacity = 0.4,
+                                        size = 8,
+                                        line = list(color = "black",
+                                                    width = 1)),
+                          hoveron = "violins+points") %>%
+                layout(height = 800,
+                       xaxis = list(title = "Date of strain identification"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.15,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "Show points",
+                                   method = "restyle",
+                                   args = list(list(points = "all"))),
+                               list(
+                                   label = "Remove points",
+                                   method = "restyle",
+                                   args = list(list(points = FALSE)))
+                           )))) %>%
+                highlight(on= "plotly_selected",
+                          off="plotly_deselect") 
+        }
+    })
+    
+    
+    # strain geo ecc histogram by time point
+    output$strain_geo_histogram <- renderPlotly({
+        
+        if(input$region == 3) {
+            ggplotly(ggplot(strains_sh$data(withSelection=T) %>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(country %in% input$regionProvince), 
+                            aes(x=tp1_t0_ecc_0.1.0, fill=as.factor(timepoint))) +
+                         geom_histogram(position="dodge", bins = 20) +
+                         #geom_density(alpha=0.5) +
+                         facet_wrap(~province) +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Time point") +
+                         xlim(0,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                layout(margin = list(l = 55, r = 100)) %>%
+                add_annotations(text = "Geospatial ECC value",
+                                y = 0,
+                                x=0.5, 
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0, 
+                                xshift = -60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14)) 
+            
+        } else if (input$region == 2) {
+            ggplotly(ggplot(strains_sh, 
+                            aes(x=tp1_t0_ecc_0.1.0, fill=as.factor(timepoint))) +
+                         geom_histogram(position="dodge", bins = 20) +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Time point") +
+                         facet_wrap(~country) +
+                         xlim(0,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                layout(margin = list(l = 60, r = 100)) %>%
+                add_annotations(text = "Geospatial ECC value",
+                                y = 0,
+                                x=0.5, 
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0, 
+                                xshift = -60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14)) 
+        } else { 
+            ggplotly(ggplot(strains_sh, 
+                            aes(x=tp1_t0_ecc_0.1.0, fill=as.factor(timepoint))) +
+                         geom_histogram(position="dodge", bins = 20) +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Time point") +
+                         xlim(0,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank())) %>%
+                layout(margin = list(l = 60, r = 100)) %>%
+                add_annotations(text = "Geospatial ECC value",
+                                y = 0,
+                                x=0.5, 
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0, 
+                                xshift = -60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14)) 
+            
+        }
+    })
+    
+    # strain temp histogram by time point
+    output$strain_temp_histogram <- renderPlotly({
+        
+        if(input$region == 3) {
+            ggplotly(ggplot(strains_sh$data(withSelection=T) %>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(country %in% input$regionProvince), 
+                            aes(x=tp1_t0_ecc_0.0.1, fill=as.factor(timepoint))) +
+                         geom_histogram(position="dodge", bins = 20) +
+                         #geom_density(alpha=0.5) +
+                         facet_wrap(~province) +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Time point") +
+                         xlim(0,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                layout(margin = list(l = 50, r = 100)) %>%
+                add_annotations(text = "Temporal ECC value",
+                                y = 0,
+                                x=0.5, 
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0, 
+                                xshift = -55,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14)) 
+            
+        } else if (input$region == 2) {
+            ggplotly(ggplot(strains_sh, 
+                            aes(x=tp1_t0_ecc_0.0.1, fill=as.factor(timepoint))) +
+                         geom_histogram(position="dodge", bins = 20) +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Time point") +
+                         facet_wrap(~country) +
+                         xlim(0,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                layout(margin = list(l = 50, r = 100)) %>%
+                add_annotations(text = "Temporal ECC value",
+                                y = 0,
+                                x=0.5, 
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0, 
+                                xshift = -55,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14)) 
+        } else { 
+            ggplotly(ggplot(strains_sh, 
+                            aes(x=tp1_t0_ecc_0.0.1, fill=as.factor(timepoint))) +
+                         geom_histogram(position="dodge", bins = 20) +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Time point") +
+                         xlim(0,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank())) %>%
+                layout(margin = list(l = 50, r = 100)) %>%
+                add_annotations(text = "Temporal ECC value",
+                                y = 0,
+                                x=0.5, 
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0, 
+                                xshift = -55,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14)) 
+        }
+    })
+    
+    
+    # strain delta geo ecc histogram by time point
+    output$strain_delta_geo_histogram <- renderPlotly({
+        
+        if(input$region == 3) {
+            ggplotly(ggplot(strains_sh$data(withSelection=T) %>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(country %in% input$regionProvince),
+                            aes(x=delta_ecc_0.1.0)) +
+                         geom_histogram(position="dodge", bins = 40, fill = "#1c74b4") +
+                         facet_wrap(~province) +
+                         xlim(-1,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                layout(margin = list(l = 50, r = 100)) %>%
+                add_annotations(text = "Delta geospatial ECC value",
+                                y = 0,
+                                x=0.5,
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0,
+                                xshift = -55,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14))
+            
+        } else if (input$region == 2) {
+            ggplotly(ggplot(strains_sh,
+                            aes(x=delta_ecc_0.1.0)) +
+                         geom_histogram(position="dodge", bins = 40,fill = "#1c74b4") +
+                         facet_wrap(~country) +
+                         xlim(-1,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                layout(margin = list(l = 50, r = 100)) %>%
+                add_annotations(text = "Delta geospatial ECC value",
+                                y = 0,
+                                x=0.5,
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0,
+                                xshift = -55,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14))
+        } else {
+            ggplotly(ggplot(strains_sh,
+                            aes(x=delta_ecc_0.1.0)) +
+                         geom_histogram(position="dodge", bins = 40,  fill = "#1c74b4") +
+                         xlim(-1,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank())) %>%
+                layout(margin = list(l = 50, r = 100)) %>%
+                add_annotations(text = "Delta geospatial ECC value",
+                                y = 0,
+                                x=0.5,
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0,
+                                xshift = -55,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14))
+        }
+    })
+    
+    
+    # strain delta temp ecc histogram by time point
+    output$strain_delta_temp_histogram <- renderPlotly({
+        
+        if(input$region == 3) {
+            ggplotly(ggplot(strains_sh$data(withSelection=T) %>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(country %in% input$regionProvince),
+                            aes(x=delta_ecc_0.0.1)) +
+                         geom_histogram(position="dodge", bins = 40, fill = "#1c74b4") +
+                         facet_wrap(~province) +
+                         xlim(-1,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                layout(margin = list(l = 50, r = 100)) %>%
+                add_annotations(text = "Delta temporal ECC value",
+                                y = 0,
+                                x=0.5,
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0,
+                                xshift = -55,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14))
+            
+        } else if (input$region == 2) {
+            ggplotly(ggplot(strains_sh,
+                            aes(x=delta_ecc_0.0.1)) +
+                         geom_histogram(position="dodge", bins = 40,fill = "#1c74b4") +
+                         facet_wrap(~country) +
+                         xlim(-1,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                layout(margin = list(l = 50, r = 100)) %>%
+                add_annotations(text = "Delta temporal ECC value",
+                                y = 0,
+                                x=0.5,
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0,
+                                xshift = -55,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14))
+        } else {
+            ggplotly(ggplot(strains_sh,
+                            aes(x=delta_ecc_0.0.1)) +
+                         geom_histogram(position="dodge", bins = 40,  fill = "#1c74b4") +
+                         xlim(-1,1) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle=45, hjust=1),
+                               axis.title = element_blank(),
+                               panel.border = element_blank(),
+                               panel.grid.major.x = element_blank())) %>%
+                layout(margin = list(l = 50, r = 100)) %>%
+                add_annotations(text = "Delta temporal ECC value",
+                                y = 0,
+                                x=0.5,
+                                yshift=-60,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "middle",
+                                yanchor = "bottom",
+                                showarrow = FALSE,
+                                font = list(size = 14)) %>%
+                add_annotations(text = "Number of strains",
+                                y = 0.5,
+                                x=0,
+                                xshift = -55,
+                                yref = "paper",
+                                xref = "paper",
+                                xanchor = "left",
+                                yanchor = "middle",
+                                textangle = -90,
+                                showarrow = FALSE,
+                                font = list(size = 14))
+        }
+    })
+    
+    # histogram of strain counts for tp1
+    output$strain_histogram_tp1 <- renderPlotly({
+        if(input$region == 3) {
+            # strain count by country histogram
+            plot_ly(type = "histogram",
+                    data = strains_sh1$data(withSelection = T) %>%
+                        filter(selected_ | is.na(selected_)) %>%
+                        subset(country %in% input$regionProvince),
+                    histfunc = "count",
+                    x = ~strain_date,
+                    color = ~province,
+                    xbins = list(size = "M1"),
+                    hovertemplate = ~paste('<b>', province, '</b><br>',
+                                           'Count: %{y}', '<br>',
+                                           'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
+                layout(barmode = "stack",
+                       xaxis = list(title = "Date"),
+                       yaxis = list(title = "Number of new strains identified"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.25,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "By day",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 86400000.0)))),
+                               list(
+                                   label = "By week",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 604800000.0)))),
+                               list(
+                                   label = "By month",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = "M1"))))
+                           ))))
+        } else if (input$region == 2) {
+            # strain count by country histogram
+            plot_ly(type = "histogram",
+                    data = strains_sh1,
+                    histfunc = "count",
+                    x = ~strain_date,
+                    color = ~country,
+                    colors = "Set1",
+                    xbins = list(size = "M1"),
+                    hovertemplate = ~paste('<b>', country, '</b><br>',
+                                           'Count: %{y}', '<br>',
+                                           'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
+                layout(barmode = "stack",
+                       xaxis = list(title = "Date"),
+                       yaxis = list(title = "Number of new strains identified"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.25,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "By day",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 86400000.0)))),
+                               list(
+                                   label = "By week",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 604800000.0)))),
+                               list(
+                                   label = "By month",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = "M1"))))
+                           ))))
+        } else {
+            # strain count by country histogram
+            plot_ly(type = "histogram",
+                    data = strains_sh1,
+                    histfunc = "count",
+                    x = ~strain_date,
+                    colors = "Set1",
+                    xbins = list(size = "M1"),
+                    hovertemplate = ~paste('Count: %{y}', '<br>',
+                                           'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
+                layout(barmode = "stack",
+                       xaxis = list(title = "Date"),
+                       yaxis = list(title = "Number of new strains identified"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.25,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "By day",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 86400000.0)))),
+                               list(
+                                   label = "By week",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 604800000.0)))),
+                               list(
+                                   label = "By month",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = "M1"))))
+                           ))))
+        }
+    })
+    
+    # histogram of strain counts for tp2
+    output$strain_histogram_tp2 <- renderPlotly({
+        if(input$region == 3) {
+            # strain count by country histogram
+            plot_ly(type = "histogram",
+                    data = strains_sh2$data(withSelection = T) %>%
+                        filter(selected_ | is.na(selected_)) %>%
+                        subset(country %in% input$regionProvince),
+                    histfunc = "count",
+                    x = ~strain_date,
+                    color = ~province,
+                    xbins = list(size = "M1"),
+                    hovertemplate = ~paste('<b>', province, '</b><br>',
+                                           'Count: %{y}', '<br>',
+                                           'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
+                layout(barmode = "stack",
+                       xaxis = list(title = "Date"),
+                       yaxis = list(title = "Number of new strains identified"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.25,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "By day",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 86400000.0)))),
+                               list(
+                                   label = "By week",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 604800000.0)))),
+                               list(
+                                   label = "By month",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = "M1"))))
+                           ))))
+        } else if (input$region == 2) {
+            # strain count by country histogram
+            plot_ly(type = "histogram",
+                    data = strains_sh2,
+                    histfunc = "count",
+                    x = ~strain_date,
+                    color = ~country,
+                    colors = "Set1",
+                    xbins = list(size = "M1"),
+                    hovertemplate = ~paste('<b>', country, '</b><br>',
+                                           'Count: %{y}', '<br>',
+                                           'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
+                layout(barmode = "stack",
+                       xaxis = list(title = "Date"),
+                       yaxis = list(title = "Number of new strains identified"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.25,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "By day",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 86400000.0)))),
+                               list(
+                                   label = "By week",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 604800000.0)))),
+                               list(
+                                   label = "By month",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = "M1"))))
+                           ))))
+        } else {
+            # strain count by country histogram
+            plot_ly(type = "histogram",
+                    data = strains_sh2,
+                    histfunc = "count",
+                    x = ~strain_date,
+                    colors = "Set1",
+                    xbins = list(size = "M1"),
+                    hovertemplate = ~paste('Count: %{y}', '<br>',
+                                           'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
+                layout(barmode = "stack",
+                       xaxis = list(title = "Date"),
+                       yaxis = list(title = "Number of new strains identified"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.25,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "By day",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 86400000.0)))),
+                               list(
+                                   label = "By week",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 604800000.0)))),
+                               list(
+                                   label = "By month",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = "M1"))))
+                           ))))
+        }
+    })
+    
+    # cumulative strain counts for tp1
+    output$cum_strains_tp1 <- renderPlotly({
+        
+        # leaflet built in color function
+        pal <-  leaflet::colorFactor(
+            palette = rep(cols25(n=25),
+                          length.out=length(unique(vals$clusters$tp1_cluster))),
+            domain = unique(vals$clusters$tp1_cluster))
+        
+        if(input$region == 3) {
+            
+            # need to aggregate data
+            strains_sh1_cumsum <- strains_sh$data(withSelection = T) %>%
+                subset(timepoint == 1) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                subset(country == input$regionProvince) %>%
+                group_by(tp1_cluster, province, strain_date) %>% 
+                tally(!is.na(strain)) %>% 
+                mutate(cumsum = cumsum(n))
+            
+            # time point 1
+            ggplotly(ggplot(data = strains_sh1_cumsum,
+                            aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+                         scale_color_manual(values = pal(unique(strains_sh1_cumsum$tp1_cluster)),
+                                            name = "Cluster") +
+                         geom_line() +
+                         facet_wrap(~province) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+                               axis.title = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.border = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                add_annotations( text = "Date",
+                                 y = 0,
+                                 x=0.5, 
+                                 yshift=-70,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "middle",
+                                 yanchor = "bottom",
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) %>%
+                add_annotations( text = "Cumulative strain count",
+                                 y = 0.5,
+                                 x=0, 
+                                 xshift = -50,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "left",
+                                 yanchor = "middle",
+                                 textangle = -90,
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) 
+            
+        } else if (input$region == 2) {
+            
+            # need to aggregate data
+            strains_sh1_cumsum <- strains_sh$data(withSelection = T) %>%
+                subset(timepoint == 1) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(tp1_cluster, country, strain_date) %>% 
+                tally(!is.na(strain)) %>% 
+                mutate(cumsum = cumsum(n))
+            
+            # time point 1
+            ggplotly(ggplot(data = strains_sh1_cumsum,
+                            aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+                         scale_color_manual(values = pal(unique(strains_sh1_cumsum$tp1_cluster)),
+                                            name = "Cluster") +
+                         geom_line() +
+                         facet_wrap(~country) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+                               axis.title = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.border = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                add_annotations( text = "Date",
+                                 y = 0,
+                                 x=0.5, 
+                                 yshift=-70,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "middle",
+                                 yanchor = "bottom",
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) %>%
+                add_annotations( text = "Cumulative strain count",
+                                 y = 0.5,
+                                 x=0, 
+                                 xshift = -50,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "left",
+                                 yanchor = "middle",
+                                 textangle = -90,
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) 
+        } else { 
+            
+            # need to aggregate data
+            strains_sh1_cumsum <- strains_sh$data(withSelection = T) %>%
+                subset(timepoint == 1) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(tp1_cluster, strain_date) %>% 
+                tally(!is.na(strain)) %>% 
+                mutate(cumsum = cumsum(n))
+            
+            # time point 1
+            ggplotly(ggplot(data = strains_sh1_cumsum,
+                            aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+                         scale_color_manual(values = pal(unique(strains_sh1_cumsum$tp1_cluster)),
+                                            name = "Cluster") +
+                         geom_line() +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+                               axis.title = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.border = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                add_annotations( text = "Date",
+                                 y = 0,
+                                 x=0.5, 
+                                 yshift=-70,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "middle",
+                                 yanchor = "bottom",
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) %>%
+                add_annotations( text = "Cumulative strain count",
+                                 y = 0.5,
+                                 x=0, 
+                                 xshift = -50,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "left",
+                                 yanchor = "middle",
+                                 textangle = -90,
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) 
+        }
+    })
+    
+    # cumulative strain counts for tp2
+    output$cum_strains_tp2 <- renderPlotly({
+        
+        # leaflet built in color function
+        pal <-  leaflet::colorFactor(
+            palette = rep(cols25(n=25),
+                          length.out=length(unique(vals$clusters$tp1_cluster))),
+            domain = unique(vals$clusters$tp1_cluster))
+        
+        if(input$region == 3) {
+            
+            # need to aggregate data
+            strains_sh2_cumsum <- strains_sh$data(withSelection = T) %>%
+                subset(timepoint == 2) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                subset(country == input$regionProvince) %>%
+                group_by(tp1_cluster, province, strain_date) %>% 
+                tally(!is.na(strain)) %>% 
+                mutate(cumsum = cumsum(n))
+            
+            # time point 1
+            ggplotly(ggplot(data = strains_sh2_cumsum,
+                            aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+                         scale_color_manual(values = pal(unique(strains_sh2_cumsum$tp1_cluster)),
+                                            name = "Cluster") +
+                         geom_line() +
+                         facet_wrap(~province) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+                               axis.title = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.border = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                add_annotations( text = "Date",
+                                 y = 0,
+                                 x=0.5, 
+                                 yshift=-70,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "middle",
+                                 yanchor = "bottom",
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) %>%
+                add_annotations( text = "Cumulative strain count",
+                                 y = 0.5,
+                                 x=0, 
+                                 xshift = -50,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "left",
+                                 yanchor = "middle",
+                                 textangle = -90,
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) 
+            
+        } else if (input$region == 2) {
+            
+            # need to aggregate data
+            strains_sh2_cumsum <- strains_sh$data(withSelection = T) %>%
+                subset(timepoint == 2) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(tp1_cluster, country, strain_date) %>% 
+                tally(!is.na(strain)) %>% 
+                mutate(cumsum = cumsum(n))
+            
+            # time point 1
+            ggplotly(ggplot(data = strains_sh2_cumsum,
+                            aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+                         scale_color_manual(values = pal(unique(strains_sh2_cumsum$tp1_cluster)),
+                                            name = "Cluster") +
+                         geom_line() +
+                         facet_wrap(~country) +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+                               axis.title = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.border = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                add_annotations( text = "Date",
+                                 y = 0,
+                                 x=0.5, 
+                                 yshift=-70,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "middle",
+                                 yanchor = "bottom",
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) %>%
+                add_annotations( text = "Cumulative strain count",
+                                 y = 0.5,
+                                 x=0, 
+                                 xshift = -50,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "left",
+                                 yanchor = "middle",
+                                 textangle = -90,
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) 
+        } else { 
+            
+            # need to aggregate data
+            strains_sh2_cumsum <- strains_sh$data(withSelection = T) %>%
+                subset(timepoint == 2) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(tp1_cluster, strain_date) %>% 
+                tally(!is.na(strain)) %>% 
+                mutate(cumsum = cumsum(n))
+            
+            # time point 1
+            ggplotly(ggplot(data = strains_sh2_cumsum,
+                            aes(x=strain_date, y = cumsum, color = tp1_cluster)) +
+                         scale_color_manual(values = pal(unique(strains_sh2_cumsum$tp1_cluster)),
+                                            name = "Cluster") +
+                         geom_line() +
+                         theme_bw() +
+                         theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+                               axis.title = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.border = element_blank(),
+                               panel.spacing.y = unit(2, "lines"))) %>%
+                add_annotations( text = "Date",
+                                 y = 0,
+                                 x=0.5, 
+                                 yshift=-70,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "middle",
+                                 yanchor = "bottom",
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) %>%
+                add_annotations( text = "Cumulative strain count",
+                                 y = 0.5,
+                                 x=0, 
+                                 xshift = -50,
+                                 yref = "paper",
+                                 xref = "paper",
+                                 xanchor = "left",
+                                 yanchor = "middle",
+                                 textangle = -90,
+                                 showarrow = FALSE,
+                                 font = list(size = 14)) 
+        }
     })
     
 }
