@@ -745,7 +745,7 @@ server <- function(input, output, session) {
   
   # all cluster reactive filtering
   clusters_rall <- reactive({
-
+    
     clusters_filt <- clusters_long %>%
       # tp1 filters
       # also filter for tp2 clusters since they are linked?
@@ -847,7 +847,7 @@ server <- function(input, output, session) {
   
   # tp1 strain reactive filtering
   strains_r1 <- reactive({
-
+    
     strains %>%
       {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
@@ -858,7 +858,7 @@ server <- function(input, output, session) {
   
   # tp2 strain reactive filtering
   strains_r2 <- reactive({
-
+    
     strains %>%
       {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
       {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
@@ -2519,3 +2519,6 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
+
+
+

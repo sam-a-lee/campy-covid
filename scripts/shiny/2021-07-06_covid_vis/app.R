@@ -241,6 +241,22 @@ body <- dashboardBody(
                             plotlyOutput("delta_temp_histogram")),
                         collapsible = TRUE
                     )
+                ),
+                
+                # fluid row 5
+                fluidRow(
+                    # single vs multi strain cluster histogram 
+                    box(title = HTML("<b>", "Number of single and multistrain clusters by date",  "</b>"),
+                        width = 12,
+                        box(width = 6,
+                            title = "Time point 1",
+                            solidHeader = TRUE, 
+                            plotlyOutput("singlemultclust_tp1", width = "100%", height = "100%")),
+                        box(width = 6,
+                            solidHeader = TRUE, 
+                            title = "Time point 2",
+                            plotlyOutput("singlemultclust_tp2", width = "100%", height = "100%")),
+                        collapsible = TRUE)
                 )
         ),
         
@@ -319,6 +335,22 @@ body <- dashboardBody(
                 
                 # fluid row 5
                 fluidRow(
+                    # single vs multi strain histogram 
+                    box(title = HTML("<b>", "Number of strains single part of single and multi strain clusters",  "</b>"),
+                        width = 12,
+                        box(width = 6,
+                            title = "Time point 1",
+                            solidHeader = TRUE, 
+                            plotlyOutput("straintypes_tp1", width = "100%", height = "100%")),
+                        box(width = 6,
+                            solidHeader = TRUE, 
+                            title = "Time point 2",
+                            plotlyOutput("straintypes_tp2", width = "100%", height = "100%")),
+                        collapsible = TRUE)
+                ),
+                
+                # fluid row 6
+                fluidRow(
                     #strain histogram 
                     box(title = HTML("<b>", "Number of new strains identified per month",  "</b>"),
                         width = 12,
@@ -333,7 +365,7 @@ body <- dashboardBody(
                         collapsible = TRUE)
                 ),
                 
-                # row 6
+                # row 7
                 fluidRow(
                     # cumulative strain identification by time point 
                     box(title = HTML("<b>", "Cumulative strain identification by cluster ",  "</b>"),
@@ -444,7 +476,7 @@ server <- function(input, output, session) {
     
     # read data frame into reactive values
     observeEvent(input$userFile, {
-        vals$data_raw <- read_xlsx(input$userFile$datapath, n_max = 5000)
+        vals$data_raw <- read_xlsx(input$userFile$datapath)
     }, ignoreNULL = T)
     
     
@@ -633,7 +665,8 @@ server <- function(input, output, session) {
         strains <- eccdata %>%
             select(strain, country, province, city, year, month, day,
                    strain_latitude, strain_longitude, present_at_tp1, 
-                   tp1_cluster, present_at_tp2, tp2_cluster, tp1_t0_ecc_0.1.0, 
+                   tp1_cluster,tp1_cluster_size_2, present_at_tp2, 
+                   tp2_cluster, tp2_cluster_size_2, tp1_t0_ecc_0.1.0, 
                    tp2_t0_ecc_0.1.0, tp1_t0_ecc_0.0.1, tp2_t0_ecc_0.0.1,
                    delta_ecc_0.1.0, delta_ecc_0.0.1, type)
         
@@ -703,10 +736,9 @@ server <- function(input, output, session) {
         
         req(vals$clusters)
         data <- vals$clusters 
-        data <- as.data.frame(data)
         
-        print("printing cluster data")
-        print(data)
+        # get top n
+        topn <- {if (input$number != "all") as.numeric(input$number) else nrow(clusters_long)}
         
         filtered <- data %>%
             {if (!is.null(input$tp1_cluster)) filter(., tp1_cluster %in% input$tp1_cluster)  else . } %>%
@@ -725,7 +757,9 @@ server <- function(input, output, session) {
             filter(cluster_novel_growth_rate >= input$cluster_novel_growth_rate[1] & cluster_novel_growth_rate <= input$cluster_novel_growth_rate[2]) %>%
             filter(delta_ecc_0.0.1 >= input$delta_ecc_0.0.1[1] & delta_ecc_0.0.1 <= input$delta_ecc_0.0.1[2]) %>%
             filter(delta_ecc_0.1.0 >= input$delta_ecc_0.1.0[1] & delta_ecc_0.1.0 <= input$delta_ecc_0.1.0[2])%>%
+            
             # data subsetting 
+            {if (input$subsets==1) arrange(., desc(abs(cluster_size_2))) else . }  %>%
             {if (input$subsets==2) arrange(., desc(abs(delta_ecc_0.0.1))) else . }  %>%
             {if (input$subsets==3) arrange(., desc(abs(delta_ecc_0.1.0))) else . } 
         
@@ -776,7 +810,7 @@ server <- function(input, output, session) {
     strains_sh <- SharedData$new(strains_r, key = ~key, group = "strains")
     strains_sh1 <- SharedData$new(strains_r1, key = ~key, group = "strains")
     strains_sh2 <- SharedData$new(strains_r2, key = ~key, group = "strains")
-
+    
     
     #################################
     # data frames displayed in tabs #
@@ -830,7 +864,7 @@ server <- function(input, output, session) {
                       scroller = TRUE),
                   selection = 'none')
     })
-
+    
     # raw data table
     output$raw_data <- renderDataTable({
         datatable(vals$data_raw,
@@ -854,17 +888,17 @@ server <- function(input, output, session) {
     # mapbox token
     mapboxToken <- "pk.eyJ1Ijoic2FtLWEtbGVlIiwiYSI6ImNrb2s0bXVpbzFhMGkybm5zeHI1dHR1aTgifQ.1K8o7OaSOWo_y5UdVH348w"    # You need your own token
     Sys.setenv("MAPBOX_TOKEN" = mapboxToken)
-
+    
     # cluster map
     # plotly using mapbox
     output$cluster_map <- renderPlotly({
-
+        
         # leaflet built in color function
         pal <-  leaflet::colorFactor(
             palette = rep(cols25(n=25),
                           length.out=length(unique(vals$clusters$tp1_cluster))),
             domain = unique(vals$clusters$tp1_cluster))
-
+        
         plot_mapbox(mode = 'scattermapbox') %>%
             add_markers(data = clusters_sh,
                         x = ~avg_longitude,
@@ -879,10 +913,10 @@ server <- function(input, output, session) {
             layout(mapbox = list(zoom =1.5,
                                  center = list(lon = 80, lat = 40)))
     })
-
+    
     # polar plot describing cardinal direction of change
     output$cardinal_polar <- renderPlotly({
-
+        
         # color pal for polar plot
         polarpal <-  leaflet::colorFactor(
             palette = ocean.phase(n=16),
@@ -1224,6 +1258,76 @@ server <- function(input, output, session) {
                 histfunc = "count",
                 x = ~delta_cluster_size) %>%
             layout(barmode = "overlay")
+    })
+    
+    
+    # single vs multistrain cluster prevalence at tp1
+    output$singlemultclust_tp1 <- renderPlotly({
+        
+        plot_ly(type = "histogram",
+                data = clusters_sh %>%
+                    mutate(homo_het = ifelse(cluster_size_2>2,"multi","single")),
+                histfunc = "count",
+                x = ~avg_date,
+                color = ~homo_het,
+                xbins = list(size = "M1")) %>%
+            layout(barmode = "beside",
+                   xaxis = list(title = "Date"),
+                   yaxis = list(title = "Number strains"),
+                   updatemenus = list( list(
+                       active = -1,
+                       x= -0.25,
+                       type = 'buttons',
+                       buttons = list(
+                           list(
+                               label = "By day",
+                               method = "restyle",
+                               args = list(list(xbins = list(size = 86400000.0)))),
+                           list(
+                               label = "By week",
+                               method = "restyle",
+                               args = list(list(xbins = list(size = 604800000.0)))),
+                           list(
+                               label = "By month",
+                               method = "restyle",
+                               args = list(list(xbins = list(size = "M1"))))
+                       ))))
+    })
+    
+    
+    # single vs multistrain cluster prevalence at tp1
+    output$singlemultclust_tp2 <- renderPlotly({
+        
+        plot_ly(type = "histogram",
+                data = clusters_sh$data(withSelection = TRUE)%>%
+                    filter(selected_ | is.na(selected_)) %>%
+                    subset(timepoint==2) %>%
+                    mutate(homo_het = ifelse(cluster_size_2>2,"multi","single")),
+                histfunc = "count",
+                x = ~avg_date,
+                color = ~homo_het,
+                xbins = list(size = "M1")) %>%
+            layout(barmode = "beside",
+                   xaxis = list(title = "Date"),
+                   yaxis = list(title = "Number strains"),
+                   updatemenus = list( list(
+                       active = -1,
+                       x= -0.25,
+                       type = 'buttons',
+                       buttons = list(
+                           list(
+                               label = "By day",
+                               method = "restyle",
+                               args = list(list(xbins = list(size = 86400000.0)))),
+                           list(
+                               label = "By week",
+                               method = "restyle",
+                               args = list(list(xbins = list(size = 604800000.0)))),
+                           list(
+                               label = "By month",
+                               method = "restyle",
+                               args = list(list(xbins = list(size = "M1"))))
+                       ))))
     })
     
     
@@ -2386,6 +2490,117 @@ server <- function(input, output, session) {
         }
     })
     
+    # counts of single vs multi strain clusters at time point 1
+    # regional facetting available 
+    output$straintypes_tp1 <- renderPlotly({
+        if(input$region == 3) {
+            # by province 
+            ggplotly(ggplot(data = strains_sh$data(withSelection = T) %>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(timepoint==1) %>%
+                                subset(country %in% input$province) %>%
+                                mutate(tp1_homo_het = ifelse(tp1_cluster_size_2>2,"Multi-strain","Single-strain")), 
+                            aes(x=strain_date,  fill = tp1_homo_het)) +
+                         geom_histogram() +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Cluster type") + 
+                         facet_wrap(~province) +
+                         theme_bw() +
+                         theme(panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.grid.minor.x = element_blank()), 
+                     dynamicTicks = T)
+            
+        } else if (input$region == 2) {
+            # by country 
+            ggplotly(ggplot(data = strains_sh$data(withSelection = T)%>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(timepoint==1) %>%
+                                mutate(tp1_homo_het = ifelse(tp1_cluster_size_2>2,"Multi-strain","Single-strain")), 
+                            aes(x=strain_date,  fill = tp1_homo_het)) +
+                         geom_histogram() +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Cluster type") + 
+                         facet_wrap(~country) +
+                         theme_bw() +
+                         theme(panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.grid.minor.x = element_blank()), 
+                     dynamicTicks = T)
+        } else { 
+            # no regional facetting 
+            ggplotly(ggplot(data = strains_sh$data(withSelection = T) %>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(timepoint==1) %>%
+                                mutate(tp1_homo_het = ifelse(tp1_cluster_size_2>2,"Multi-strain","Single-strain")), 
+                            aes(x=strain_date,  fill = tp1_homo_het)) +
+                         geom_histogram() +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Cluster type") + 
+                         theme_bw() +
+                         theme(panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.grid.minor.x = element_blank()),
+                     dynamicTicks = T) 
+        }
+    })
+    
+    # counts of single vs multi strain clusters at time point 2
+    # regional facetting available 
+    output$straintypes_tp2 <- renderPlotly({
+        if(input$region == 3) {
+            # by province 
+            ggplotly(ggplot(data = strains_sh$data(withSelection = T) %>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(country %in% input$province) %>%
+                                subset(timepoint==2) %>%
+                                mutate(tp2_homo_het = ifelse(tp2_cluster_size_2>2,"Multi-strain","Single-strain")), 
+                            aes(x=strain_date,  fill = tp2_homo_het)) +
+                         geom_histogram() +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Cluster type") + 
+                         facet_wrap(~province) +
+                         theme_bw() +
+                         theme(panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.grid.minor.x = element_blank()), 
+                     dynamicTicks = T)
+            
+        } else if (input$region == 2) {
+            # by country 
+            ggplotly(ggplot(data = strains_sh$data(withSelection = T) %>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(timepoint==2) %>%
+                                mutate(tp2_homo_het = ifelse(tp2_cluster_size_2>2,"Multi-strain","Single-strain")), 
+                            aes(x=strain_date,  fill = tp2_homo_het)) +
+                         geom_histogram() +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Cluster type") + 
+                         facet_wrap(~country) +
+                         theme_bw() +
+                         theme(panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.grid.minor.x = element_blank()), 
+                     dynamicTicks = T)
+        } else { 
+            # no regional facetting 
+            ggplotly(ggplot(data = strains_sh$data(withSelection = T)  %>%
+                                filter(selected_ | is.na(selected_)) %>%
+                                subset(timepoint==2) %>%
+                                mutate(tp2_homo_het = ifelse(tp2_cluster_size_2>2,"Multi-strain","Single-strain")), 
+                            aes(x=strain_date,  fill = tp2_homo_het)) +
+                         geom_histogram() +
+                         scale_fill_manual(values = c("#1c74b4", "#fc7c0d"),
+                                           name = "Cluster type") + 
+                         theme_bw() +
+                         theme(panel.border = element_blank(),
+                               panel.grid.major.x = element_blank(),
+                               panel.grid.minor.x = element_blank()),
+                     dynamicTicks = T) 
+        }
+    })
 }
 
 shinyApp(ui, server)
+
+
