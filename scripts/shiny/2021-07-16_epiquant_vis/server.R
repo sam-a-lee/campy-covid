@@ -18,6 +18,8 @@ library(geosphere) # for directions between points
 library(shinydashboardPlus) # for collapsable boxes
 library(data.table) # for melting
 library(rvest) # for downloading cardinal table 
+#library(reticulate) # for python; facetting easier in plotly
+
 
 
 ############# 
@@ -90,10 +92,11 @@ server <- function(input, output, session) {
         print("col class")
         print(lapply(eccdata, class))
         
-        
+        print("removing boring columns...")
         # remove non-informative cols
         eccdata <- eccdata[,-c(32:35)]
         
+        print("naming nicely...")
         # rename columns
         # remove spaces, all lowercase
         colnames(eccdata) <- c("strain", "country", "province", "city", "strain_latitude", 
@@ -115,6 +118,8 @@ server <- function(input, output, session) {
         # remove 0 for now as its causing problems
         eccdata <- eccdata %>% subset(tp1_cluster != 0 )
         
+        print("coverting classes...")
+        
         # covert appropriate columns to numeric
         eccdata[,c(5:10, 12:15, 17:21, 23:26, 28:39)] <- 
             sapply(eccdata[,c(5:10, 12:15, 17:21, 23:26, 28:39)], as.numeric)
@@ -130,6 +135,7 @@ server <- function(input, output, session) {
         
         vals$data_proc <- eccdata
         
+        print("formatting cluster data...")
         
         # tp1 cluster data
         clusters <- eccdata %>% 
@@ -270,6 +276,7 @@ server <- function(input, output, session) {
         
         vals$clusters <- clusters_long
         
+        print("formatting strain data...")
         
         strains <- eccdata %>%
             select(strain, country, province, city, year, month, day,
@@ -305,20 +312,21 @@ server <- function(input, output, session) {
                                                ifelse(tp2_cluster_size_2>2 & timepoint ==2, "Multi strain clusters", "Single strain clusters"))))
         
         
-        # hard code text
-        strains$maptext <-
-            paste0('<strong>', strains$strain, '</strong>','<br/>',
-                   'Cluster: ', '<strong>', strains$tp1_cluster, '</strong>', '<br/>',
-                   'Timepoint: ', '<strong>', strains$timepoint, '</strong>', '<br/>',
-                   'Country: ', strains$country, '<br/>',
-                   'Province: ', strains$province, '<br/>',
-                   'Date: ', strains$strain_date, '<br/>') %>%
-            lapply(htmltools::HTML) 
+        strains_long <- data.table::melt(setDT(strains),
+                                         measure.vars=list(c("tp1_t0_ecc_0.0.1", "tp2_t0_ecc_0.0.1"),
+                                                           c("tp1_t0_ecc_0.1.0", "tp2_t0_ecc_0.1.0"),
+                                                           c("tp1_cluster_size_2", "tp2_cluster_size_2")),
+                                         variable.name='timepoint2', value.name=c("ecc_0.0.1", "ecc_0.1.0",
+                                                                                  "cluster_size_2"))
+        
         
         # create unique row ids for shared cluster and strain data
-        strains$key <- as.numeric(rownames(strains))
+        strains_long$key <- as.numeric(rownames(strains_long))
         
-        vals$strains <- strains
+        vals$strains_long <- strains_long
+        
+        print("updating selectize inputs...")
+        
         
         # update cluster sliders
         updateSelectInput(inputId = "tp1_cluster", label = "TP1 cluster", choices = unique(vals$clusters$tp1_cluster),  selected = NULL)
@@ -339,8 +347,8 @@ server <- function(input, output, session) {
         sliderInput(inputId = "delta_ecc_0.1.0", label = "delta ecc_0.1.0", min = min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max = max(vals$clusters$delta_ecc_0.1.0, na.rm = T), value = c(min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max(vals$clusters$delta_ecc_0.1.0, na.rm = T)))
         #update stain filters
         # strain filters
-        updateSelectInput(inputId = "country", label = "Country", choices = unique(vals$strains$country),  selected = NULL)
-        updateSelectInput(inputId = "province", label = "Province", choices = unique(vals$strains$province),  selected = NULL)
+        updateSelectInput(inputId = "country", label = "Country", choices = unique(vals$strains_long$country),  selected = NULL)
+        updateSelectInput(inputId = "province", label = "Province", choices = unique(vals$strains_long$province),  selected = NULL)
     })
     
     
@@ -349,6 +357,9 @@ server <- function(input, output, session) {
     ###########################
     
     clusters_r <- reactive({
+        
+        print("creating reactive cluster data...")
+        print(vals$clus)
         
         req(vals$clusters)
         data <- vals$clusters 
@@ -390,95 +401,26 @@ server <- function(input, output, session) {
     })
     
     
-    clusters_r1 <- reactive({
-        
-        clusters_r() %>%
-            subset(timepoint==1)
-    })
-    
-    clusters_r2 <- reactive({
-        
-        clusters_r() %>%
-            subset(timepoint==2)
-    })
-    
     # cluster shared data frame 
     clusters_sh <- SharedData$new(clusters_r, key = ~key, group = "clusters")
-    clusters_sh1 <- SharedData$new(clusters_r1, key = ~key, group = "clusters")
-    clusters_sh2 <- SharedData$new(clusters_r2, key = ~key, group = "clusters")
-    
     
     
     # all strain filtering 
     strains_r <- reactive({
-        req(vals$strains,clusters_sh)
-        vals$strains %>%
+        print("creating reactive strain data...")
+        
+        req(vals$strains_long,clusters_sh)
+        vals$strains_long %>%
             {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
             {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
             # filter by shared cluster selections
             filter(tp1_cluster %in% (clusters_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
     })
     
-    # tp1 strain reactive filtering
-    strains_r1 <- reactive({
-        req(vals$strains,clusters_sh)
-        vals$strains %>%
-            {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
-            {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
-            filter(present_at_tp1==1) %>%
-            filter(tp1_cluster %in% (clusters_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
-    })
     
-    # tp2 strain reactive filtering
-    strains_r2 <- reactive({
-        req(vals$strains,clusters_sh)
-        vals$strains %>%
-            {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
-            {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
-            filter(present_at_tp1==0) %>%
-            filter(tp1_cluster %in% (clusters_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1_cluster)))
-    })
     
     # strain shared data
     strains_sh <- SharedData$new(strains_r, key = ~key, group = "strains")
-    strains_sh1 <- SharedData$new(strains_r1, key = ~key, group = "strains")
-    strains_sh2 <- SharedData$new(strains_r2, key = ~key, group = "strains")
-    
-    
-    ################################
-    # cluster movement value boxes #
-    ################################
-    
-    output$clustercountbox <- renderValueBox({
-        df <-  clusters_sh$data(withSelection = T) %>%
-            subset(selected_ | is.na(selected_))
-        
-        valueBox(
-            subtitle = ifelse(length(unique(df$tp1_cluster))==1, "cluster", "clusters"),
-            value = length(unique(df$tp1_cluster))
-        )
-    })
-    
-    output$cardinalbox <- renderValueBox({
-        df <-  clusters_sh$data(withSelection = T)
-        valueBox(
-            subtitle = "movement",
-            value = names(table(df$cardinal_long)[which(table(df$cardinal_long)==max(table(df$cardinal_long)))])
-        )
-    })
-    
-    output$speedbox <- renderValueBox({
-        df <-  clusters_sh$data(withSelection = T)
-        valueBox(value = names(table(df$ecc_speed)[which(table(df$ecc_speed)==max(table(df$ecc_speed)))]),
-                 subtitle = "growth")
-    })
-    
-    output$spreadbox <- renderValueBox({
-        df <-  clusters_sh$data(withSelection = T)
-        valueBox(value = names(table(df$ecc_spread)[which(table(df$ecc_spread)==max(table(df$ecc_spread)))]),
-                 subtitle = "spread")
-    })
-    
     
     #################################
     # data frames displayed in tabs #
@@ -550,6 +492,40 @@ server <- function(input, output, session) {
     
     
     ################################
+    # cluster movement value boxes #
+    ################################
+    
+    output$clustercountbox <- renderValueBox({
+        df <-  clusters_sh$data(withSelection = T) %>%
+            subset(selected_ | is.na(selected_))
+        
+        valueBox(
+            subtitle = ifelse(length(unique(df$tp1_cluster))==1, "cluster", "clusters"),
+            value = length(unique(df$tp1_cluster))
+        )
+    })
+    
+    output$cardinalbox <- renderValueBox({
+        df <-  clusters_sh$data(withSelection = T)
+        valueBox(
+            subtitle = "movement",
+            value = names(table(df$cardinal_long)[which(table(df$cardinal_long)==max(table(df$cardinal_long)))])
+        )
+    })
+    
+    output$speedbox <- renderValueBox({
+        df <-  clusters_sh$data(withSelection = T)
+        valueBox(value = names(table(df$ecc_speed)[which(table(df$ecc_speed)==max(table(df$ecc_speed)))]),
+                 subtitle = "growth")
+    })
+    
+    output$spreadbox <- renderValueBox({
+        df <-  clusters_sh$data(withSelection = T)
+        valueBox(value = names(table(df$ecc_spread)[which(table(df$ecc_spread)==max(table(df$ecc_spread)))]),
+                 subtitle = "spread")
+    })
+    
+    ################################
     # cluster based visualizations #
     ################################
     
@@ -562,27 +538,21 @@ server <- function(input, output, session) {
     output$cluster_map <- renderPlotly({
         
         plot_mapbox(mode = 'scattermapbox') %>%
-            add_markers(data = clusters_sh1,
+            add_markers(data = clusters_sh,
                         x = ~avg_longitude,
                         y = ~avg_latitude,
-                        name = "Timepoint 1",
+                        frame = ~timepoint,
                         color= ~I("#1F78C8"),
                         marker =list(size = ~log10(cluster_size_2)*10,
                                      opacity = 0.6),
-                        hovertext = ~paste(tp1_cluster)) %>%
-            add_markers(data = clusters_sh2, 
-                        x = ~avg_longitude,
-                        y = ~avg_latitude,
-                        color= ~I("#a6cee3"),
-                        name = "Timepoint 2",
-                        marker =list(size = ~log10(cluster_size_2)*10,
-                                     opacity = 0.9),
-                        hovertext = ~paste(tp1_cluster)) %>%
+                        hovertext = ~paste(tp1_cluster, timepoint)) %>%
             config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
             layout(mapbox = list(zoom =1,
                                  style = 'light',
                                  center = list(lon = 50, lat = 40))) %>%
-            highlight(color = "red")
+            highlight(color = "red") %>%            
+            animation_opts(1000, redraw = T, transition = 500) %>% 
+            animation_button(visible = T) 
     })
     
     
@@ -623,7 +593,6 @@ server <- function(input, output, session) {
     
     # radio plot for ecc explanation of cluster spread
     output$ecc_radar <- renderPlotly({
-        
         
         plot_ly(type="scatterpolar",
                 data = clusters_sh$data(withSelection = TRUE) %>%
@@ -688,212 +657,308 @@ server <- function(input, output, session) {
     # peak number of clusters identified per day?
     # (strains %>% group_by(timepoint, tp1_cluster, strain_date) %>% summarize(n = n()))$n 
     
-    ##########################
-    # strain identification  #
-    ##########################
-    
-    # plotly map for strains using mapbox
-    output$strain_map <- renderPlotly({
-        plot_mapbox(mode = 'scattermapbox') %>%
-            # strain markers
-            add_markers(data = strains_sh1,
-                        x = ~strain_longitude_jit,
-                        y = ~strain_latitude_jit,
-                        name = "Timepoint 1",
-                        color= ~I("#1F78C8"),
-                        marker =list(size = 5,
-                                     opacity = 0.87),
-                        hovertext = ~maptext) %>%
-            # strain markers
-            add_markers(data = strains_sh2,
-                        x = ~strain_longitude_jit,
-                        y = ~strain_latitude_jit,
-                        name = "Timepoint 2",
-                        color= ~I("#a6cee3"),
-                        marker =list(size = 5,
-                                     opacity = 0.8),
-                        hovertext = ~maptext) %>%
-            config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
-            layout(mapbox = list(zoom =1,
-                                 style = 'light',
-                                 center = list(lon = 50, lat = 40))) %>%
-            highlight(color = "red")
-    })
-    
-    
-    # ridgeline plot, a
-    output$ridgeplot <- renderPlotly({
-        tp1 <- ggplotly(ggplot() +
-                            geom_freqpoly(strains_sh1, mapping=aes(x = strain_date, group = tp1_cluster, col = as.factor(timepoint)), stat = "count" )+ 
-                            scale_color_manual(values = c("#1F78C8")) +
-                            labs(x="Date", y = "Count") + 
-                            theme_bw() + 
-                            theme(panel.border = element_blank(),
-                                  legend.position = "none",
-                                  panel.grid.major.x = element_blank(),
-                                  panel.grid.minor.x = element_blank(),
-                                  panel.grid.minor.y = element_blank(),
-                                  strip.background = element_blank(),
-                                  strip.placement = "inside"), 
-                        dynamicTicks = T) %>%
-            layout(margin = list(r = 100)) %>%
-            highlight(color = "red")
-        
-        
-        tp2 <-  ggplotly(ggplot() +
-                             geom_freqpoly(strains_sh2, mapping=aes(x = strain_date, group = tp1_cluster, col = as.factor(timepoint)), stat = "count" )+ 
-                             scale_color_manual(values = c("#1F78C8")) +
-                             labs(x="Date", y = "Count") + 
-                             theme_bw() + 
-                             theme(panel.border = element_blank(),
-                                   legend.position = "none",
-                                   panel.grid.major.x = element_blank(),
-                                   panel.grid.minor.x = element_blank(),
-                                   panel.grid.minor.y = element_blank(),
-                                   strip.background = element_blank(),
-                                   strip.placement = "inside"), 
-                         dynamicTicks = T) %>%
-            layout(margin = list(r = 100)) %>%
-            highlight(color = "red")
-        
-        
-        
-        subplot(tp1, tp2, shareY=T) %>%
-            layout(annotations = list(
-                list(x = 0.2 , y = 1, text = "Timepoint 1", showarrow = F, xref='paper', yref='paper'),
-                list(x = 0.8 , y = 1, text = "Timepoint 2", showarrow = F, xref='paper', yref='paper'))
-            )  
-    })
-    
-    
-    # single vs multistrain clusters
-    output$singlemultclust <- renderPlotly({
-        
-        pal <- leaflet::colorFactor(c("#a6cee3","#1F78C8"), domain=strains_r()$single_mult)
-        
-        tp1 <- plot_ly() %>%
-            add_trace(data = strains_sh1,
-                      type = "histogram",
-                      x = ~strain_date,
-                      color = ~I(pal(single_mult)),
-                      #colors = ~pal(single_mult),
-                      name = ~paste(single_mult, "TP1"),
-                      xbins = list(size = 86400000.0)) %>%
-            layout(barmode = "stack") %>%
-            highlight(color = "red")
-        
-        tp2 <- plot_ly() %>%
-            add_trace(data = strains_sh2,
-                      type = "histogram",
-                      x = ~strain_date,
-                      color = ~I(pal(single_mult)),
-                      #colors =  ~pal(single_mult),
-                      name = ~paste(single_mult, "TP2"),
-                      xbins = list(size = 86400000.0)) %>%
-            layout(barmode = "stack") %>%
-            highlight(color = "red")
-        
-        subplot(tp1, tp2, shareY=T) %>%
-            layout(annotations = list(
-                list(x = 0.2 , y = 1, text = "Timepoint 1", showarrow = F, xref='paper', yref='paper'),
-                list(x = 0.8 , y = 1, text = "Timepoint 2", showarrow = F, xref='paper', yref='paper'))
-            )  
-    })
     
     
     ###############
     # ECC Indices #
     ###############
     
-    # geospatial ecc
-    output$geoecc <- renderPlotly({
-        
-        plot_ly() %>%
-            add_trace(data = strains_sh, 
-                      type = "histogram",
-                      name = "Timepoint 1", 
-                      color = I("#1F78C8"), 
-                      xbins = list(size = 0.01),
-                      x = ~tp1_t0_ecc_0.1.0) %>%
-            add_trace(data = strains_sh, 
-                      type = "histogram",
-                      name = "Timepoint 2",
-                      color = I("#a6cee3"),
-                      xbins = list(size = 0.01),
-                      x = ~tp2_t0_ecc_0.1.0) %>%
-            layout(xaxis = list(title = "Geospatial epicluster cohesion index"),
-                   yaxis = list(title = "Count"))
-        
-    })
-    
-    # temporal ecc
-    output$tempecc <- renderPlotly({
-        
-        plot_ly() %>%
-            add_trace(data = strains_sh, 
-                      type = "histogram",
-                      name = "Timepoint 1", 
-                      color = I("#1F78C8"), 
-                      xbins = list(size = 0.01),
-                      x = ~tp1_t0_ecc_0.0.1) %>%
-            add_trace(data = strains_sh, 
-                      type = "histogram",
-                      name = "Timepoint 2",
-                      color = I("#a6cee3"),
-                      xbins = list(size = 0.01),
-                      x = ~tp2_t0_ecc_0.0.1) %>%
-            layout(xaxis = list(title = "Temporal epicluster cohesion index"),
-                   yaxis = list(title = "Count"))
-    })
-    
-    
-    output$bubbleplot <- renderPlotly({
-        
-        pal <- leaflet::colorFactor(c("#1F78C8", "#a6cee3"), domain=as.factor(clusters_r()$timepoint))
-        
-        plot_ly() %>%
+    output$bubble_geo <- renderPlotly({
+        geo <- plot_ly() %>%
             add_trace(data = clusters_sh, 
                       type = "scatter",
                       mode = "markers", 
                       x = ~ecc_0.1.0,
-                      y = ~ecc_0.0.1,
-                      name = ~paste("Timepoint", timepoint), 
+                      frame = ~timepoint, 
                       size = ~I(cluster_size_2),
-                      color = ~timepoint,
-                      colors = ~pal(timepoint), 
+                      color = I("#1F78C8"), 
+                      hovertemplate = ~tp1_cluster,
+                      showlegend = FALSE,
+                      marker = list(sizemode = "area", opacity = 0.5)) %>%
+            layout(xaxis = list(title = "Geospatial epicluster cohesion index",
+                                range = c(0, 1)),
+                   yaxis = list(showticklabels = F)) %>% 
+            animation_opts(1000, redraw = FALSE) %>% 
+            animation_button(visible = FALSE) %>%
+            htmlwidgets::onRender("
+        function(el,x){
+          $('#anim').on('click', function(){Plotly.animate(el);});
+        }") 
+    })
+    
+    output$bubble_temp <- renderPlotly({
+       
+         plot_ly() %>%
+            add_trace(data = clusters_sh, 
+                      type = "scatter",
+                      mode = "markers", 
+                      x = ~ecc_0.0.1,
+                      size = ~I(cluster_size_2),
+                      color = I("#1F78C8"), 
+                      frame = ~timepoint, 
+                      hovertemplate = ~tp1_cluster,
+                      showlegend = FALSE,
+                      marker = list(sizemode = "area", opacity = 0.5)) %>%
+            layout(xaxis = list(title = "Temporal epicluster cohesion index",
+                                range = c(0, 1)),
+                   yaxis = list(showticklabels = F)) %>% 
+            animation_opts(1000, redraw = FALSE) %>% 
+            animation_button(visible = FALSE) %>%
+            htmlwidgets::onRender("
+        function(el,x){
+          $('#anim').on('click', function(){Plotly.animate(el);});
+        }")
+    })
+    
+    output$bubble_both <- renderPlotly({
+        
+        plot_ly() %>%
+            add_trace(data = clusters_long, 
+                      type = "scatter",
+                      mode = "markers", 
+                      x = ~ecc_0.1.0,
+                      y = ~ecc_0.0.1,
+                      frame = ~timepoint,  
+                      size = ~I(cluster_size_2),
+                      color = I("#1F78C8"), 
+                      hovertemplate = ~tp1_cluster,
+                      showlegend = FALSE, 
                       marker = list(sizemode = "area", opacity = 0.5)) %>%
             layout(xaxis = list(title = "Geospatial epicluster cohesion index"),
-                   yaxis = list(title = "Temporal epicluster cohesion index"))
+                   yaxis = list(title = "Temporal epicluster cohesion index")) %>% 
+            animation_opts(1000, redraw = FALSE) %>% 
+            animation_button(visible = FALSE) %>%
+            htmlwidgets::onRender("
+        function(el,x){
+          $('#anim').on('click', function(){Plotly.animate(el);});
+        }")
+        
     })
+    
+    
+    # geospatial histogram 
+    output$geo_histogram2 <- renderPlotly({
+        
+        # no faceting 
+        plot_ly() %>%
+            add_trace(data = strains_sh,
+                      type = "histogram",
+                      x = ~ecc_0.1.0,
+                      frame = ~timepoint2,
+                      color = I("#1F78C8"),
+                      xbins = list(size = 0.01),
+                      showlegend = FALSE) %>%
+            layout(xaxis = list(range=c(0,1),
+                                title = "Geospatial epicluster cohesion index")) %>%
+            animation_opts(1000, redraw = T) %>%
+            animation_button(visible = F) %>%
+            htmlwidgets::onRender("
+        function(el,x){
+          $('#anim').on('click', function(){Plotly.animate(el);});
+        }")
+        
+        # # facet by country
+        # strains_long %>%
+        #     group_by(country) %>%
+        #     do(p=plot_ly(.) %>%
+        #            add_trace(x = ~ecc_0.1.0,
+        #                      type = "histogram",
+        #                      frame = ~timepoint2,
+        #                      xbins = list(size = 0.01),
+        #                      color = I("#1F78C8"),
+        #                      showlegend = FALSE) %>%
+        #            layout(xaxis = list(range = c(0,1),
+        #                                title = ""),
+        #                   annotations = list(text= ~unique(country),
+        #                                      xref = "paper",
+        #                                      yref = "paper",
+        #                                      yanchor = "bottom",
+        #                                      xanchor = "center",
+        #                                      align = "center",
+        #                                      x = 0.5,
+        #                                      y = 1,
+        #                                      showarrow = FALSE))) %>%
+        #     subplot(nrows = 3, shareX = TRUE, shareY = TRUE) %>%
+        #     layout( annotations = list(list(text= "Geospatial epicluster cohesion index",
+        #                                     xref = "paper",
+        #                                     yref = "paper",
+        #                                     yanchor = "bottom",
+        #                                     xanchor = "center",
+        #                                     align = "center",
+        #                                     x = 0.5,
+        #                                     y = -0.1,
+        #                                     showarrow = FALSE),
+        #                                list(text= "Count",
+        #                                     xref = "paper",
+        #                                     yref = "paper",
+        #                                     yanchor = "bottom",
+        #                                     xanchor = "center",
+        #                                     align = "center",
+        #                                     x = -0.1,
+        #                                     y = 0.5,
+        #                                     textangle= -90,
+        #                                     showarrow = FALSE)))
+        
+        #
+        # # facet by province
+        # strains_long %>%
+        #     subset(country == "China") %>%
+        #     group_by(province) %>%
+        #     do(p=plot_ly(.) %>%
+        #            add_trace(x = ~ecc_0.1.0,
+        #                      type = "histogram",
+        #                      frame = ~timepoint2,
+        #                      xbins = list(size = 0.01),
+        #                      color = I("#1F78C8"),
+        #                      showlegend = FALSE) %>%
+        #            layout(xaxis = list(range = c(0,1)),
+        #                   annotations = list(text= ~unique(province),
+        #                                      xref = "paper",
+        #                                      yref = "paper",
+        #                                      yanchor = "bottom",
+        #                                      xanchor = "center",
+        #                                      align = "center",
+        #                                      x = 0.5,
+        #                                      y = 1,
+        #                                      showarrow = FALSE))) %>%
+        #     subplot(nrows = ceiling(sqrt(length(unique(strains_long %>% subset(country == "China") %>% pull(province))))),
+        #             shareX = TRUE, shareY = TRUE) %>%
+        # layout( annotations = list(list(text= "Geospatial epicluster cohesion index",
+        #                                 xref = "paper",
+        #                                 yref = "paper",
+        #                                 yanchor = "bottom",
+        #                                 xanchor = "center",
+        #                                 align = "center",
+        #                                 x = 0.5,
+        #                                 y = -0.1,
+        #                                 showarrow = FALSE),
+        #                            list(text= "Count",
+        #                                 xref = "paper",
+        #                                 yref = "paper",
+        #                                 yanchor = "bottom",
+        #                                 xanchor = "center",
+        #                                 align = "center",
+        #                                 x = -0.1,
+        #                                 y = 0.5,
+        #                                 textangle= -90,
+        #                                 showarrow = FALSE)))
+        
+    })
+    
+    
+    # temporal histogram 
+    output$temp_histogram2 <- renderPlotly({
+        
+        # no faceting 
+        plot_ly() %>%
+            add_trace(data = strains_sh,
+                      type = "histogram",
+                      x = ~ecc_0.0.1,
+                      frame = ~timepoint2,
+                      color = I("#1F78C8"), 
+                      xbins = list(size = 0.01),
+                      showlegend = FALSE) %>%
+            layout(xaxis = list(range=c(0,1),
+                                title = "Temporal epicluster cohesion index")) %>%
+            animation_opts(1000, redraw = T) %>%
+            animation_button(visible = F) %>%
+            htmlwidgets::onRender("
+        function(el,x){
+          $('#anim').on('click', function(){Plotly.animate(el);});
+        }")
+        
+        
+        # # facet by country
+        # strains_long %>%
+        #     group_by(country) %>%
+        #     do(p=plot_ly(.) %>%
+        #            add_trace(x = ~ecc_0.0.1,
+        #                      type = "histogram",
+        #                      frame = ~timepoint2,
+        #                      xbins = list(size = 0.01),
+        #                      color = I("#1F78C8"),
+        #                      showlegend = FALSE) %>%
+        #            layout(xaxis = list(range = c(0,1)),
+        #                   annotations = list(text= ~unique(country),
+        #                                      xref = "paper",
+        #                                      yref = "paper",
+        #                                      yanchor = "bottom",
+        #                                      xanchor = "center",
+        #                                      align = "center",
+        #                                      x = 0.5,
+        #                                      y = 1,
+        #                                      showarrow = FALSE))) %>%
+        #     subplot(nrows = 3, shareX = TRUE, shareY = TRUE) %>%
+        # layout( annotations = list(list(text= "Geospatial epicluster cohesion index",
+        #                                 xref = "paper",
+        #                                 yref = "paper",
+        #                                 yanchor = "bottom",
+        #                                 xanchor = "center",
+        #                                 align = "center",
+        #                                 x = 0.5,
+        #                                 y = -0.1,
+        #                                 showarrow = FALSE),
+        #                            list(text= "Count",
+        #                                 xref = "paper",
+        #                                 yref = "paper",
+        #                                 yanchor = "bottom",
+        #                                 xanchor = "center",
+        #                                 align = "center",
+        #                                 x = -0.1,
+        #                                 y = 0.5,
+        #                                 textangle= -90,
+        #                                 showarrow = FALSE)))
+        
+        
+        #
+        # # facet by province
+        # strains_long %>%
+        #     subset(country == "China") %>%
+        #     group_by(province) %>%
+        #     do(p=plot_ly(.) %>%
+        #            add_trace(x = ~ecc_0.0.1,
+        #                      type = "histogram",
+        #                      frame = ~timepoint2,
+        #                      xbins = list(size = 0.01),
+        #                      color = I("#1F78C8"),
+        #                      showlegend = FALSE) %>%
+        #            layout(xaxis = list(range = c(0,1)),
+        #                   annotations = list(text= ~unique(province),
+        #                                      xref = "paper",
+        #                                      yref = "paper",
+        #                                      yanchor = "bottom",
+        #                                      xanchor = "center",
+        #                                      align = "center",
+        #                                      x = 0.5,
+        #                                      y = 1,
+        #                                      showarrow = FALSE))) %>%
+        #     subplot(nrows = ceiling(sqrt(length(unique(strains_long %>% subset(country == "China") %>% pull(province))))),
+        #             shareX = TRUE, shareY = TRUE) %>%
+        # layout( annotations = list(list(text= "Geospatial epicluster cohesion index",
+        #                                 xref = "paper",
+        #                                 yref = "paper",
+        #                                 yanchor = "bottom",
+        #                                 xanchor = "center",
+        #                                 align = "center",
+        #                                 x = 0.5,
+        #                                 y = -0.1,
+        #                                 showarrow = FALSE),
+        #                            list(text= "Count",
+        #                                 xref = "paper",
+        #                                 yref = "paper",
+        #                                 yanchor = "bottom",
+        #                                 xanchor = "center",
+        #                                 align = "center",
+        #                                 x = -0.1,
+        #                                 y = 0.5,
+        #                                 textangle= -90,
+        #                                 showarrow = FALSE)))
+        # 
+    })
+    
     
     
     
     
 }
 
-
-# 
-# # temporal ecc
-# output$deltageoecc <- renderPlotly({
-#     plot_ly() %>%
-#         add_trace(data = strains, 
-#                   type = "histogram",
-#                   color = I("#1F78C8"), 
-#                   xbins = list(size = 0.01),
-#                   x = ~delta_ecc_0.1.0) %>%
-#         layout(xaxis = list(title = "Delta geospatial epicluster cohesion index"),
-#                yaxis = list(title = "Count"))
-# })
-# 
-# 
-# # temporal ecc
-# output$deltatempecc <- renderPlotly({
-#     plot_ly() %>%
-#         add_trace(data = strains, 
-#                   type = "histogram",
-#                   color = I("#1F78C8"), 
-#                   xbins = list(size = 0.01),
-#                   x = ~delta_ecc_0.0.1) %>%
-#         layout(xaxis = list(title = "Delta temporal epicluster cohesion index"),
-#                yaxis = list(title = "Count"))
-# })

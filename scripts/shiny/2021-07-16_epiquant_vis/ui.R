@@ -97,10 +97,7 @@ sidebar <- dashboardSidebar(
               menuItem("Raw data", tabName = "rawData"),
               
               # upload user data
-              menuItem("Upload data", tabName = "userData", selected = TRUE),
-              
-              # ECC indices tab
-              menuItem("ECC indices", tabName = "eccIndices")
+              menuItem("Upload data", tabName = "userData", selected = TRUE)
   )
 )
 
@@ -137,6 +134,12 @@ body <- dashboardBody(
                               background-color: #1F78C8;
                               }
                               '))),
+
+  tags$head(tags$style('#animateboth .box-header{ display: none}')),
+  tags$head(tags$style('#bubblegeo .box-header{ display: none}')),
+  tags$head(tags$style('#bubbletemp .box-header{ display: none}')),
+  tags$head(tags$style('#bubbleboth .box-header{ display: none}')),
+
   
   tabItems(
     tabItem(tabName = "clusterMove",
@@ -170,7 +173,7 @@ body <- dashboardBody(
                   plotlyOutput("ecc_radar", width = "100%", height = "100%"))
             ),
             
-
+            
             
             # row 3 for histograms
             fluidRow(
@@ -320,25 +323,20 @@ body <- dashboardBody(
     tabItem(tabName = "eccIndices",
             h2("Epicluster cohesion indices"),
             
-
             fluidRow(
-              box(width = 12, 
-                  solidHeader = TRUE, 
-                  plotlyOutput("bubbleplot")),
-              collapsible = TRUE
+              box(width =12,
+                  box(width = 12, id = "animateboth", actionButton("anim", "Animate")),
+                  box(width = 4, id = "bubblegeo", plotlyOutput("bubble_geo")),
+                  box(width = 4, id = "bubbletemp",  plotlyOutput("bubble_temp")),
+                  box(width = 4, id = "bubbleboth",  plotlyOutput("bubble_both"))
+              )
             ),
             
             fluidRow(
-              box(title = NULL,
-                  width = 12, 
-                  box(width = 6, 
-                      solidHeader = TRUE,
-                      plotlyOutput("geoecc")),
-                  box(width = 6, 
-                      solidHeader = TRUE, 
-                      plotlyOutput("tempecc")),
-                  collapsible = TRUE)
-              
+              box(width = 12,
+                  box(width = 6, plotlyOutput("geo_histogram2")),
+                  box(width = 6, plotlyOutput("temp_histogram2"))
+              )
             )
     ),
     
