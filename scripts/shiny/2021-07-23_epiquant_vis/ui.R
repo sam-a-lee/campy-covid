@@ -27,14 +27,10 @@ header <- dashboardHeader(title = "EpiQuant Vis")
 sidebar <- dashboardSidebar(
   sidebarMenu(id = 'sidebarmenu',
               
-              # Cluster visualization tab
-              menuItem("Cluster movement",tabName = "clusterMove"),
-              
-              # Strain visualization tab
-              menuItem("Strain identification", tabName = "strainId"),
               
               # ECC indices tab
               menuItem("ECC indices", tabName = "eccIndices"),
+              menuItem("Maps", tabName = "maps"),
               
               # Data exploration tab
               menuItem("Explore the data", tabName = "exploreData",
@@ -46,11 +42,11 @@ sidebar <- dashboardSidebar(
                                                    "Largest delta temporal ECC" = 3, "None" = 4), selected = 1),
                        radioButtons("region", "Regional granularity",
                                     choices = list("No faceting" = 1, "By country" = 2,
-                                                   "By province" = 3), selected = 1)
-                       # conditionalPanel(
-                       #     condition = "input.region == 3",
-                       #     selectizeInput("regionProvince", "View provinces in: ", unique(strains$country),
-                       #                    selected = NULL, multiple = FALSE))
+                                                   "By province" = 3), selected = 1),
+                       conditionalPanel(
+                           condition = "input.region == 3",
+                           selectizeInput("regionProvince", "View provinces in: ", unique(strains$country),
+                                          selected = NULL, multiple = FALSE))
               ),
               
               # Data filters
@@ -134,181 +130,102 @@ body <- dashboardBody(
                               background-color: #1F78C8;
                               }
                               '))),
-
+  
   tags$head(tags$style('#animateboth .box-header{ display: none}')),
   tags$head(tags$style('#bubblegeo .box-header{ display: none}')),
   tags$head(tags$style('#bubbletemp .box-header{ display: none}')),
   tags$head(tags$style('#bubbleboth .box-header{ display: none}')),
-
+  
   
   tabItems(
-    tabItem(tabName = "clusterMove",
-            # tab title
-            h2("Cluster movement"),
-            
-            fluidRow(
-              valueBoxOutput("clustercountbox", width =2),
-              valueBoxOutput("cardinalbox", width =4),
-              valueBoxOutput("speedbox", width =3),
-              valueBoxOutput("spreadbox", width =3)
-            ),
-            
-            
-            # row 1 for map of clusters and cardinal movement
-            fluidRow(
-              box(width=12,
-                  title = "", 
-                  plotlyOutput("cluster_map"),
-                  collapsible = TRUE)
-            ),
-            
-            # cardinal and radial plots
-            fluidRow(
-              box(width = 6,
-                  solidHeader = T,
-                  title = NULL,
-                  plotlyOutput("cardinal_polar", width = "100%", height = "100%")),
-              box(width = 6,
-                  title = NULL,
-                  plotlyOutput("ecc_radar", width = "100%", height = "100%"))
-            )
-    ),
     
-    
-    # strain visualizations 
-    tabItem(tabName = "strainId",
-            h2("Strain identification"),
-            
-            fluidRow(
-              valueBoxOutput("straincountbox", width =2),
-              valueBoxOutput("singleclustbox", width =2),
-              valueBoxOutput("strainmaxtp", width =3)
-              
-            ),
-            
-            # row 1 for map
-            fluidRow(
-              # map
-              box(solidHeader = TRUE, 
-                  width = 12, 
-                  plotlyOutput("strain_map", width = "100%", height = "100%"),
-                  collapsible = TRUE)
-            ),
-            
-            fluidRow( 
-              box(title = HTML("Daily number of strains identified, by phylogenetic cluster"),
-                  width = 12, 
-                  plotlyOutput("strain_cumsum", width = "100%", height = "100%"),
-                  collapsible = TRUE)
-            ),
-            
-            fluidRow(
-              
-              # geo ecc histogram by time point
-              box(title = "Daily number of strains identified, by single vs multi strain clusters", 
-                  width = 12, 
-                  solidHeader = TRUE, 
-                  plotlyOutput("singlemultclust", width = "100%", height = "100%" ))
-              
-              
-            ), 
-            
-            # row 2 for delta strain ecc data 
-            fluidRow(
-              box(title = HTML("<b>", "Delta geospatial and temporal ECC indices", "</b>"),
-                  width = 12,
-                  # geo ecc histogram by time point
-                  box(title = "Delta geospatial ECC histogram", 
-                      width = 6, 
-                      solidHeader = TRUE, 
-                      plotlyOutput("strain_delta_geo_histogram")),
-                  # temp ecc histogram by time point
-                  box(title = "Delta temporal ECC histogram", 
-                      width = 6, 
-                      solidHeader = TRUE, 
-                      plotlyOutput("strain_delta_temp_histogram")),
-                  collapsible = TRUE
-              )
-            ), 
-            
-            
-            
-            # fluid row 5
-            fluidRow(
-              # single vs multi strain histogram 
-              box(title = HTML("<b>", "Number of strains single part of single and multi strain clusters",  "</b>"),
-                  width = 12,
-                  box(width = 6,
-                      title = "Time point 1",
-                      solidHeader = TRUE, 
-                      plotlyOutput("straintypes_tp1", width = "100%", height = "100%")),
-                  box(width = 6,
-                      solidHeader = TRUE, 
-                      title = "Time point 2",
-                      plotlyOutput("straintypes_tp2", width = "100%", height = "100%")),
-                  collapsible = TRUE)
-            ),
-            
-            # fluid row 6
-            fluidRow(
-              #strain histogram 
-              box(title = HTML("<b>", "Number of new strains identified per month",  "</b>"),
-                  width = 12,
-                  box(width = 6,
-                      title = "Time point 1",
-                      solidHeader = TRUE, 
-                      plotlyOutput("strain_histogram_tp1", width = "100%", height = "100%")),
-                  box(width = 6,
-                      solidHeader = TRUE, 
-                      title = "Time point 2",
-                      plotlyOutput("strain_histogram_tp2", width = "100%", height = "100%")),
-                  collapsible = TRUE)
-            ),
-            
-            # row 7
-            fluidRow(
-              # cumulative strain identification by time point 
-              box(title = HTML("<b>", "Cumulative strain identification by cluster ",  "</b>"),
-                  width = 12, 
-                  box(width = 6, 
-                      solidHeader = TRUE,
-                      title = "Time point 1",
-                      plotlyOutput("cum_strains_tp1")),
-                  box(width = 6, 
-                      solidHeader = TRUE, 
-                      title = "Time point 2",
-                      plotlyOutput("cum_strains_tp2")),
-                  collapsible = TRUE)
-            )
-    ),
     
     # strain visualizations 
     tabItem(tabName = "eccIndices",
-            h2("Epicluster cohesion indices"),
-            
             fluidRow(
-              valueBoxOutput("geoeccbox", width =2),
-              valueBoxOutput("tempeccbox", width =2),
-              valueBoxOutput("deltageoeccbox", width =4),
-              valueBoxOutput("deltatempeccbox", width =4)
- 
+              valueBoxOutput("activegrowth", width =4),
+              valueBoxOutput("activespread", width =4),
+              valueBoxOutput("sigtransmission", width =4)
             ),
             
             fluidRow(
-              box(width =12,
-                  box(width = 12, id = "animateboth", 
-                      actionButton("anim", "Animate")
-                      ),
-                  box(width = 4, id = "bubblegeo", plotlyOutput("bubble_geo")),
-                  box(width = 4, id = "bubbletemp",  plotlyOutput("bubble_temp")),
-                  box(width = 4, id = "bubbleboth",  plotlyOutput("bubble_both"))
+              tabBox(
+                title = "Geospatial and temporal epicluster cohesion indices",
+                # The id lets us use input$tabset1 on the server to find the current tab
+                id = "tabset1",
+                width =12,
+                side = "right",
+                selected = "ECC visualizations",
+                tabPanel("Interpretation", 
+                         HTML("<p>The <strong>geospatial epicluster cohesion index&nbsp;</strong>representes the relative mean distance (km) between strains and the geographical centre of the cluster. A larger geospatial epicluster cohesion index represents a greater mean distance between strains and the cluster centre.</p>
+<p>The <strong>temporal epicluster cohesion index&nbsp;</strong>representes the relative time (days) between identification of new strains that are part of a given cluster. A larger temporal epicluster cohesion index represents a greater amount of time between the identification of one strain to the next.&nbsp;</p>
+<p>As the geospatial and temporal epicluster cohesion indices are relative to the input data, the interpretation of these values will vary between inputted data sets. i.e. A geospatial epicluster cohesion index of 0.5 may represent a distance of 75 km in one data set, but 1032 km in another data set.&nbsp;</p>
+<p><br></p>")
+                ),
+                tabPanel("ECC visualizations",
+                         plotlyOutput("bubble", height = "100%")
+                )
               )
             ),
             
             fluidRow(
-              box(width = 12,
-                  box(width = 6, plotlyOutput("geo_histogram2")),
-                  box(width = 6, plotlyOutput("temp_histogram2"))
+              tabBox(
+                title = "Cluster transmission",
+                # The id lets us use input$tabset1 on the server to find the current tab
+                id = "tabset2",
+                width =12,
+                side = "right",
+                selected = "Radar plot",
+                tabPanel("Interpretation", 
+                         HTML("<p><strong>Cluster transmission</strong> is determined by examining the<em>&nbsp;<strong>change in geospatial and temporal epicluster cohesions indices</strong></em>, and translating these differences into cluster spread and transmission, respectively. Specifically, an increase in the geospatial index indicates that the cluster is becoming more disperse (i.e. spreading geographically), whereas a decrease in the geosptial index indicates that cluster spread is becoming more isolated (i.e. strains have been identified in fewer areas than before). An increase in the temporal index indicates the length of time between identification of each new strain is increasing, and therefore the transmission of the cluster is slowing. Conversely, a decrease in the temporal index indicates that new strains are being identified more rapidly and suggests transmission is increasing.&nbsp;</p>
+<p>We can view the changes in geospatial and temporal indices by plotting them against one another and drawing vectors, which we call &quot;<strong>change vectors</strong>&quot;.&nbsp;</p>
+<p>To ease and spead the intepreation of change vectors, we convert them to an angle and plot them on a 16-rose compass that describes how the spread and transmission are changing. We summarize this information using a <strong>radar plot</strong>, which describes the number of clusters displaying a given change in spread and transmission.&nbsp;</p>
+<p><br></p>")
+                ),
+                tabPanel("Change vectors",
+                         plotlyOutput("changevector", height = "100%")
+                ),
+                tabPanel("Radar plot",
+                         plotlyOutput("radar", height = "100%")
+                )
+                
+              )
+            ),
+            
+            fluidRow(
+              tabBox(
+                title = "Cluster growth",
+                # The id lets us use input$tabset1 on the server to find the current tab
+                id = "tabset2",
+                width =12,
+                side = "right",
+                selected = "Growth visualizations",
+                tabPanel("Interpretation", 
+                         HTML("")
+                ),
+                tabPanel("Growth visualizations",
+                         plotlyOutput("cluster_growth", height = "100%")
+                )
+              )
+            ),
+    ),
+    
+    tabItem(tabName = "maps",
+            fluidRow(
+              tabBox(
+                title = "Maps",
+                # The id lets us use input$tabset1 on the server to find the current tab
+                id = "tabset2",
+                width =12,
+                side = "right",
+                selected = "Maps",
+                tabPanel("Interpretation", 
+                         HTML("")
+                ),
+                tabPanel("Maps",
+                         plotlyOutput("cluster_map", height = "100%"),
+                         plotlyOutput("strain_map", height = "100%")
+                )
               )
             )
     ),
