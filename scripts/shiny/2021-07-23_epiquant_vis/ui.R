@@ -45,7 +45,7 @@ sidebar <- dashboardSidebar(
                                                    "By province" = 3), selected = 1),
                        conditionalPanel(
                            condition = "input.region == 3",
-                           selectizeInput("regionProvince", "View provinces in: ", unique(strains$country),
+                           selectizeInput("regionProvince", "View provinces in: ", c("China", "France", "Italy"),
                                           selected = NULL, multiple = FALSE))
               ),
               
@@ -155,14 +155,17 @@ body <- dashboardBody(
                 id = "tabset1",
                 width =12,
                 side = "right",
-                selected = "ECC visualizations",
+                selected = "ECC bubble plots",
                 tabPanel("Interpretation", 
                          HTML("<p>The <strong>geospatial epicluster cohesion index&nbsp;</strong>representes the relative mean distance (km) between strains and the geographical centre of the cluster. A larger geospatial epicluster cohesion index represents a greater mean distance between strains and the cluster centre.</p>
 <p>The <strong>temporal epicluster cohesion index&nbsp;</strong>representes the relative time (days) between identification of new strains that are part of a given cluster. A larger temporal epicluster cohesion index represents a greater amount of time between the identification of one strain to the next.&nbsp;</p>
 <p>As the geospatial and temporal epicluster cohesion indices are relative to the input data, the interpretation of these values will vary between inputted data sets. i.e. A geospatial epicluster cohesion index of 0.5 may represent a distance of 75 km in one data set, but 1032 km in another data set.&nbsp;</p>
 <p><br></p>")
                 ),
-                tabPanel("ECC visualizations",
+                tabPanel("ECC histograms",
+                         plotlyOutput("ecc_histograms", height = "100%")
+                ),
+                tabPanel("ECC bubble plots",
                          plotlyOutput("bubble", height = "100%")
                 )
               )
@@ -202,6 +205,8 @@ body <- dashboardBody(
                 selected = "Growth visualizations",
                 tabPanel("Interpretation", 
                          HTML("")
+                ),
+                tabPanel("Single vs multi strain"
                 ),
                 tabPanel("Growth visualizations",
                          plotlyOutput("cluster_growth", height = "100%")

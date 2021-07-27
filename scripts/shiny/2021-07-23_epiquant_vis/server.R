@@ -65,9 +65,9 @@ directions$degree_mid <- c(0,22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180, 202.5,2
 server <- function(input, output, session) { 
     
     
-    #########################
-    # get data to visualize #
-    #########################
+    #######################################
+    # get user inputted data to visualize #
+    #######################################
     
     # create reactive values
     vals <- reactiveValues(data_raw = NULL, data_proc = NULL, clusters = NULL, strains = NULL)
@@ -77,27 +77,23 @@ server <- function(input, output, session) {
         vals$data_raw <- read_xlsx(input$userFile$datapath) #n_max=1000
     }, ignoreNULL = T)
     
+    #####################
+    # process user data #
+    #####################
     
-    # process data
     observeEvent(vals$data_raw, {
         
         print("new data!")
         
+        # get data 
         eccdata <- vals$data_raw
         
-        print("ecc data class")
-        print(class(eccdata))
+        #################
+        # clean eccdata #
+        #################
         
-        print("col class")
-        print(lapply(eccdata, class))
-        
-        print("removing boring columns...")
-        # remove non-informative cols
-        eccdata <- eccdata[,-c(32:35)]
-        
+        # rename columns, remove spaces, all lowercase
         print("naming nicely...")
-        # rename columns
-        # remove spaces, all lowercase
         colnames(eccdata) <- c("strain", "country", "province", "city", "strain_latitude", 
                                "strain_longitude", "day", "month", "year", "present_at_tp1", 
                                "tp1_cluster", "tp1_cluster_size_2", "tp1_t0_ecc_0.1.0", 
@@ -109,6 +105,8 @@ server <- function(input, output, session) {
                                "avg_tp1_geo_dist_km", "avg_tp2_date", 
                                "avg_tp2_temporal_dist_days", "avg_tp2_latitude", 
                                "avg_tp2_longitude", "avg_tp2_geo_dist_km", 
+                               "first_obs_tp1", "last_obs_tp1", 
+                               "first_obs_tp2", "last_obs_tp2",
                                "tp1_cluster_size", "tp2_cluster_size", 
                                "delta_cluster_size", "num_additional_tp1_strains_tp2", 
                                "num_novel_tp2_strains", "overall_cluster_growth_rate", 
@@ -118,23 +116,104 @@ server <- function(input, output, session) {
         eccdata <- eccdata %>% subset(tp1_cluster != 0 )
         
         print("coverting classes...")
-        
-        # covert appropriate columns to numeric
-        eccdata[,c(5:10, 12:15, 17:21, 23:26, 28:39)] <- 
-            sapply(eccdata[,c(5:10, 12:15, 17:21, 23:26, 28:39)], as.numeric)
-        
-        # convert character columns and grouping vars to factor
-        # e.g. names, whether a strain is present at tp1
-        eccdata[,c(1:4, 10:11, 15:16)] <- 
-            sapply(eccdata[,c(1:4, 10:11, 15:16)], as.factor)
+        # convert columns to appropriate types
+        # as.is = T specifies character stays as character
+        # type.convert is table and used in read.table
+        eccdata <- lapply(eccdata, type.convert, as.is = T)
+        eccdata <- bind_rows(eccdata)
         
         # format date columns
+        # these should be in a single column in new epiquant format
         eccdata$avg_tp1_date <- as.Date(eccdata$avg_tp1_date, format = "%d-%m-%y") 
         eccdata$avg_tp2_date <- as.Date(eccdata$avg_tp2_date, format = "%d-%m-%y")
         
+        ##################################
+        # calculate cluster transmission #
+        ##################################
+        
+        eccdata <- eccdata %>% 
+            mutate(ecc_angle_delta = angle(delta_ecc_0.1.0, delta_ecc_0.0.1))
+        
+        # use new column to assign ecc values speed, spread, and combined
+        eccdata <- eccdata %>%
+            mutate(ecc_direction_delta = cut(ecc_angle_delta,
+                                             breaks = c(0, directions$degree_max, 360), 
+                                             labels = c(directions$ecc_comb, 'F')),
+                   ecc_speed = cut(ecc_angle_delta, 
+                                   breaks = c(0, directions$degree_max, 360), 
+                                   labels = c(directions$ecc_speed, 'F')),
+                   ecc_spread = cut(ecc_angle_delta,
+                                    breaks = c(0, directions$degree_max, 360), 
+                                    labels = c(directions$ecc_spread, 'F')))
+        
+        # convert to factor
+        eccdata$ecc_direction_delta <- as.factor(eccdata$ecc_direction_delta)
+        
+        # set levels 
+        eccdata$ecc_direction_delta <-  factor(eccdata$ecc_direction_delta, 
+                                               levels = c("Slower", "Slower/Slower, isolated", "Slower, Isolated", "Isolated/Slower, isolated",
+                                                          "Isolated", "Isolated/Faster, isolated", "Faster, Isolated", "Faster/Faster, isolated",
+                                                          "Faster", "Faster/Faster, dispersed", "Faster, dispersed", "Dispersed/Faster, dispersed", 
+                                                          "Dispersed", "Dispersed/Slower, dispersed", "Slower, dispersed", "Slower/Slower, dispersed"))
+        
+        #############################
+        # calculate cluster bearing #
+        #############################
+        
+        # get bearing (direction of change)
+        eccdata$bearing_delta <- bearing(as.matrix(eccdata[,c("avg_tp1_longitude", "avg_tp1_latitude")]),
+                                         as.matrix(eccdata[,c("avg_tp2_longitude", "avg_tp2_latitude")]))
+        
+        # convert bearing to compass direction
+        # centre on directions 
+        eccdata$cardinal_delta <- sapply(eccdata$bearing_delta, function(x){
+            
+            if(x <= 11.25 & x >= 0) {return("N")}
+            if(x > 11.25 & x <= 33.75) {return("NNE")}
+            if(x > 33.75 & x <= 56.25) {return("NE")}
+            if(x > 56.25 & x <= 78.75) {return("ENE")}
+            if(x > 78.75 & x <= 101.25) {return("E")}
+            if(x > 101.25 & x <= 123.75) {return("ESE")}
+            if(x > 123.75 & x <= 146.25) {return("SE")}
+            if(x > 146.25 & x <= 168.75) {return("SSE")}
+            if(x > 168.5 & x <= 180) {return("S")}
+            if(x < -168.5 & x >= -180) {return("S")}
+            if(x < -146.25 & x >= -168.5) {return("SSW")}
+            if(x < -123.75 & x >= -146.25) {return("SW")}
+            if(x < -101.25 & x >= -123.75) {return("WSW")}
+            if(x < -78.75 & x >= -101.25) {return("W")}
+            if(x < -56.25 & x >= -78.75) {return("WNW")}
+            if(x < -33.75 & x >= -56.25) {return("NW")}
+            if(x < -11.25 & x >= -33.75) {return("NNW")}
+            if(x < 0 & x >= -11.25) {return("N")}
+        })  
+        
+        
+        # convert to factor
+        eccdata$cardinal_delta <- as.factor(eccdata$cardinal_delta)
+        
+        # set levels
+        levels(eccdata$cardinal_delta) <-  c("N", "NNE", "NE", "ENE",
+                                             "E", "ESE", "SE", "SSE",
+                                             "S", "SSW", "SW", "WSW", 
+                                             "W", "WNW", "NW", "NNW")
+        
+        # set levels 
+        eccdata$cardinal_delta_long <- plyr::revalue(eccdata$cardinal_delta, 
+                                                     c("N" = "North", "NNE" = "North/Northeast", "NE" = "Northeast", "ENE" = "East/Northeast",
+                                                       "E"= "East", "ESE" = "East/Southeast", "SE" = "Southeast", "SSE" = "South/Southeast", 
+                                                       "S" = "South", "SSW" = "South/Southwest", "SW" = "Southwest", "WSW" = "West/Southwest", 
+                                                       "W" = "West", "WNW" = "West/Northwest", "NW" = "Northwest", "NNW" = "North/Northwest"))
+        
+        # write processed data to reactive vals 
+        # will show to user in table later
         vals$data_proc <- eccdata
         
-        print("formatting cluster data...")
+        ##################################
+        # pull out cluster specific info #
+        ##################################
+        
+        print("pulling cluster data...")
         
         # tp1 cluster data
         clusters <- eccdata %>% 
@@ -167,95 +246,14 @@ server <- function(input, output, session) {
                       num_novel_tp2_strains = mean(num_novel_tp2_strains),
                       overall_cluster_growth_rate = mean(overall_cluster_growth_rate),
                       cluster_novel_growth_rate = mean(cluster_novel_growth_rate),
+                      ecc_direction_delta = unique(ecc_direction_delta),
+                      ecc_speed = unique(ecc_speed),
+                      ecc_spread = unique(ecc_spread),
+                      bearing_delta = mean(bearing_delta),
+                      cardinal_delta = unique(cardinal_delta),
+                      cardinal_delta_long = unique(cardinal_delta_long),
                       type = mean(type))
         
-        # get bearing (direction of change)
-        clusters$bearing_delta <- bearing(as.matrix(clusters[,c("avg_tp1_longitude", "avg_tp1_latitude")]),
-                                          as.matrix(clusters[,c("avg_tp2_longitude", "avg_tp2_latitude")]))
-        
-        # convert bearing to compass direction
-        # centre on directions 
-        clusters$cardinal_delta <- sapply(clusters$bearing_delta, function(x){
-            
-            if(x <= 11.25 & x >= 0) {return("N")}
-            if(x > 11.25 & x <= 33.75) {return("NNE")}
-            if(x > 33.75 & x <= 56.25) {return("NE")}
-            if(x > 56.25 & x <= 78.75) {return("ENE")}
-            if(x > 78.75 & x <= 101.25) {return("E")}
-            if(x > 101.25 & x <= 123.75) {return("ESE")}
-            if(x > 123.75 & x <= 146.25) {return("SE")}
-            if(x > 146.25 & x <= 168.75) {return("SSE")}
-            if(x > 168.5 & x <= 180) {return("S")}
-            if(x < -168.5 & x >= -180) {return("S")}
-            if(x < -146.25 & x >= -168.5) {return("SSW")}
-            if(x < -123.75 & x >= -146.25) {return("SW")}
-            if(x < -101.25 & x >= -123.75) {return("WSW")}
-            if(x < -78.75 & x >= -101.25) {return("W")}
-            if(x < -56.25 & x >= -78.75) {return("WNW")}
-            if(x < -33.75 & x >= -56.25) {return("NW")}
-            if(x < -11.25 & x >= -33.75) {return("NNW")}
-            if(x < 0 & x >= -11.25) {return("N")}
-        })  
-        
-        
-        # convert to factor
-        clusters$cardinal_delta <- as.factor(clusters$cardinal_delta)
-        
-        # set levels
-        levels(clusters$cardinal_delta) <-  c("N", "NNE", "NE", "ENE",
-                                              "E", "ESE", "SE", "SSE",
-                                              "S", "SSW", "SW", "WSW", 
-                                              "W", "WNW", "NW", "NNW")
-        
-        # set levels 
-        clusters$cardinal_delta_long <- 
-            plyr::revalue(clusters$cardinal_delta, c("N" = "North", 
-                                                     "NNE" = "North/Northeast",
-                                                     "NE" = "Northeast", 
-                                                     "ENE" = "East/Northeast",
-                                                     "E"= "East", 
-                                                     "ESE" = "East/Southeast", 
-                                                     "SE" = "Southeast", 
-                                                     "SSE" = "South/Southeast", 
-                                                     "S" = "South", 
-                                                     "SSW" = "South/Southwest",
-                                                     "SW" = "Southwest", 
-                                                     "WSW" = "West/Southwest", 
-                                                     "W" = "West",
-                                                     "WNW" = "West/Northwest",
-                                                     "NW" = "Northwest",
-                                                     "NNW" = "North/Northwest"))
-        
-        
-        
-        # calculate the angle based that delta ECCs form
-        clusters <- clusters %>% 
-            mutate(ecc_angle_delta = angle(delta_ecc_0.1.0, delta_ecc_0.0.1))
-        
-        # use new column to assign ecc values speed, spread, and combined
-        clusters <- clusters %>%
-            mutate(ecc_direction_delta = cut(ecc_angle_delta,
-                                             breaks = c(0, directions$degree_max, 360), 
-                                             labels = c(directions$ecc_comb, 'F')),
-                   ecc_speed = cut(ecc_angle_delta, 
-                                   breaks = c(0, directions$degree_max, 360), 
-                                   labels = c(directions$ecc_speed, 'F')),
-                   ecc_spread = cut(ecc_angle_delta,
-                                    breaks = c(0, directions$degree_max, 360), 
-                                    labels = c(directions$ecc_spread, 'F')))
-        
-        # convert to factor
-        clusters$ecc_direction_delta <- as.factor(clusters$ecc_direction_delta)
-        
-        # set levels 
-        clusters$ecc_direction_delta <-  factor(clusters$ecc_direction_delta, 
-                                                levels = c("Slower", "Slower/Slower, isolated", "Slower, Isolated", "Isolated/Slower, isolated",
-                                                           "Isolated", "Isolated/Faster, isolated", "Faster, Isolated", "Faster/Faster, isolated",
-                                                           "Faster", "Faster/Faster, dispersed", "Faster, dispersed", "Dispersed/Faster, dispersed", 
-                                                           "Dispersed", "Dispersed/Slower, dispersed", "Slower, dispersed", "Slower/Slower, dispersed"))
-        
-        # convert to dataframe
-        clusters <- as.data.frame(clusters)
         
         # select only complete cases
         clusters_cc <- na.omit(clusters)
@@ -278,44 +276,37 @@ server <- function(input, output, session) {
                                                        "avg_temporal_dist", "avg_geo_dist",
                                                        "cluster_size"))
         
-        # add in pop text for clusters in map
-        clusters_long$maptext <-
-            paste0('<strong>', clusters_long$tp1_cluster, '</strong>','<br/>',
-                   'Timepoint: ', '<strong>', clusters_long$timepoint, '</strong>', '<br/>',
-                   'Cluster size: ', clusters_long$cluster_size_2, '<br/>',
-                   'Temporal ECC: ', clusters_long$ecc_0.0.1, '<br/>',
-                   'Geospatial ECC: ', clusters_long$ecc_0.1.0, '<br/>') %>%
-            lapply(htmltools::HTML) 
-        
-        # calculate the angle based that delta ECCs form
-        clusters_long <- clusters_long %>% 
-            mutate(ecc_angle = angle(ecc_0.1.0, ecc_0.0.1))
-        
+        # specify key for crosstalk shareddata
         clusters_long$key <- as.numeric(rownames(clusters_long))
         
+        # write to reactive vals df 
+        # to be displayed in table later
         vals$clusters <- clusters_long
         
         print("formatting strain data...")
         
+        #################################
+        # pull out strain specific info #
+        #################################
+        
+        # grab pertinent columns
         strains <- eccdata %>%
             select(strain, country, province, city, year, month, day,
                    strain_latitude, strain_longitude, present_at_tp1, 
                    tp1_cluster,tp1_cluster_size_2, present_at_tp2, 
                    tp2_cluster, tp2_cluster_size_2, tp1_t0_ecc_0.1.0, 
                    tp2_t0_ecc_0.1.0, tp1_t0_ecc_0.0.1, tp2_t0_ecc_0.0.1,
-                   delta_ecc_0.1.0, delta_ecc_0.0.1, type)
+                   delta_ecc_0.1.0, delta_ecc_0.0.1, type, ecc_angle_delta,
+                   ecc_direction_delta, ecc_speed, ecc_spread, bearing_delta,
+                   cardinal_delta, cardinal_delta_long)
         
+        # hit 
         strains <- strains %>%
-            mutate(strain_latitude_jit = round(jitter(as.numeric(strain_latitude),10,1),digits=4)) %>%
-            mutate(strain_longitude_jit = round(jitter(as.numeric(strain_longitude),10,1),digits=4))
+            mutate(latitude_jit = round(jitter(as.numeric(strain_latitude),10,1),digits=4)) %>%
+            mutate(longitude_jit = round(jitter(as.numeric(strain_longitude),10,1),digits=4))
         
         # make column for strain date instead of having three separate columns
-        strains$strain_date <- paste(strains$day, 
-                                     strains$month, 
-                                     strains$year, 
-                                     sep = "-")
-        
-        strains$strain_date <- as.Date(strains$strain_date, format = "%d-%m-%y")
+        strains$strain_date <- as.Date(paste(strains$day, strains$month, strains$year, sep = "-"), format = "%d-%m-%y")
         
         # create time difference for ridgeline plots 
         strains <- strains %>% mutate(stain_time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y"))))
@@ -330,7 +321,7 @@ server <- function(input, output, session) {
                                         ifelse(tp1_cluster_size_2<=2 & timepoint ==1, "Single strain clusters",
                                                ifelse(tp2_cluster_size_2>2 & timepoint ==2, "Multi strain clusters", "Single strain clusters"))))
         
-        
+        # convert to long form
         strains_long <- data.table::melt(setDT(strains),
                                          measure.vars=list(c("tp1_t0_ecc_0.0.1", "tp2_t0_ecc_0.0.1"),
                                                            c("tp1_t0_ecc_0.1.0", "tp2_t0_ecc_0.1.0"),
@@ -338,11 +329,15 @@ server <- function(input, output, session) {
                                          variable.name='timepoint2', value.name=c("ecc_0.0.1", "ecc_0.1.0",
                                                                                   "cluster_size_2"))
         
-        
-        # create unique row ids for shared cluster and strain data
+        # create unique row ids for shared data
         strains_long$key <- as.numeric(rownames(strains_long))
         
+        # write out to reactive vals object
         vals$strains_long <- strains_long
+        
+        ############################################## 
+        # update selectize inputs based on user data #
+        ##############################################
         
         print("updating selectize inputs...")
         
@@ -364,7 +359,6 @@ server <- function(input, output, session) {
         sliderInput(inputId = "delta_ecc_0.0.1", label = "delta ecc_0.0.1", min = min(vals$clusters$delta_ecc_0.0.1, na.rm = T), max = max(vals$clusters$delta_ecc_0.0.1, na.rm = T), value = c(min(vals$clusters$delta_ecc_0.0.1, na.rm = T), max(vals$clusters$delta_ecc_0.0.1, na.rm = T)))
         sliderInput(inputId = "delta_ecc_0.1.0", label = "delta ecc_0.1.0", min = min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max = max(vals$clusters$delta_ecc_0.1.0, na.rm = T), value = c(min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max(vals$clusters$delta_ecc_0.1.0, na.rm = T)))
         #update stain filters
-        # strain filters
         updateSelectInput(inputId = "country", label = "Country", choices = unique(vals$strains_long$country),  selected = NULL)
         updateSelectInput(inputId = "province", label = "Province", choices = unique(vals$strains_long$province),  selected = NULL)
     })
@@ -377,7 +371,7 @@ server <- function(input, output, session) {
     clusters_r <- reactive({
         
         print("creating reactive cluster data...")
-        print(vals$clus)
+        print(vals$clusters)
         
         req(vals$clusters)
         data <- vals$clusters 
@@ -437,26 +431,28 @@ server <- function(input, output, session) {
     
     strains_r_group <- reactive({
         
-        test <- strains_r()
+        ungrouped <- strains_r()
         if (input$region == 2) {
-            test %>%
+            ungrouped %>%
                 group_by(country, tp1_cluster, timepoint) %>%
                 summarize(n = n(),
                           ecc_0.0.1 = mean(ecc_0.0.1),
-                          ecc_0.1.0 = mean(ecc_0.1.0)) %>%
+                          ecc_0.1.0 = mean(ecc_0.1.0),
+                          ecc_comb = unique(as.character(ecc_direction_delta))) %>%
                 rowid_to_column(., var = "rowid") %>%
                 group_by(country) 
         } else if (input$region == 3){
-            test %>%
+            ungrouped %>%
                 subset(country %in% input$regionProvince) %>% 
                 group_by(province, tp1_cluster, timepoint) %>%
                 summarize(n = n(),
                           ecc_0.0.1 = mean(ecc_0.0.1),
-                          ecc_0.1.0 = mean(ecc_0.1.0)) %>%
+                          ecc_0.1.0 = mean(ecc_0.1.0),
+                          ecc_comb = unique(as.character(ecc_direction_delta))) %>%
                 rowid_to_column(., var = "rowid") %>%
                 group_by(province) 
         } else {
-            test
+            ungrouped
         }
         
         
@@ -465,7 +461,6 @@ server <- function(input, output, session) {
     # strain shared data
     strains_sh <- SharedData$new(strains_r, key = ~key, group = "strains")
     strains_sh_gr <- SharedData$new(strains_r_group, key = ~rowid, group = "strains_grouped")
-    
     
     #################################
     # data frames displayed in tabs #
@@ -559,7 +554,7 @@ server <- function(input, output, session) {
         valueBox(
             subtitle = "clusters with significant local transmission",
             value = nrow(clusters_r() %>% 
-                             slice(which(clusters$ecc_spread=="Isolated")) %>% 
+                             slice(which(clusters_r()$ecc_spread=="Isolated")) %>% 
                              subset(overall_cluster_growth_rate >= 3))
         )
     })
@@ -742,7 +737,7 @@ server <- function(input, output, session) {
         } else if (input$region == 2 ){
             
             a <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.0.1, y=1, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5, fill ="#898a8c") +
+                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
                               scale_x_continuous(breaks=seq(0, 1, 0.5),
                                                  limits=c(0,1)) +
                               facet_wrap(~country, scales = "free_y") +
@@ -767,7 +762,7 @@ server <- function(input, output, session) {
             
             
             b <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.1.0, y=1, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5) +
+                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
                               scale_x_continuous(breaks=seq(0, 1, 0.5),
                                                  limits=c(0,1)) +
                               facet_wrap(~country, scales = "free_y") +
@@ -792,7 +787,7 @@ server <- function(input, output, session) {
             
             
             c <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.0.1, y=ecc_0.1.0, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5) +
+                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
                               scale_x_continuous(breaks=seq(0, 1, 0.5),
                                                  limits=c(0,1)) +
                               scale_y_continuous(breaks=seq(0, 1, 0.5),
@@ -832,7 +827,7 @@ server <- function(input, output, session) {
         } else if (input$region == 3) {
             
             a <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.0.1, y=1, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5, fill ="#898a8c") +
+                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
                               scale_x_continuous(breaks=seq(0, 1, 0.5),
                                                  limits=c(0,1)) +
                               facet_wrap(~province, scales = "free_y") +
@@ -857,7 +852,7 @@ server <- function(input, output, session) {
             
             
             b <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.1.0, y=1, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5) +
+                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
                               scale_x_continuous(breaks=seq(0, 1, 0.5),
                                                  limits=c(0,1)) +
                               facet_wrap(~province, scales = "free_y") +
@@ -882,7 +877,7 @@ server <- function(input, output, session) {
             
             
             c <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.0.1, y=ecc_0.1.0, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5) +
+                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
                               scale_x_continuous(breaks=seq(0, 1, 0.5),
                                                  limits=c(0,1)) +
                               scale_y_continuous(breaks=seq(0, 1, 0.5),
@@ -922,41 +917,236 @@ server <- function(input, output, session) {
         
     })
     
+    output$ecc_histograms <- renderPlotly({
+        
+        # no faceting 
+        geo <- plot_ly() %>%
+            add_trace(data = strains_sh,
+                      type = "histogram",
+                      x = ~ecc_0.1.0,
+                      frame = ~timepoint2,
+                      color = I("#898a8c"),
+                      xbins = list(size = 0.01),
+                      showlegend = FALSE) %>%
+            layout(xaxis = list(range = c(0,1),
+                                title = "Geospatial epicluster cohesion index"),
+                   yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                                                       filter(selected_ | is.na(selected_))))),
+                   annotations = list(text= "Geospatial epicluster cohesion index",
+                                      xref = "paper",
+                                      yref = "paper",
+                                      yanchor = "bottom",
+                                      xanchor = "center",
+                                      align = "center",
+                                      x = 0.5,
+                                      y = -0.3,
+                                      showarrow = FALSE)) %>%
+            highlight(color = "#1F78C8")
+        
+        delta_geo <- plot_ly() %>%
+            add_trace(data = strains_sh,
+                      type = "histogram",
+                      x = ~delta_ecc_0.1.0,
+                      frame = ~timepoint2,
+                      color = I("#898a8c"),
+                      xbins = list(size = 0.01),
+                      showlegend = FALSE) %>%
+            layout(xaxis = list(range = c(-1,1),
+                                title = "Delta geospatial epicluster cohesion index"),
+                   yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                                                      filter(selected_ | is.na(selected_))))),
+                   annotations = list(text= "Delta geospatial epicluster cohesion index",
+                                      xref = "paper",
+                                      yref = "paper",
+                                      yanchor = "bottom",
+                                      xanchor = "center",
+                                      align = "center",
+                                      x = 0.5,
+                                      y = -0.3,
+                                      showarrow = FALSE)) %>%
+            highlight(color = "#1F78C8")
+        
+        
+        temp <- plot_ly() %>%
+            add_trace(data = strains_sh,
+                      type = "histogram",
+                      x = ~ecc_0.0.1,
+                      frame = ~timepoint2,
+                      color = I("#898a8c"), 
+                      xbins = list(size = 0.01),
+                      showlegend = FALSE) %>%
+            layout(xaxis = list(range = c(0,1),
+                                title = "Temporal epicluster cohesion index"),
+                   yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                                                      filter(selected_ | is.na(selected_))))),
+                   annotations = list(text= "Temporal epicluster cohesion index",
+                                      xref = "paper",
+                                      yref = "paper",
+                                      yanchor = "bottom",
+                                      xanchor = "center",
+                                      align = "center",
+                                      x = 0.5,
+                                      y = -0.3,
+                                      showarrow = FALSE)) %>%
+            highlight(color = "#1F78C8")
+        
+        delta_temp <- plot_ly() %>%
+            add_trace(data = strains_sh,
+                      type = "histogram",
+                      x = ~delta_ecc_0.0.1,
+                      frame = ~timepoint2,
+                      color = I("#898a8c"), 
+                      xbins = list(size = 0.01),
+                      showlegend = FALSE) %>%
+            layout(xaxis = list(range = c(-1,1),
+                                title = "Delta temporal epicluster cohesion index"),
+                   yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                                                      filter(selected_ | is.na(selected_))))),
+                   annotations = list(text= "Delta temporal epicluster cohesion index",
+                                      xref = "paper",
+                                      yref = "paper",
+                                      yanchor = "bottom",
+                                      xanchor = "center",
+                                      align = "center",
+                                      x = 0.5,
+                                      y = -0.3,
+                                      showarrow = FALSE)) %>%
+            highlight(color = "#1F78C8")
+        
+        
+        subplot(subplot(geo, temp, nrows=1), subplot(delta_geo, delta_temp, nrows=1), nrows=2, margin = 0.05) %>%
+            layout(yaxis = list(title = "Number of strains"))
+        
+        
+    })
+    
     output$radar <- renderPlotly({
         
-        
-        # change to change
-        plot_ly(type="scatterpolar",
-                data = clusters_sh$data(withSelection = TRUE) %>%
-                    mutate(selfact = selection_factor(.),
-                           ecc_comb = ecc_direction_delta) %>%
-                    group_by(selfact) %>%
-                    distinct(tp1_cluster, .keep_all = T) %>%
-                    count(ecc_comb, .drop=FALSE) %>%
-                    full_join(directions, by = c('ecc_comb')),
-                r = ~n,
-                theta = ~degree_mid,
-                color = ~selfact,
-                colors = c("#898a8c", "#1F78C8"),
-                fill = 'toself') %>%
-            layout(showlegend = F,
-                   margin = list(l = 100, r = 100),
-                   polar = list(
-                       angularaxis = list(
-                           rotation = 90,
-                           direction = 'clockwise',
-                           tickmode = 'array',
-                           tickvals = c(0, 45,  90, 135, 180,
-                                        225, 270, 315),
-                           ticktext = c("Slower spread",
-                                        HTML(paste("Slower spread,", "<br>", "more concentrated")),
-                                        HTML(paste("More ", "<br>", "concentrated", sep="")),
-                                        HTML(paste("Faster spread,", "<br>", "more concentrated")),
-                                        "Faster spread",
-                                        HTML(paste("Faster spread,", "<br>", "more disperse")),
-                                        HTML(paste("More ", "<br>", "disperse", sep="")),
-                                        HTML(paste("Slower spread,", "<br>", "more disperse"))))))
-        
+        if (input$region ==1) {
+            # change to change
+            plot_ly(type="scatterpolar",
+                    data = clusters_sh$data(withSelection = TRUE) %>%
+                        filter(selected_ | is.na(selected_)) %>%
+                        mutate(ecc_comb = ecc_direction_delta) %>%
+                        group_by(timepoint) %>%
+                        count(ecc_comb, .drop=FALSE) %>%
+                        full_join(directions, by = c('ecc_comb')) %>%
+                        mutate(cardinal = factor(cardinal, levels =c("N", "NNE", "NE", "ENE",
+                                                                     "E", "ESE", "SE", "SSE",
+                                                                     "S", "SSW", "SW", "WSW", 
+                                                                     "W", "WNW", "NW", "NNW"))),
+                    r = ~n,
+                    theta = ~degree_mid,
+                    color = I("#898a8c"),
+                    frame = ~timepoint, 
+                    fill = 'toself') %>%
+                layout(showlegend = F,
+                       margin = list(l = 100, r = 100),
+                       polar = list(
+                           angularaxis = list(
+                               rotation = 90,
+                               direction = 'clockwise',
+                               tickmode = 'array',
+                               tickvals = c(0, 45,  90, 135, 180,
+                                            225, 270, 315),
+                               ticktext = c("Slower spread",
+                                            HTML(paste("Slower spread,", "<br>", "more concentrated")),
+                                            HTML(paste("More ", "<br>", "concentrated", sep="")),
+                                            HTML(paste("Faster spread,", "<br>", "more concentrated")),
+                                            "Faster spread",
+                                            HTML(paste("Faster spread,", "<br>", "more disperse")),
+                                            HTML(paste("More ", "<br>", "disperse", sep="")),
+                                            HTML(paste("Slower spread,", "<br>", "more disperse"))))))
+        } else if (input$region == 2) {
+            
+            # by country 
+            strains_sh_gr$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                # group_by(country, tp1_cluster, timepoint) %>%
+                # summarize(ecc_0.0.1 = mean(ecc_0.0.1),
+                #           ecc_0.1.0 = mean(ecc_0.1.0),
+                #           ecc_comb = unique(as.character(ecc_direction_delta))) %>%
+                group_by(country, timepoint) %>%
+                #na.omit() %>%
+                count(ecc_comb, .drop=FALSE) %>%
+                full_join(directions, by = c('ecc_comb')) %>%
+                mutate(cardinal = factor(cardinal, 
+                                         levels =c("N", "NNE", "NE", "ENE",
+                                                   "E", "ESE", "SE", "SSE",
+                                                   "S", "SSW", "SW", "WSW", 
+                                                   "W", "WNW", "NW", "NNW"))) %>%
+                na.omit() %>%
+                arrange(cardinal) %>%
+                plot_ly(type="scatterpolar",
+                        frame = ~timepoint,
+                        r = ~n,
+                        split = ~country,
+                        theta = ~degree_mid,
+                        name = ~country,
+                        color  = I("#898a8c"),
+                        fill = "tonext") %>%
+                layout(margin = list(l = 100, r = 100),
+                       polar = list(
+                           angularaxis = list(
+                               rotation = 90,
+                               direction = 'clockwise',
+                               tickmode = 'array',
+                               tickvals = c(0, 45,  90, 135, 180,
+                                            225, 270, 315),
+                               ticktext = c("Slower spread",
+                                            HTML(paste("Slower spread,", "<br>", "more concentrated")),
+                                            HTML(paste("More ", "<br>", "concentrated", sep="")),
+                                            HTML(paste("Faster spread,", "<br>", "more concentrated")),
+                                            "Faster spread",
+                                            HTML(paste("Faster spread,", "<br>", "more disperse")),
+                                            HTML(paste("More ", "<br>", "disperse", sep="")),
+                                            HTML(paste("Slower spread,", "<br>", "more disperse"))))))
+            
+        } else if (input$region == 3){
+            # by province 
+            strains_sh_gr$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                #subset(country %in% input$regionProvince) %>% 
+                #group_by(province, tp1_cluster, timepoint) %>%
+                #summarize(ecc_0.0.1 = mean(ecc_0.0.1),
+                #          ecc_0.1.0 = mean(ecc_0.1.0),
+                #          ecc_comb = unique(as.character(ecc_direction_delta))) %>%
+                group_by(province, timepoint) %>%
+                #na.omit() %>%
+                count(ecc_comb, .drop=FALSE) %>%
+                full_join(directions, by = c('ecc_comb')) %>%
+                mutate(cardinal = factor(cardinal, 
+                                         levels =c("N", "NNE", "NE", "ENE",
+                                                   "E", "ESE", "SE", "SSE",
+                                                   "S", "SSW", "SW", "WSW", 
+                                                   "W", "WNW", "NW", "NNW"))) %>%
+                na.omit() %>%
+                arrange(cardinal) %>%
+                plot_ly(type="scatterpolar",
+                        frame = ~timepoint,
+                        r = ~n,
+                        split = ~province,
+                        theta = ~degree_mid,
+                        name = ~province,
+                        color  = I("#898a8c"),
+                        fill = "tonext") %>%
+                layout(margin = list(l = 100, r = 100),
+                       polar = list(
+                           angularaxis = list(
+                               rotation = 90,
+                               direction = 'clockwise',
+                               tickmode = 'array',
+                               tickvals = c(0, 45,  90, 135, 180,
+                                            225, 270, 315),
+                               ticktext = c("Slower spread",
+                                            HTML(paste("Slower spread,", "<br>", "more concentrated")),
+                                            HTML(paste("More ", "<br>", "concentrated", sep="")),
+                                            HTML(paste("Faster spread,", "<br>", "more concentrated")),
+                                            "Faster spread",
+                                            HTML(paste("Faster spread,", "<br>", "more disperse")),
+                                            HTML(paste("More ", "<br>", "disperse", sep="")),
+                                            HTML(paste("Slower spread,", "<br>", "more disperse"))))))
+        }
     })
     
     
@@ -998,7 +1188,7 @@ server <- function(input, output, session) {
     
     output$cluster_growth <- renderPlotly({
         
-        a <- plot_ly(data = clusters_long ) %>%
+        a <- plot_ly(data = clusters_sh) %>%
             add_trace(type = "scatter",
                       mode = "markers",
                       x = ~timepoint,
@@ -1011,7 +1201,7 @@ server <- function(input, output, session) {
                    xaxis = list(title = "Time point")) %>%
             highlight(color = "#1F78C8")
         
-        b <- plot_ly(data = clusters_long) %>%
+        b <- plot_ly(data = clusters_sh) %>%
             add_trace(type = "scatter",
                       mode = "markers",
                       x = ~timepoint,
@@ -1024,7 +1214,8 @@ server <- function(input, output, session) {
                    xaxis = list(title = "Time point")) %>%
             highlight(color = "#1F78C8")
         
-        test <- strains_long %>%
+        test <- strains_sh$data(withSelection = T) %>%
+            filter(selected_ | is.na(selected_)) %>%
             group_by(timepoint, tp1_cluster, strain_date) %>%
             tally()
         
@@ -1081,8 +1272,8 @@ server <- function(input, output, session) {
         plot_mapbox(mode = 'scattermapbox') %>%
             add_markers(data = strains_sh,
                         name = "Clusters",
-                        x = ~strain_longitude_jit,
-                        y = ~strain_latitude_jit,
+                        x = ~longitude_jit,
+                        y = ~latitude_jit,
                         frame = ~timepoint,
                         color = I(col),
                         size = I(5),
