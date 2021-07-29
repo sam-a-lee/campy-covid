@@ -321,6 +321,8 @@ server <- function(input, output, session) {
                                         ifelse(tp1_cluster_size_2<=2 & timepoint ==1, "Single strain clusters",
                                                ifelse(tp2_cluster_size_2>2 & timepoint ==2, "Multi strain clusters", "Single strain clusters"))))
         
+        levels(strains$single_mult) <- c("Multi strain clusters", "Single strain clusters")
+        
         # convert to long form
         strains_long <- data.table::melt(setDT(strains),
                                          measure.vars=list(c("tp1_t0_ecc_0.0.1", "tp2_t0_ecc_0.0.1"),
@@ -931,7 +933,7 @@ server <- function(input, output, session) {
             layout(xaxis = list(range = c(0,1),
                                 title = "Geospatial epicluster cohesion index"),
                    yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
-                                                       filter(selected_ | is.na(selected_))))),
+                                                      filter(selected_ | is.na(selected_))))),
                    annotations = list(text= "Geospatial epicluster cohesion index",
                                       xref = "paper",
                                       yref = "paper",
@@ -1198,7 +1200,26 @@ server <- function(input, output, session) {
                       frame=~timepoint) %>%
             layout(yaxis = list(rangemode = "tozero", 
                                 title = "Overall growth rate"),
-                   xaxis = list(title = "Time point")) %>%
+                   xaxis = list(title = "Time point"),
+                   annotations = list(list(text= "Overall cluster growth rate",
+                                           xref = "paper",
+                                           yref = "paper",
+                                           yanchor = "center",
+                                           xanchor = "center",
+                                           align = "center",
+                                           textangle = -90,
+                                           x = -0.05,
+                                           y = 0.5,
+                                           showarrow = FALSE),
+                                      list(text= "Time point",
+                                           xref = "paper",
+                                           yref = "paper",
+                                           yanchor = "center",
+                                           xanchor = "center",
+                                           align = "center",
+                                           x = 0.5,
+                                           y = -0.1,
+                                           showarrow = FALSE)))%>%
             highlight(color = "#1F78C8")
         
         b <- plot_ly(data = clusters_sh) %>%
@@ -1211,21 +1232,47 @@ server <- function(input, output, session) {
                       frame=~timepoint) %>%
             layout(yaxis = list(rangemode = "tozero",
                                 title = "Novel growth rate"),
-                   xaxis = list(title = "Time point")) %>%
+                   xaxis = list(title = "Time point"),
+                   annotations = list(list(text= "Novel cluster growth rate",
+                                           xref = "paper",
+                                           yref = "paper",
+                                           yanchor = "center",
+                                           xanchor = "center",
+                                           align = "center",
+                                           textangle = -90,
+                                           x = -0.05,
+                                           y = 0.5,
+                                           showarrow = FALSE),
+                                      list(text= "Time point",
+                                           xref = "paper",
+                                           yref = "paper",
+                                           yanchor = "center",
+                                           xanchor = "center",
+                                           align = "center",
+                                           x = 0.5,
+                                           y = -0.1,
+                                           showarrow = FALSE))) %>%
             highlight(color = "#1F78C8")
         
-        test <- strains_sh$data(withSelection = T) %>%
+        
+        subplot(a, b, nrows = 1, margin = 0.025)
+        #subplot( c, subplot(a, b, nrows = 1, margin = 0.025), nrows=2, margin = 0.025, shareX = F, shareY = F) 
+    }) 
+    
+    output$strainsbycluster <- renderPlotly({
+        
+        counts <- strains_sh$data(withSelection = T) %>%
             filter(selected_ | is.na(selected_)) %>%
-            group_by(timepoint, tp1_cluster, strain_date) %>%
+            group_by(tp1_cluster, strain_date) %>%
             tally()
         
-        c <- plot_ly(data = test) %>%
+        a <- plot_ly(data = counts) %>%
             add_trace(type = "scatter",
                       mode = "line",
-                      y = ~n,
-                      frame = ~timepoint,
-                      x = ~day(strain_date),
                       color = I("#898a8c"),
+                      x = ~strain_date,
+                      y = ~n, 
+                      name = ~tp1_cluster, 
                       showlegend = F) %>%
             layout(yaxis = list(rangemode = "tozero",
                                 title = "Number of novel strains identified"),
@@ -1233,8 +1280,142 @@ server <- function(input, output, session) {
             highlight(color = "#1F78C8")
         
         
-        subplot( c, subplot(a, b, nrows = 1, margin = 0.025), nrows=2, margin = 0.025, shareX = F, shareY = F) 
-    }) 
+        # need to aggregate data
+        cumsum <- strains_sh$data(withSelection = T) %>%
+            filter(selected_ | is.na(selected_)) %>%
+            group_by(tp1_cluster, strain_date) %>% 
+            tally(!is.na(strain)) %>% 
+            mutate(cumsum = cumsum(n))
+        
+        
+        b <- plot_ly(data = cumsum) %>%
+            add_trace(type = "scatter",
+                      mode = "line",
+                      color = I("#898a8c"),
+                      x = ~strain_date,
+                      y = ~cumsum, 
+                      name = ~tp1_cluster, 
+                      showlegend = F) %>%
+            layout(yaxis = list(rangemode = "tozero",
+                                title = "Cumulative number of strains identified"),
+                   xaxis = list(title = "Time point")) %>%
+            highlight(color = "#1F78C8")
+        
+        subplot(a, b, nrows = 1, margin = 0.025)
+        
+        
+    })
+    
+    output$newstrainsbydate <- renderPlotly({
+        plot_ly(type = "histogram",
+                data = strains_sh,
+                histfunc = "count",
+                x = ~strain_date,
+                color = I("#898a8c"),                
+                xbins = list(size = 86400000.0),
+                hovertemplate = ~paste('<b>', country, '</b><br>',
+                                       'Count: %{y}', '<br>',
+                                       'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
+            layout(barmode = "stack",
+                   xaxis = list(title = "Date"),
+                   yaxis = list(title = "Number of new strains identified"),
+                   updatemenus = list( list(
+                       active = -1,
+                       x= -0.1,
+                       type = 'buttons',
+                       buttons = list(
+                           list(
+                               label = "By day",
+                               method = "restyle",
+                               args = list(list(xbins = list(size = 86400000.0)))),
+                           list(
+                               label = "By week",
+                               method = "restyle",
+                               args = list(list(xbins = list(size = 604800000.0)))),
+                           list(
+                               label = "By month",
+                               method = "restyle",
+                               args = list(list(xbins = list(size = "M1"))))
+                       )))) %>%
+            highlight(color = "#1F78C8")
+        
+    })
+    
+    
+    output$singlevsmulti <- renderPlotly({
+        
+        
+        a <- plot_ly(type = "histogram") %>%
+            add_trace(data = strains_long %>%
+                          subset(single_mult == "Multi strain clusters"),
+                      histfunc = "count",
+                      x = ~strain_date,
+                      color = I("#898a8c"),    
+                      showlegend = F, 
+                      xbins = list(size = 86400000.0)) %>%
+            layout(xaxis = list(title = "Date"),
+                   annotations = list(list(text= "Count",
+                                           xref = "paper",
+                                           yref = "paper",
+                                           yanchor = "center",
+                                           xanchor = "center",
+                                           align = "center",
+                                           textangle = -90,
+                                           x = -0.05,
+                                           y = 0.3,
+                                           font = list(size = 14),
+                                           showarrow = FALSE),
+                                      list(text= "New strains identified as part of a multi-strain cluster",
+                                           xref = "paper",
+                                           yref = "paper",
+                                           yanchor = "center",
+                                           xanchor = "left",
+                                           align = "left",
+                                           font = list(size = 14),
+                                           x = 0,
+                                           y = 1,
+                                           showarrow = FALSE)))
+        
+        b <- plot_ly(type = "histogram") %>%
+            add_trace(data = strains_long %>%
+                          subset(single_mult == "Single strain clusters"),
+                      histfunc = "count",
+                      x = ~strain_date,
+                      color = I("#898a8c"),     
+                      showlegend = F,
+                      xbins = list(size = 86400000.0)) %>%
+            layout(xaxis = list(title = "Date"),
+                   yaxis = list(range = c(0, max(strains_long %>%
+                                                     subset(single_mult == "Multi strain clusters") %>%
+                                                     group_by(strain_date) %>%
+                                                     count() %>%
+                                                     pull(n)))),
+                   annotations = list(list(text= "Count",
+                                           xref = "paper",
+                                           yref = "paper",
+                                           yanchor = "center",
+                                           xanchor = "center",
+                                           align = "center",
+                                           textangle = -90,
+                                           x = -0.05,
+                                           y = 0.5,
+                                           font = list(size = 14),
+                                           showarrow = FALSE),
+                                      list(text= "New strains identified as part of single-strain cluster",
+                                           xref = "paper",
+                                           yref = "paper",
+                                           yanchor = "center",
+                                           xanchor = "left",
+                                           align = "left",
+                                           font = list(size = 14),
+                                           x = 0,
+                                           y = 1,
+                                           showarrow = FALSE)))
+        
+        subplot(b, a, nrows = 2, shareX = T, margin = 0.075)
+        
+        
+    })
     
     # mapbox token 
     mapboxToken <- "pk.eyJ1Ijoic2FtLWEtbGVlIiwiYSI6ImNrb2s0bXVpbzFhMGkybm5zeHI1dHR1aTgifQ.1K8o7OaSOWo_y5UdVH348w"    # You need your own token

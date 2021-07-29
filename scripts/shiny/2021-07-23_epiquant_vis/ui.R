@@ -21,7 +21,7 @@ library(rvest) # for downloading cardinal table
 
 # Define UI for application that draws a histogram
 
-header <- dashboardHeader(title = "EpiQuant Vis")
+header <- dashboardHeader(title = "EpiQuant SARS-CoVis")
 
 # the dashboard side bar
 sidebar <- dashboardSidebar(
@@ -197,18 +197,25 @@ body <- dashboardBody(
             
             fluidRow(
               tabBox(
-                title = "Cluster growth",
+                title = "Growth",
                 # The id lets us use input$tabset1 on the server to find the current tab
                 id = "tabset2",
                 width =12,
                 side = "right",
-                selected = "Growth visualizations",
+                selected = "Cluster growth",
                 tabPanel("Interpretation", 
                          HTML("")
                 ),
-                tabPanel("Single vs multi strain"
+                tabPanel("Single vs multi strain clusters",
+                         plotlyOutput("singlevsmulti", height = "100%")
                 ),
-                tabPanel("Growth visualizations",
+                tabPanel("New strains by date",
+                         plotlyOutput("newstrainsbydate", height = "100%")
+                ),
+                tabPanel("New strains by cluster",
+                         plotlyOutput("strainsbycluster", height = "100%")
+                ),
+                tabPanel("Cluster growth",
                          plotlyOutput("cluster_growth", height = "100%")
                 )
               )
