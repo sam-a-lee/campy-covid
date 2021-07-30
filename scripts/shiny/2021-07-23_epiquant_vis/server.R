@@ -442,7 +442,8 @@ server <- function(input, output, session) {
                           ecc_0.1.0 = mean(ecc_0.1.0),
                           ecc_comb = unique(as.character(ecc_direction_delta))) %>%
                 rowid_to_column(., var = "rowid") %>%
-                group_by(country) 
+                group_by(country)
+            
         } else if (input$region == 3){
             ungrouped %>%
                 subset(country %in% input$regionProvince) %>% 
@@ -452,7 +453,7 @@ server <- function(input, output, session) {
                           ecc_0.1.0 = mean(ecc_0.1.0),
                           ecc_comb = unique(as.character(ecc_direction_delta))) %>%
                 rowid_to_column(., var = "rowid") %>%
-                group_by(province) 
+                group_by(province)
         } else {
             ungrouped
         }
@@ -738,288 +739,704 @@ server <- function(input, output, session) {
             subplot(c, subplot(a, b, nrows = 2, margin = 0.075), nrows = 1, margin = 0.025)
         } else if (input$region == 2 ){
             
-            a <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.0.1, y=1, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
-                              scale_x_continuous(breaks=seq(0, 1, 0.5),
-                                                 limits=c(0,1)) +
-                              facet_wrap(~country, scales = "free_y") +
-                              theme_minimal() +
-                              theme(axis.text.y = element_blank(),
-                                    axis.ticks.y = element_blank())) %>%
-                layout(xaxis = list(title = "Geospatial epicluster cohesion index",
-                                    range = c(0, 1.05)),
-                       yaxis = list(showticklabels = F),
-                       annotations = list(text= "Geospatial epicluster cohesion index",
+            geo <- strains_sh$data(withSelection=T) %>%
+                group_by(country, tp1_cluster, timepoint) %>%
+                summarize(n = n(),
+                          ecc_0.1.0 = mean(ecc_0.1.0)) %>%
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d, # group and summarize here?  
+                                              # catch statement for less than 3 groups?
+                                           type = "scatter",
+                                           mode = "markers", 
+                                           x = ~ecc_0.1.0,
+                                           y = 1,
+                                           color = I("#898a8c"),
+                                           frame = ~timepoint, 
+                                           hovertemplate = ~tp1_cluster,
+                                           size = ~I(n),
+                                           marker = list(sizemode = "area", opacity = 0.5),
+                                           showlegend = FALSE) %>%
+                           layout(xaxis = list(range = c(-0.05,1.05), title = "", zeroline = F),
+                                  yaxis = list(showticklabels = F),
+                                  annotations = list(text= ~unique(country),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 0.9,
+                                                     showarrow = FALSE)) %>%
+                           highlight(color = "#1F78C8")
+                ) %>% 
+                subplot(nrows = 3,   shareX = T) %>%
+                layout(annotations = list(text= "Geospatial epicluster cohesion index",
                                           xref = "paper",
                                           yref = "paper",
                                           yanchor = "bottom",
                                           xanchor = "center",
                                           align = "center",
                                           x = 0.5,
-                                          y = -0.3,
-                                          font = list(size = 12),
-                                          showarrow = FALSE)) %>%
-                highlight(color = "#1F78C8")
-            
-            
-            
-            b <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.1.0, y=1, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
-                              scale_x_continuous(breaks=seq(0, 1, 0.5),
-                                                 limits=c(0,1)) +
-                              facet_wrap(~country, scales = "free_y") +
-                              theme_minimal() +
-                              theme(axis.text.y = element_blank(),
-                                    axis.ticks.y = element_blank())) %>%
-                layout(xaxis = list(title = "Temporal epicluster cohesion index",
-                                    range = c(0, 1.05)),
-                       yaxis = list(showticklabels = F),
-                       annotations = list(text= "Temporal epicluster cohesion index",
+                                          y = -0.175,
+                                          font = list(size = 14),
+                                          showarrow = FALSE))
+
+            temp <-  strains_sh$data(withSelection=T)  %>%
+                group_by(country, tp1_cluster, timepoint) %>%
+                summarize(n = n(),
+                          ecc_0.0.1 = mean(ecc_0.0.1)) %>%
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d,                          
+                                           type = "scatter",
+                                           mode = "markers", 
+                                           x = ~ecc_0.0.1,
+                                           y = 1,
+                                           color = I("#898a8c"),
+                                           frame = ~timepoint, 
+                                           hovertemplate = ~tp1_cluster,
+                                           size = ~I(n),
+                                           marker = list(sizemode = "area", opacity = 0.5),
+                                           showlegend = FALSE) %>%
+                           layout(xaxis = list(range = c(-0.05,1.05), title = "", zeroline = F),
+                                  yaxis = list(showticklabels = F),
+                                  annotations = list(text= ~unique(country),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 0.9,
+                                                     showarrow = FALSE)) %>%
+                           highlight(color = "#1F78C8")
+                ) %>% 
+                subplot(nrows = 3, shareX = T) %>%
+                layout(annotations = list(text= "Temporal epicluster cohesion index",
                                           xref = "paper",
                                           yref = "paper",
                                           yanchor = "bottom",
                                           xanchor = "center",
                                           align = "center",
                                           x = 0.5,
-                                          y = -0.3,
-                                          font = list(size = 12),
-                                          showarrow = FALSE)) %>%
-                highlight(color = "#1F78C8")
+                                          y = -0.175,
+                                          font = list(size = 14),
+                                          showarrow = FALSE))
             
-            
-            
-            c <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.0.1, y=ecc_0.1.0, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
-                              scale_x_continuous(breaks=seq(0, 1, 0.5),
-                                                 limits=c(0,1)) +
-                              scale_y_continuous(breaks=seq(0, 1, 0.5),
-                                                 limits = c(0,1)) +
-                              facet_wrap(~country) +
-                              theme_minimal()) %>%
-                layout(xaxis = list(title = "Geospatial epicluster cohesion index",
-                                    range = c(0,1.05)),
-                       yaxis = list(title = "Temporal epicluster cohesion index",
-                                    range = c(0,1.05)),
-                       annotations = list(list(text= "Geospatial epicluster cohesion index",
-                                               xref = "paper",
-                                               yref = "paper",
-                                               yanchor = "bottom",
-                                               xanchor = "center",
-                                               align = "center",
-                                               x = 0.5,
-                                               y = -0.12,
-                                               font = list(size = 12),
-                                               showarrow = FALSE),
-                                          list(text= "Temporal epicluster cohesion index",
-                                               xref = "paper",
-                                               yref = "paper",
-                                               yanchor = "center",
-                                               xanchor = "center",
-                                               align = "center",
-                                               x = -0.075,
-                                               y = 0.5,
-                                               font = list(size = 12),
-                                               textangle = -90,
-                                               showarrow = FALSE))) %>%
-                highlight(color = "#1F78C8")
+            both <- strains_sh$data(withSelection=T)  %>%
+                group_by(country, tp1_cluster, timepoint) %>%
+                summarize(n = n(),
+                          ecc_0.0.1 = mean(ecc_0.0.1),
+                          ecc_0.1.0 = mean(ecc_0.1.0)) %>%
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d,                          
+                                           type = "scatter",
+                                           mode = "markers", 
+                                           x = ~ecc_0.0.1,
+                                           y = ~ecc_0.1.0,
+                                           color = I("#898a8c"),
+                                           frame = ~timepoint, 
+                                           hovertemplate = ~tp1_cluster,
+                                           size = ~I(n),
+                                           marker = list(sizemode = "area", opacity = 0.5),
+                                           showlegend = FALSE) %>%
+                           layout(xaxis = list(range = c(-0.05,1.05), title = ""),
+                                  yaxis = list(range = c(-0.05,1.05)),
+                                  annotations = list(text= ~unique(country),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 0.95,
+                                                     showarrow = FALSE)) %>%
+                           highlight(color = "#1F78C8")
+                ) %>% 
+                subplot(nrows = 3, shareX = T) %>%
+                layout(annotations = list( list(text= "Geospatial epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.075,
+                                                font = list(size = 14),
+                                                showarrow = FALSE),
+                                           list(text= "Temporal epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "center",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = -0.1,
+                                                y = 0.3,
+                                                textangle = -90,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
             
             # Link Animated views
-            subplot(c, subplot(a, b, nrows = 2, margin = 0.1), nrows = 1, margin = 0.02)
+            subplot(both, subplot(geo, temp, nrows = 2, margin = 0.075), nrows = 1, margin = 0.02)
             
         } else if (input$region == 3) {
             
-            a <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.0.1, y=1, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
-                              scale_x_continuous(breaks=seq(0, 1, 0.5),
-                                                 limits=c(0,1)) +
-                              facet_wrap(~province, scales = "free_y") +
-                              theme_minimal() +
-                              theme(axis.text.y = element_blank(),
-                                    axis.ticks.y = element_blank())) %>%
-                layout(xaxis = list(title = "Geospatial epicluster cohesion index",
-                                    range = c(0, 1.05)),
-                       yaxis = list(showticklabels = F),
-                       annotations = list(text= "Geospatial epicluster cohesion index",
+            geo <- strains_sh$data(withSelection=T)  %>%
+                subset(country %in% input$regionProvince) %>%
+                group_by(province, tp1_cluster, timepoint) %>%
+                summarize(n = n(),
+                          ecc_0.1.0 = mean(ecc_0.1.0)) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d,                          
+                                           type = "scatter",
+                                           mode = "markers", 
+                                           x = ~ecc_0.1.0,
+                                           y = 1,
+                                           color = I("#898a8c"),
+                                           frame = ~timepoint, 
+                                           hovertemplate = ~tp1_cluster,
+                                           size = ~I(n),
+                                           marker = list(sizemode = "area", opacity = 0.5),
+                                           showlegend = FALSE) %>%
+                           layout(xaxis = list(range = c(-0.05,1.05), title = "", zeroline = F),
+                                  yaxis = list(showticklabels = F),
+                                  annotations = list(text= ~unique(province),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 0.9,
+                                                     showarrow = FALSE)) %>%
+                           highlight(color = "#1F78C8")
+                ) %>% 
+                subplot(nrows = 3,   shareX = T) %>%
+                layout(annotations = list(text= "Geospatial epicluster cohesion index",
                                           xref = "paper",
                                           yref = "paper",
                                           yanchor = "bottom",
                                           xanchor = "center",
                                           align = "center",
                                           x = 0.5,
-                                          y = -0.3,
-                                          font = list(size = 12),
-                                          showarrow = FALSE)) %>%
-                highlight(color = "#1F78C8")
+                                          y = -0.175,
+                                          font = list(size = 14),
+                                          showarrow = FALSE))
             
             
             
-            b <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.1.0, y=1, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
-                              scale_x_continuous(breaks=seq(0, 1, 0.5),
-                                                 limits=c(0,1)) +
-                              facet_wrap(~province, scales = "free_y") +
-                              theme_minimal() +
-                              theme(axis.text.y = element_blank(),
-                                    axis.ticks.y = element_blank())) %>%
-                layout(xaxis = list(title = "Temporal epicluster cohesion index",
-                                    range = c(0, 1.05)),
-                       yaxis = list(showticklabels = F),
-                       annotations = list(text= "Temporal epicluster cohesion index",
+            temp <- strains_sh$data(withSelection=T)  %>%
+                subset(country %in% input$regionProvince) %>%
+                group_by(province, tp1_cluster, timepoint) %>%
+                summarize(n = n(),
+                          ecc_0.0.1 = mean(ecc_0.0.1)) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d,                          
+                                           type = "scatter",
+                                           mode = "markers", 
+                                           x = ~ecc_0.0.1,
+                                           y = 1,
+                                           color = I("#898a8c"),
+                                           frame = ~timepoint, 
+                                           hovertemplate = ~tp1_cluster,
+                                           size = ~I(n),
+                                           marker = list(sizemode = "area", opacity = 0.5),
+                                           showlegend = FALSE) %>%
+                           layout(xaxis = list(range = c(-0.05,1.05), title = "", zeroline = F),
+                                  yaxis = list(showticklabels = F),
+                                  annotations = list(text= ~unique(province),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 0.9,
+                                                     showarrow = FALSE)) %>%
+                           highlight(color = "#1F78C8")
+                ) %>% 
+                subplot(nrows = 3, shareX = T) %>%
+                layout(annotations = list(text= "Temporal epicluster cohesion index",
                                           xref = "paper",
                                           yref = "paper",
                                           yanchor = "bottom",
                                           xanchor = "center",
                                           align = "center",
                                           x = 0.5,
-                                          y = -0.3,
-                                          font = list(size = 12),
-                                          showarrow = FALSE)) %>%
-                highlight(color = "#1F78C8")
+                                          y = -0.175,
+                                          font = list(size = 14),
+                                          showarrow = FALSE))
             
-            
-            
-            c <- ggplotly(ggplot(strains_sh_gr, aes(x = ecc_0.0.1, y=ecc_0.1.0, size = n)) +
-                              geom_point(aes(frame=timepoint), alpha=0.5, col ="#898a8c") +
-                              scale_x_continuous(breaks=seq(0, 1, 0.5),
-                                                 limits=c(0,1)) +
-                              scale_y_continuous(breaks=seq(0, 1, 0.5),
-                                                 limits = c(0,1)) +
-                              facet_wrap(~province) +
-                              theme_minimal()) %>%
-                layout(xaxis = list(title = "Geospatial epicluster cohesion index",
-                                    range = c(0,1.05)),
-                       yaxis = list(title = "Temporal epicluster cohesion index",
-                                    range = c(0,1.05)),
-                       annotations = list(list(text= "Geospatial epicluster cohesion index",
-                                               xref = "paper",
-                                               yref = "paper",
-                                               yanchor = "bottom",
-                                               xanchor = "center",
-                                               align = "center",
-                                               x = 0.5,
-                                               y = -0.12,
-                                               font = list(size = 12),
-                                               showarrow = FALSE),
-                                          list(text= "Temporal epicluster cohesion index",
-                                               xref = "paper",
-                                               yref = "paper",
-                                               yanchor = "center",
-                                               xanchor = "center",
-                                               align = "center",
-                                               x = -0.075,
-                                               y = 0.5,
-                                               font = list(size = 12),
-                                               textangle = -90,
-                                               showarrow = FALSE))) %>%
-                highlight(color = "#1F78C8")
+            both <- strains_sh$data(withSelection=T)  %>%
+                subset(country %in% input$regionProvince) %>%
+                group_by(province, tp1_cluster, timepoint) %>%
+                summarize(n = n(),
+                          ecc_0.0.1 = mean(ecc_0.0.1),
+                          ecc_0.1.0 = mean(ecc_0.1.0)) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d,                          
+                                           type = "scatter",
+                                           mode = "markers", 
+                                           x = ~ecc_0.0.1,
+                                           y = ~ecc_0.1.0,
+                                           color = I("#898a8c"),
+                                           frame = ~timepoint, 
+                                           hovertemplate = ~tp1_cluster,
+                                           size = ~I(n),
+                                           marker = list(sizemode = "area", opacity = 0.5),
+                                           showlegend = FALSE) %>%
+                           layout(xaxis = list(range = c(-0.05,1.05), title = ""),
+                                  yaxis = list(range = c(-0.05,1.05)),
+                                  annotations = list(text= ~unique(province),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 0.95,
+                                                     showarrow = FALSE)) %>%
+                           highlight(color = "#1F78C8")
+                ) %>% 
+                subplot(nrows = 3, shareX = T) %>%
+                layout(annotations = list( list(text= "Geospatial epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.075,
+                                                font = list(size = 14),
+                                                showarrow = FALSE),
+                                           list(text= "Temporal epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "center",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = -0.1,
+                                                y = 0.3,
+                                                textangle = -90,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
             
             # Link Animated views
-            subplot(c, subplot(a, b, nrows = 2, margin = 0.1), nrows = 1, margin = 0.02)
+            subplot(both, subplot(geo, temp, nrows = 2, margin = 0.075), nrows = 1, margin = 0.02)
         }
         
     })
     
     output$ecc_histograms <- renderPlotly({
         
-        # no faceting 
-        geo <- plot_ly() %>%
-            add_trace(data = strains_sh,
-                      type = "histogram",
-                      x = ~ecc_0.1.0,
-                      frame = ~timepoint2,
-                      color = I("#898a8c"),
-                      xbins = list(size = 0.01),
-                      showlegend = FALSE) %>%
-            layout(xaxis = list(range = c(0,1),
-                                title = "Geospatial epicluster cohesion index"),
-                   yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
-                                                      filter(selected_ | is.na(selected_))))),
-                   annotations = list(text= "Geospatial epicluster cohesion index",
-                                      xref = "paper",
-                                      yref = "paper",
-                                      yanchor = "bottom",
-                                      xanchor = "center",
-                                      align = "center",
-                                      x = 0.5,
-                                      y = -0.3,
-                                      showarrow = FALSE)) %>%
-            highlight(color = "#1F78C8")
         
-        delta_geo <- plot_ly() %>%
-            add_trace(data = strains_sh,
-                      type = "histogram",
-                      x = ~delta_ecc_0.1.0,
-                      frame = ~timepoint2,
-                      color = I("#898a8c"),
-                      xbins = list(size = 0.01),
-                      showlegend = FALSE) %>%
-            layout(xaxis = list(range = c(-1,1),
-                                title = "Delta geospatial epicluster cohesion index"),
-                   yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
-                                                      filter(selected_ | is.na(selected_))))),
-                   annotations = list(text= "Delta geospatial epicluster cohesion index",
-                                      xref = "paper",
-                                      yref = "paper",
-                                      yanchor = "bottom",
-                                      xanchor = "center",
-                                      align = "center",
-                                      x = 0.5,
-                                      y = -0.3,
-                                      showarrow = FALSE)) %>%
-            highlight(color = "#1F78C8")
-        
-        
-        temp <- plot_ly() %>%
-            add_trace(data = strains_sh,
-                      type = "histogram",
-                      x = ~ecc_0.0.1,
-                      frame = ~timepoint2,
-                      color = I("#898a8c"), 
-                      xbins = list(size = 0.01),
-                      showlegend = FALSE) %>%
-            layout(xaxis = list(range = c(0,1),
-                                title = "Temporal epicluster cohesion index"),
-                   yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
-                                                      filter(selected_ | is.na(selected_))))),
-                   annotations = list(text= "Temporal epicluster cohesion index",
-                                      xref = "paper",
-                                      yref = "paper",
-                                      yanchor = "bottom",
-                                      xanchor = "center",
-                                      align = "center",
-                                      x = 0.5,
-                                      y = -0.3,
-                                      showarrow = FALSE)) %>%
-            highlight(color = "#1F78C8")
-        
-        delta_temp <- plot_ly() %>%
-            add_trace(data = strains_sh,
-                      type = "histogram",
-                      x = ~delta_ecc_0.0.1,
-                      frame = ~timepoint2,
-                      color = I("#898a8c"), 
-                      xbins = list(size = 0.01),
-                      showlegend = FALSE) %>%
-            layout(xaxis = list(range = c(-1,1),
-                                title = "Delta temporal epicluster cohesion index"),
-                   yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
-                                                      filter(selected_ | is.na(selected_))))),
-                   annotations = list(text= "Delta temporal epicluster cohesion index",
-                                      xref = "paper",
-                                      yref = "paper",
-                                      yanchor = "bottom",
-                                      xanchor = "center",
-                                      align = "center",
-                                      x = 0.5,
-                                      y = -0.3,
-                                      showarrow = FALSE)) %>%
-            highlight(color = "#1F78C8")
-        
-        
-        subplot(subplot(geo, temp, nrows=1), subplot(delta_geo, delta_temp, nrows=1), nrows=2, margin = 0.05) %>%
-            layout(yaxis = list(title = "Number of strains"))
-        
-        
+        if(input$region == 1){
+            # no faceting 
+            geo <- plot_ly() %>%
+                add_trace(data = strains_sh,
+                          type = "histogram",
+                          x = ~ecc_0.1.0,
+                          frame = ~timepoint2,
+                          color = I("#898a8c"),
+                          xbins = list(size = 0.01),
+                          showlegend = FALSE) %>%
+                layout(xaxis = list(range = c(0,1),
+                                    title = "Geospatial epicluster cohesion index"),
+                       yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                                                          filter(selected_ | is.na(selected_))))),
+                       annotations = list(text= "Geospatial epicluster cohesion index",
+                                          xref = "paper",
+                                          yref = "paper",
+                                          yanchor = "bottom",
+                                          xanchor = "center",
+                                          align = "center",
+                                          x = 0.5,
+                                          y = -0.3,
+                                          showarrow = FALSE)) %>%
+                highlight(color = "#1F78C8")
+            
+            delta_geo <- plot_ly() %>%
+                add_trace(data = strains_sh,
+                          type = "histogram",
+                          x = ~delta_ecc_0.1.0,
+                          frame = ~timepoint2,
+                          color = I("#898a8c"),
+                          xbins = list(size = 0.01),
+                          showlegend = FALSE) %>%
+                layout(xaxis = list(range = c(-1,1),
+                                    title = "Delta geospatial epicluster cohesion index"),
+                       yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                                                          filter(selected_ | is.na(selected_))))),
+                       annotations = list(text= "Delta geospatial epicluster cohesion index",
+                                          xref = "paper",
+                                          yref = "paper",
+                                          yanchor = "bottom",
+                                          xanchor = "center",
+                                          align = "center",
+                                          x = 0.5,
+                                          y = -0.3,
+                                          showarrow = FALSE)) %>%
+                highlight(color = "#1F78C8")
+            
+            
+            temp <- plot_ly() %>%
+                add_trace(data = strains_sh,
+                          type = "histogram",
+                          x = ~ecc_0.0.1,
+                          frame = ~timepoint2,
+                          color = I("#898a8c"), 
+                          xbins = list(size = 0.01),
+                          showlegend = FALSE) %>%
+                layout(xaxis = list(range = c(0,1),
+                                    title = "Temporal epicluster cohesion index"),
+                       yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                                                          filter(selected_ | is.na(selected_))))),
+                       annotations = list(text= "Temporal epicluster cohesion index",
+                                          xref = "paper",
+                                          yref = "paper",
+                                          yanchor = "bottom",
+                                          xanchor = "center",
+                                          align = "center",
+                                          x = 0.5,
+                                          y = -0.3,
+                                          showarrow = FALSE)) %>%
+                highlight(color = "#1F78C8")
+            
+            delta_temp <- plot_ly() %>%
+                add_trace(data = strains_sh,
+                          type = "histogram",
+                          x = ~delta_ecc_0.0.1,
+                          frame = ~timepoint2,
+                          color = I("#898a8c"), 
+                          xbins = list(size = 0.01),
+                          showlegend = FALSE) %>%
+                layout(xaxis = list(range = c(-1,1),
+                                    title = "Delta temporal epicluster cohesion index"),
+                       yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                                                          filter(selected_ | is.na(selected_))))),
+                       annotations = list(text= "Delta temporal epicluster cohesion index",
+                                          xref = "paper",
+                                          yref = "paper",
+                                          yanchor = "bottom",
+                                          xanchor = "center",
+                                          align = "center",
+                                          x = 0.5,
+                                          y = -0.3,
+                                          showarrow = FALSE)) %>%
+                highlight(color = "#1F78C8")
+            
+            subplot(subplot(geo, temp, nrows=1), subplot(delta_geo, delta_temp, nrows=1), nrows=2, margin = 0.05) %>%
+                layout(yaxis = list(title = "Number of strains"))    
+            
+        } else if (input$region == 2){
+            
+            geo <- strains_sh$data(withSelection=T)  %>% 
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           x = ~ecc_0.1.0,
+                                           color = I("#898a8c"),
+                                           xbins = list(size = 0.01),
+                                           showlegend = FALSE,
+                                           frame = ~timepoint2) %>%
+                           layout(xaxis = list(range = c(0,1), title = ""),
+                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                                                    group_by(country, timepoint2) %>%
+                                                                    count(cut_width(ecc_0.1.0,width=0.01)) %>%
+                                                                    pull(n))*1.1)),
+                                  annotations = list(text= ~unique(country),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 1,
+                                                     showarrow = FALSE))
+                ) %>%
+                subplot(nrows = 3, margin = 0.05, shareY=T) %>%
+                layout( annotations = list(list(text= "Geospatial epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.15,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
+            
+            temp <- strains_sh$data(withSelection=T) %>% 
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           x = ~ecc_0.0.1,
+                                           color = I("#898a8c"),
+                                           xbins = list(size = 0.01),
+                                           showlegend = FALSE,
+                                           frame = ~timepoint2) %>%
+                           layout(xaxis = list(range = c(0,1), title = ""),
+                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                                                    group_by(country, timepoint2) %>%
+                                                                    count(cut_width(ecc_0.0.1, width=0.01)) %>%
+                                                                    pull(n))*1.1)),
+                                  annotations = list(text= ~unique(country),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 1,
+                                                     showarrow = FALSE))
+                ) %>%
+                subplot(nrows = 3, margin = 0.05, shareY=T) %>%
+                layout( annotations = list(list(text= "Temporal epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.15,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
+            
+            delta_geo <- strains_sh$data(withSelection=T) %>%
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           x = ~delta_ecc_0.1.0,
+                                           color = I("#898a8c"),
+                                           xbins = list(size = 0.01),
+                                           showlegend = FALSE,
+                                           frame = ~timepoint2) %>%
+                           layout(xaxis = list(range = c(-1,1), title = ""),
+                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                                                    group_by(country, timepoint2) %>%
+                                                                    count(cut_width(delta_ecc_0.1.0, width=0.01)) %>%
+                                                                    pull(n))*1.1)),
+                                  annotations = list(text= ~unique(country),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 1,
+                                                     showarrow = FALSE))
+                ) %>%
+                subplot(nrows = 3, margin = 0.05, shareY=T) %>%
+                layout( annotations = list(list(text= "Delta geospatial epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.15,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
+            
+            delta_temp <- strains_sh$data(withSelection=T) %>% 
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           x = ~delta_ecc_0.0.1,
+                                           color = I("#898a8c"),
+                                           xbins = list(size = 0.01),
+                                           showlegend = FALSE,
+                                           frame = ~timepoint2) %>%
+                           layout(xaxis = list(range = c(-1,1), title = ""),
+                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                                                    group_by(country, timepoint2) %>%
+                                                                    count(cut_width(delta_ecc_0.0.1, width=0.01)) %>%
+                                                                    pull(n))*1.1)),
+                                  annotations = list(text= ~unique(country),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 1,
+                                                     showarrow = FALSE))
+                ) %>%
+                subplot(nrows = 3, margin = 0.05, shareY=T) %>%
+                layout( annotations = list(list(text= "Delta geospatial epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.15,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
+            
+            subplot(subplot(geo, temp, nrows=1, margin = 0.05), 
+                    subplot(delta_geo, delta_temp, nrows=1, margin = 0.05), 
+                    nrows=2, margin = 0.1)  
+            
+        } else if (input$region == 3) {
+            
+            # by province
+            geo <- strains_sh$data(withSelection=T)  %>% 
+                subset(country %in% input$regionProvince) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           x = ~ecc_0.1.0,
+                                           color = I("#898a8c"),
+                                           xbins = list(size = 0.01),
+                                           showlegend = FALSE,
+                                           frame = ~timepoint2) %>%
+                           layout(xaxis = list(range = c(0,1), title = ""),
+                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                                                     subset(country %in% input$regionProvince) %>%
+                                                                     group_by(province, timepoint2) %>%
+                                                                     count(cut_width(ecc_0.1.0,width=0.01)) %>%
+                                                                     pull(n))*1.1)),
+                                  annotations = list(text= ~unique(province),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 1,
+                                                     showarrow = FALSE))
+                ) %>%
+                subplot(nrows = 3, margin = 0.05, shareY=T) %>%
+                layout( annotations = list(list(text= "Geospatial epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.15,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
+            
+            temp <- strains_sh$data(withSelection=T) %>% 
+                subset(country %in% input$regionProvince) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           x = ~ecc_0.0.1,
+                                           color = I("#898a8c"),
+                                           xbins = list(size = 0.01),
+                                           showlegend = FALSE,
+                                           frame = ~timepoint2) %>%
+                           layout(xaxis = list(range = c(0,1), title = ""),
+                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                                                     subset(country %in% input$regionProvince) %>%
+                                                                     group_by(province, timepoint2) %>%
+                                                                     count(cut_width(ecc_0.0.1, width=0.01)) %>%
+                                                                     pull(n))*1.1)),
+                                  annotations = list(text= ~unique(province),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 1,
+                                                     showarrow = FALSE))
+                ) %>%
+                subplot(nrows = 3, margin = 0.05, shareY=T) %>%
+                layout( annotations = list(list(text= "Temporal epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.15,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
+            
+            delta_geo <- strains_sh$data(withSelection=T) %>%
+                subset(country %in% input$regionProvince) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           x = ~delta_ecc_0.1.0,
+                                           color = I("#898a8c"),
+                                           xbins = list(size = 0.01),
+                                           showlegend = FALSE,
+                                           frame = ~timepoint2) %>%
+                           layout(xaxis = list(range = c(-1,1), title = ""),
+                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                                                     subset(country %in% input$regionProvince) %>%
+                                                                     group_by(province, timepoint2) %>%
+                                                                     count(cut_width(delta_ecc_0.1.0, width=0.01)) %>%
+                                                                     pull(n))*1.1)),
+                                  annotations = list(text= ~unique(province),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 1,
+                                                     showarrow = FALSE))
+                ) %>%
+                subplot(nrows = 3, margin = 0.05, shareY=T) %>%
+                layout( annotations = list(list(text= "Delta geospatial epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.15,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
+            
+            delta_temp <- strains_sh$data(withSelection=T) %>% 
+                subset(country %in% input$regionProvince) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           x = ~delta_ecc_0.0.1,
+                                           color = I("#898a8c"),
+                                           xbins = list(size = 0.01),
+                                           showlegend = FALSE,
+                                           frame = ~timepoint2) %>%
+                           layout(xaxis = list(range = c(-1,1), title = ""),
+                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                                                     subset(country %in% input$regionProvince) %>%
+                                                                     group_by(province, timepoint2) %>%
+                                                                     count(cut_width(delta_ecc_0.0.1, width=0.01)) %>%
+                                                                     pull(n))*1.1)),
+                                  annotations = list(text= ~unique(province),
+                                                     xref = "paper",
+                                                     yref = "paper",
+                                                     yanchor = "bottom",
+                                                     xanchor = "center",
+                                                     align = "center",
+                                                     x = 0.5,
+                                                     y = 1,
+                                                     showarrow = FALSE))
+                ) %>%
+                subplot(nrows = 3, margin = 0.05, shareY=T) %>%
+                layout( annotations = list(list(text= "Delta geospatial epicluster cohesion index",
+                                                xref = "paper",
+                                                yref = "paper",
+                                                yanchor = "bottom",
+                                                xanchor = "center",
+                                                align = "center",
+                                                x = 0.5,
+                                                y = -0.15,
+                                                font = list(size = 14),
+                                                showarrow = FALSE)))
+            
+            subplot(subplot(geo, temp, nrows=1, margin = 0.05), 
+                    subplot(delta_geo, delta_temp, nrows=1, margin = 0.05), 
+                    nrows=2, margin = 0.1)  
+            
+        }
     })
     
     output$radar <- renderPlotly({
@@ -1190,73 +1607,84 @@ server <- function(input, output, session) {
     
     output$cluster_growth <- renderPlotly({
         
-        a <- plot_ly(data = clusters_sh) %>%
-            add_trace(type = "scatter",
-                      mode = "markers",
-                      x = ~timepoint,
-                      y = ~overall_cluster_growth_rate,
-                      color = I("#898a8c"),
-                      showlegend = F,
-                      frame=~timepoint) %>%
-            layout(yaxis = list(rangemode = "tozero", 
-                                title = "Overall growth rate"),
-                   xaxis = list(title = "Time point"),
-                   annotations = list(list(text= "Overall cluster growth rate",
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           textangle = -90,
-                                           x = -0.05,
-                                           y = 0.5,
-                                           showarrow = FALSE),
-                                      list(text= "Time point",
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           x = 0.5,
-                                           y = -0.1,
-                                           showarrow = FALSE)))%>%
-            highlight(color = "#1F78C8")
+        if (input$region == 1) {
+            
+            a <- plot_ly(data = clusters_sh) %>%
+                add_trace(type = "scatter",
+                          mode = "markers",
+                          x = ~timepoint,
+                          y = ~overall_cluster_growth_rate,
+                          color = I("#898a8c"),
+                          showlegend = F,
+                          frame=~timepoint) %>%
+                layout(yaxis = list(rangemode = "tozero", 
+                                    title = "Overall growth rate"),
+                       xaxis = list(title = "Time point"),
+                       annotations = list(list(text= "Overall cluster growth rate",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               textangle = -90,
+                                               x = -0.05,
+                                               y = 0.5,
+                                               showarrow = FALSE),
+                                          list(text= "Time point",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.1,
+                                               showarrow = FALSE)))%>%
+                highlight(color = "#1F78C8")
+            
+            b <- plot_ly(data = clusters_sh) %>%
+                add_trace(type = "scatter",
+                          mode = "markers",
+                          x = ~timepoint,
+                          y = ~cluster_novel_growth_rate,
+                          color = I("#898a8c"),
+                          showlegend = F,
+                          frame=~timepoint) %>%
+                layout(yaxis = list(rangemode = "tozero",
+                                    title = "Novel growth rate"),
+                       xaxis = list(title = "Time point"),
+                       annotations = list(list(text= "Novel cluster growth rate",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               textangle = -90,
+                                               x = -0.05,
+                                               y = 0.5,
+                                               showarrow = FALSE),
+                                          list(text= "Time point",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.1,
+                                               showarrow = FALSE))) %>%
+                highlight(color = "#1F78C8")
+            
+            subplot(a, b, nrows = 1, margin = 0.025)
+            
+        } else if (input$region == 2) {
+            
+            # to do cluster growth my province
+            # count strains at time point 1
+            # count strains at time point 2
+            
+        }
         
-        b <- plot_ly(data = clusters_sh) %>%
-            add_trace(type = "scatter",
-                      mode = "markers",
-                      x = ~timepoint,
-                      y = ~cluster_novel_growth_rate,
-                      color = I("#898a8c"),
-                      showlegend = F,
-                      frame=~timepoint) %>%
-            layout(yaxis = list(rangemode = "tozero",
-                                title = "Novel growth rate"),
-                   xaxis = list(title = "Time point"),
-                   annotations = list(list(text= "Novel cluster growth rate",
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           textangle = -90,
-                                           x = -0.05,
-                                           y = 0.5,
-                                           showarrow = FALSE),
-                                      list(text= "Time point",
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           x = 0.5,
-                                           y = -0.1,
-                                           showarrow = FALSE))) %>%
-            highlight(color = "#1F78C8")
         
         
-        subplot(a, b, nrows = 1, margin = 0.025)
-        #subplot( c, subplot(a, b, nrows = 1, margin = 0.025), nrows=2, margin = 0.025, shareX = F, shareY = F) 
     }) 
     
     output$strainsbycluster <- renderPlotly({
