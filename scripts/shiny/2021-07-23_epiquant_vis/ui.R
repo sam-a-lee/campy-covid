@@ -2,31 +2,12 @@
 # user interface #
 ##################
 
-library(shinydashboard) # the shiny dashboard
-library(readxl) # for reading xlsx files 
-library(shiny) # for running shiny apps
-library(shinyWidgets) # for better slider/dropdown options
-library(here) # for clear dir calling
-library(tidyverse) # tidy data/ kind of used
-library(pals) # for large colour palettes (similar to brewer)
-library(plotly) # for interactive ggplots
-library(crosstalk) # for shared data
-library(DT) # data table
-library(htmltools) # for html input
-library(lubridate) # for dates 
-library(geosphere) # for directions between points 
-library(shinydashboardPlus) # for collapsable boxes
-library(data.table) # for melting
-library(rvest) # for downloading cardinal table 
-
-# Define UI for application that draws a histogram
-
+# this is the title that appears over the side bar
 header <- dashboardHeader(title = "EpiQuant SARS-CoVis")
 
 # the dashboard side bar
 sidebar <- dashboardSidebar(
   sidebarMenu(id = 'sidebarmenu',
-              
               
               # ECC indices tab
               menuItem("ECC indices", tabName = "eccIndices"),
