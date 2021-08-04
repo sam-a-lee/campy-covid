@@ -1,6 +1,9 @@
 ##################
 # user interface #
 ##################
+library(shinydashboard)
+library(plotly)
+
 
 # this is the title that appears over the side bar
 header <- dashboardHeader(title = "EpiQuant SARS-CoVis")

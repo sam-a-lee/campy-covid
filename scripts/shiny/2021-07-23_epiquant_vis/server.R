@@ -311,7 +311,7 @@ server <- function(input, output, session) {
         # create time difference for ridgeline plots 
         strains <- strains %>% mutate(stain_time_diff = as.numeric(abs(as.Date("01-01-2020", format = "%d-%m-%y") - as.Date(strain_date, format = "%d-%m-%y"))))
         
-
+        
         
         # convert to long form
         strains_long <- data.table::melt(setDT(strains),
@@ -320,7 +320,7 @@ server <- function(input, output, session) {
                                                            c("tp1_cluster_size_2", "tp2_cluster_size_2")),
                                          variable.name='timepoint', value.name=c("ecc_0.0.1", "ecc_0.1.0",
                                                                                  "cluster_size_2"))
-
+        
         
         
         # categorize as single vs multistrain
@@ -1610,37 +1610,153 @@ server <- function(input, output, session) {
     
     output$changevector <- renderPlotly({
         
-        # opacity settings
-        op <- clusters_sh$data(withSelection = T)
-        op$opacity <- ifelse(op$selected_ | is.na(op$selected_), 0.6, 0.6*0.3)
-        op$colour <- ifelse(op$selected_ , "#1F78C8","#898a8c")
-        
-        plot_ly(type = "scatter", mode="markers") %>% 
-            #add segment to connect each point to origin
-            add_trace(data = clusters_sh,
-                      x = ~delta_ecc_0.1.0, # geographical
-                      y = ~delta_ecc_0.0.1, # temporal 
-                      split = ~tp1_cluster,
-                      legendgroup = ~tp1_cluster,
-                      opacity = I(op$opacity),
-                      frame = ~timepoint,
-                      color = I(op$colour),
-                      showlegend = F,
-                      opacity = 1,
-                      size=I(0)) %>%
-            # set range and overlay arrow annotations
-            layout(xaxis = list(range = c(-1, 1.5), 
-                                title = "Delta geospatial ECC value"),
-                   yaxis = list(range = c(-1, 1.5),
-                                title = "Delta temporal ECC value"),
-                   annotations = list(ax = 0, ay = 0,
-                                      axref='x', ayref='y',
-                                      x = ~delta_ecc_0.1.0, # geospatial
-                                      y = ~delta_ecc_0.0.1, # temporal
-                                      opacity = I(op$opacity),
-                                      #name = ~paste(tp1_cluster, timepoint, sep="_"),
-                                      arrowcolor = I(op$colour),
-                                      xref='x', yref='y', text = ""))
+        # no faceting 
+        if (input$region == 1) {
+            
+            # opacity settings
+            op <- clusters_sh$data(withSelection = T)
+            op$opacity <- ifelse(op$selected_ | is.na(op$selected_), 0.6, 0.6*0.3)
+            op$colour <- ifelse(op$selected_ , "#1F78C8","#898a8c")
+            
+            plot_ly(type = "scatter", mode="markers") %>% 
+                #add segment to connect each point to origin
+                add_trace(data = clusters_sh,
+                          x = ~delta_ecc_0.1.0, # geographical
+                          y = ~delta_ecc_0.0.1, # temporal 
+                          split = ~tp1_cluster,
+                          legendgroup = ~tp1_cluster,
+                          opacity = I(op$opacity),
+                          frame = ~timepoint,
+                          color = I(op$colour),
+                          showlegend = F,
+                          opacity = 1,
+                          size=I(0)) %>%
+                # set range and overlay arrow annotations
+                layout(xaxis = list(range = c(-1, 1.5), 
+                                    title = "Delta geospatial ECC value"),
+                       yaxis = list(range = c(-1, 1.5),
+                                    title = "Delta temporal ECC value"),
+                       annotations = list(ax = 0, ay = 0,
+                                          axref='x', ayref='y',
+                                          x = ~delta_ecc_0.1.0, # geospatial
+                                          y = ~delta_ecc_0.0.1, # temporal
+                                          opacity = I(op$opacity),
+                                          #name = ~paste(tp1_cluster, timepoint, sep="_"),
+                                          arrowcolor = I(op$colour),
+                                          xref='x', yref='y', text = ""))
+            
+            # facet by country  
+        } else if (input$region == 2) {
+            
+            strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                distinct(country, tp1_cluster, .keep_all = T) %>%
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d,
+                                           type = "scatter", 
+                                           mode='markers',
+                                           x = ~delta_ecc_0.1.0, # geographical
+                                           y = ~delta_ecc_0.0.1, # temporal 
+                                           split = ~tp1_cluster,
+                                           #legendgroup = ~tp1_cluster,
+                                           #opacity = I(op$opacity),
+                                           #frame = ~timepoint,
+                                           color = I("#898a8c"),
+                                           showlegend = F,
+                                           opacity = 1,
+                                           size=I(1)) %>%
+                           layout(xaxis = list(range = c(-1, 1),
+                                               title = ""),
+                                  yaxis = list(range = c(-1, 1),
+                                               title = ""),
+                                  annotations = list(list(text= ~unique(country),
+                                                          xref = "paper",
+                                                          yref = "paper",
+                                                          yanchor = "center",
+                                                          xanchor = "center",
+                                                          align = "center",
+                                                          x = 0.5,
+                                                          y = 1.1,
+                                                          showarrow = FALSE)))) %>%
+                subplot(nrows = 3, shareX = T, shareY = T) %>%
+                layout(annotations = list(list(text= "Delta geospatial epicluster cohesion index",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.1,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "Delta temporal epicluster cohesion index",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = -0.1,
+                                               y = 0.5,
+                                               textangle = -90,
+                                               font = list(size = 14),
+                                               showarrow = FALSE)))
+            
+            # facet by province
+        } else if (input$region == 3) {
+            
+            strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                subset(country %in% input$regionProvince) %>% 
+                distinct(province, tp1_cluster, .keep_all = T) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "scatter", 
+                                           mode='markers',
+                                           x = ~delta_ecc_0.1.0, # geographical
+                                           y = ~delta_ecc_0.0.1, # temporal 
+                                           #legendgroup = ~tp1_cluster,
+                                           #opacity = I(op$opacity),
+                                           #frame = ~timepoint,
+                                           color = I("#898a8c"),
+                                           showlegend = F,
+                                           opacity = 1,
+                                           size=I(1)) %>%
+                           layout(xaxis = list(range = c(-1, 1),
+                                               title = ""),
+                                  yaxis = list(range = c(-1, 1),
+                                               title = ""),
+                                  annotations = list(list(text= ~unique(province),
+                                                          xref = "paper",
+                                                          yref = "paper",
+                                                          yanchor = "center",
+                                                          xanchor = "center",
+                                                          align = "center",
+                                                          x = 0.5,
+                                                          y = 1.1,
+                                                          showarrow = FALSE)))) %>%
+                subplot(nrows = 3, shareX = T, shareY = T) %>%
+                layout(annotations = list(list(text= "Delta geospatial epicluster cohesion index",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.1,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "Delta temporal epicluster cohesion index",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = -0.1,
+                                               y = 0.5,
+                                               textangle = -90,
+                                               font = list(size = 14),
+                                               showarrow = FALSE)))
+        }
     })
     
     
@@ -1715,7 +1831,7 @@ server <- function(input, output, session) {
             subplot(a, b, nrows = 1, margin = 0.025)
             
         } else if (input$region == 2) {
-
+            
             bycountry <- 
                 strains_sh$data(withSelection=T) %>%
                 filter(selected_ | is.na(selected_)) %>%
@@ -1743,7 +1859,7 @@ server <- function(input, output, session) {
                     group_by(country, tp1_cluster, present_at_tp1) %>%
                     summarize(n=sum(n)) %>%
                     subset(present_at_tp1==0)
-
+                
                 tp1 <- bycountry %>% 
                     group_by(country) %>%
                     subset(timepoint == i) %>%
@@ -2019,160 +2135,653 @@ server <- function(input, output, session) {
     
     output$strainsbycluster <- renderPlotly({
         
-        counts <- strains_sh$data(withSelection = T) %>%
-            filter(selected_ | is.na(selected_)) %>%
-            group_by(tp1_cluster, strain_date) %>%
-            tally()
-        
-        a <- plot_ly(data = counts) %>%
-            add_trace(type = "scatter",
-                      mode = "line",
-                      color = I("#898a8c"),
-                      x = ~strain_date,
-                      y = ~n, 
-                      name = ~tp1_cluster, 
-                      showlegend = F) %>%
-            layout(yaxis = list(rangemode = "tozero",
-                                title = "Number of novel strains identified"),
-                   xaxis = list(title = "Time point")) %>%
-            highlight(color = "#1F78C8")
-        
-        
-        # need to aggregate data
-        cumsum <- strains_sh$data(withSelection = T) %>%
-            filter(selected_ | is.na(selected_)) %>%
-            group_by(tp1_cluster, strain_date) %>% 
-            tally(!is.na(strain)) %>% 
-            mutate(cumsum = cumsum(n))
-        
-        
-        b <- plot_ly(data = cumsum) %>%
-            add_trace(type = "scatter",
-                      mode = "line",
-                      color = I("#898a8c"),
-                      x = ~strain_date,
-                      y = ~cumsum, 
-                      name = ~tp1_cluster, 
-                      showlegend = F) %>%
-            layout(yaxis = list(rangemode = "tozero",
-                                title = "Cumulative number of strains identified"),
-                   xaxis = list(title = "Time point")) %>%
-            highlight(color = "#1F78C8")
-        
-        subplot(a, b, nrows = 1, margin = 0.025)
-        
-        
+        # no faceting 
+        if (input$region == 1) {
+            
+            # tally counts by cluster and strain date 
+            counts <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(tp1_cluster, strain_date) %>%
+                tally()
+            
+            # mountain plot
+            mountain <- plot_ly(data = counts) %>%
+                add_trace(type = "scatter",
+                          mode = "line",
+                          color = I("#898a8c"),
+                          x = ~strain_date,
+                          y = ~n, 
+                          name = ~tp1_cluster, 
+                          showlegend = F) %>%
+                layout(yaxis = list(rangemode = "tozero",
+                                    title = "Number of novel strains identified"),
+                       xaxis = list(title = "Time point")) %>%
+                highlight(color = "#1F78C8")
+            
+            # need to aggregate data for cumsum 
+            cumsum <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(tp1_cluster, strain_date) %>% 
+                tally(!is.na(strain)) %>% 
+                mutate(cumsum = cumsum(n))
+            
+            # cumsum plot 
+            cumplot <- plot_ly(data = cumsum) %>%
+                add_trace(type = "scatter",
+                          mode = "line",
+                          color = I("#898a8c"),
+                          x = ~strain_date,
+                          y = ~cumsum, 
+                          name = ~tp1_cluster, 
+                          showlegend = F) %>%
+                layout(yaxis = list(rangemode = "tozero",
+                                    title = "Cumulative number of strains identified"),
+                       xaxis = list(title = "Time point")) %>%
+                highlight(color = "#1F78C8")
+            
+            # subplot mountain and cumsum together 
+            subplot(mountain, cumplot, nrows = 1, margin = 0.025)
+            
+            # facet by country     
+        } else if (input$region == 2) {
+            
+            # tally counts by country, cluster, and date
+            counts <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(country, tp1_cluster, strain_date) %>%
+                tally()
+            
+            # mountain plot 
+            mountain <- counts %>% 
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "scatter",
+                                           mode = "line",
+                                           color = I("#898a8c"),
+                                           x = ~strain_date,
+                                           y = ~n, 
+                                           name = ~tp1_cluster, 
+                                           showlegend = F) %>%
+                           layout(xaxis = list(title = ""),
+                                  yaxis = list(title = "",
+                                               range = c(0, max(na.omit(counts$n))*1.1)),
+                                  annotations = list(list(text= ~unique(country),
+                                                          xref = "paper",
+                                                          yref = "paper",
+                                                          yanchor = "center",
+                                                          xanchor = "center",
+                                                          align = "center",
+                                                          x = 0.5,
+                                                          y = 1.1,
+                                                          showarrow = FALSE))) %>%
+                           highlight(color = "#1F78C8")) %>% 
+                subplot(nrows = 3, shareX = T, shareY=T, margin = 0.025) %>%
+                layout(annotations = list(list(text= "Date",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.22,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "Count",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = -0.1,
+                                               y = 0.5,
+                                               textangle = -90,
+                                               font = list(size = 14),
+                                               showarrow = FALSE)))
+            
+            # aggregate data by country, cluster, and strain date 
+            # take cumsum of counts 
+            cumsum <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(country, tp1_cluster, strain_date) %>% 
+                tally(!is.na(strain)) %>% 
+                mutate(cumsum = cumsum(n))
+            
+            # cumsum plot 
+            cumplot <- cumsum %>% 
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "scatter",
+                                           mode = "line",
+                                           color = I("#898a8c"),
+                                           x = ~strain_date,
+                                           y = ~cumsum, 
+                                           name = ~tp1_cluster, 
+                                           showlegend = F) %>%
+                           layout(xaxis = list(title = ""),
+                                  yaxis = list(title = "",
+                                               range = c(0, max(na.omit(cumsum$cumsum))*1.1)),
+                                  annotations = list(list(text= ~unique(country),
+                                                          xref = "paper",
+                                                          yref = "paper",
+                                                          yanchor = "center",
+                                                          xanchor = "center",
+                                                          align = "center",
+                                                          x = 0.5,
+                                                          y = 1.1,
+                                                          showarrow = FALSE))) %>%
+                           highlight(color = "#1F78C8")) %>% 
+                subplot(nrows = 3, shareX = T, shareY=T, margin = 0.025) %>%
+                layout(annotations = list(list(text= "Date",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.22,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "Cumulative count",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = -0.1,
+                                               y = 0.5,
+                                               textangle = -90,
+                                               font = list(size = 14),
+                                               showarrow = FALSE)))
+            
+            # subplot mountain and cumsum together 
+            subplot(mountain, cumplot, nrows = 1, margin = 0.025)
+            
+            # facet by province    
+        } else if (input$region == 3) {
+            
+            # tally counts by province, cluster, and date
+            counts <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                subset(country %in% input$regionProvince) %>%
+                group_by(province, tp1_cluster, strain_date) %>%
+                tally()
+            
+            # mountain plot 
+            mountain <- counts %>% 
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "scatter",
+                                           mode = "line",
+                                           color = I("#898a8c"),
+                                           x = ~strain_date,
+                                           y = ~n, 
+                                           name = ~tp1_cluster, 
+                                           showlegend = F) %>%
+                           layout(xaxis = list(title = ""),
+                                  yaxis = list(title = "",
+                                               range = c(0, max(na.omit(counts$n))*1.1)),
+                                  annotations = list(list(text= ~unique(province),
+                                                          xref = "paper",
+                                                          yref = "paper",
+                                                          yanchor = "center",
+                                                          xanchor = "center",
+                                                          align = "center",
+                                                          x = 0.5,
+                                                          y = 1.1,
+                                                          showarrow = FALSE))) %>%
+                           highlight(color = "#1F78C8")) %>% 
+                subplot(nrows = 3, shareX = T, shareY=T, margin = 0.025) %>%
+                layout(annotations = list(list(text= "Date",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.22,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "Count",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = -0.1,
+                                               y = 0.5,
+                                               textangle = -90,
+                                               font = list(size = 14),
+                                               showarrow = FALSE)))
+            
+            # aggregate data by province, cluster, and strain date 
+            # take cumsum of counts 
+            cumsum <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                subset(country %in% input$regionProvince) %>%
+                group_by(province, tp1_cluster, strain_date) %>% 
+                tally(!is.na(strain)) %>% 
+                mutate(cumsum = cumsum(n))
+            
+            # cumsum plot 
+            cumplot <- cumsum %>% 
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "scatter",
+                                           mode = "line",
+                                           color = I("#898a8c"),
+                                           x = ~strain_date,
+                                           y = ~cumsum, 
+                                           name = ~tp1_cluster, 
+                                           showlegend = F) %>%
+                           layout(xaxis = list(title = ""),
+                                  yaxis = list(title = "",
+                                               range = c(0, max(na.omit(cumsum$cumsum))*1.1)),
+                                  annotations = list(list(text= ~unique(province),
+                                                          xref = "paper",
+                                                          yref = "paper",
+                                                          yanchor = "center",
+                                                          xanchor = "center",
+                                                          align = "center",
+                                                          x = 0.5,
+                                                          y = 1.1,
+                                                          showarrow = FALSE))) %>%
+                           highlight(color = "#1F78C8")) %>% 
+                subplot(nrows = 3, shareX = T, shareY=T, margin = 0.025) %>%
+                layout(annotations = list(list(text= "Date",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.22,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "Cumulative count",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = -0.1,
+                                               y = 0.5,
+                                               textangle = -90,
+                                               font = list(size = 14),
+                                               showarrow = FALSE)))
+            
+            # subplot mountain and cumsum together 
+            subplot(mountain, cumplot, nrows = 1, margin = 0.025)
+        }
     })
     
     output$newstrainsbydate <- renderPlotly({
-        plot_ly(type = "histogram",
-                data = strains_sh,
-                histfunc = "count",
-                x = ~strain_date,
-                color = I("#898a8c"),                
-                xbins = list(size = 86400000.0),
-                hovertemplate = ~paste('<b>', country, '</b><br>',
-                                       'Count: %{y}', '<br>',
-                                       'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
-            layout(barmode = "stack",
-                   xaxis = list(title = "Date"),
-                   yaxis = list(title = "Number of new strains identified"),
-                   updatemenus = list( list(
-                       active = -1,
-                       x= -0.1,
-                       type = 'buttons',
-                       buttons = list(
-                           list(
-                               label = "By day",
-                               method = "restyle",
-                               args = list(list(xbins = list(size = 86400000.0)))),
-                           list(
-                               label = "By week",
-                               method = "restyle",
-                               args = list(list(xbins = list(size = 604800000.0)))),
-                           list(
-                               label = "By month",
-                               method = "restyle",
-                               args = list(list(xbins = list(size = "M1"))))
-                       )))) %>%
-            highlight(color = "#1F78C8")
         
+        # no faceting
+        if (input$region == 1) {
+            plot_ly(type = "histogram",
+                    data = strains_sh,
+                    histfunc = "count",
+                    x = ~strain_date,
+                    color = I("#898a8c"),                
+                    xbins = list(size = 86400000.0),
+                    hovertemplate = ~paste('Count: %{y}', '<br>',
+                                           'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
+                layout(barmode = "stack",
+                       xaxis = list(title = "Date"),
+                       yaxis = list(title = "Number of new strains identified"),
+                       updatemenus = list( list(
+                           active = -1,
+                           x= -0.1,
+                           type = 'buttons',
+                           buttons = list(
+                               list(
+                                   label = "By day",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 86400000.0)))),
+                               list(
+                                   label = "By week",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = 604800000.0)))),
+                               list(
+                                   label = "By month",
+                                   method = "restyle",
+                                   args = list(list(xbins = list(size = "M1"))))
+                           )))) %>%
+                highlight(color = "#1F78C8")
+            
+            # facet by country
+        } else if (input$region == 2) {
+            
+            # calc maximum count and use to set yaxis max
+            counts <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(country, strain_date) %>% 
+                tally() 
+            # cumsum plot 
+            strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           histfunc = "count",
+                                           x = ~strain_date,
+                                           color = I("#898a8c"),                
+                                           xbins = list(size = 86400000.0),
+                                           showlegend = F,
+                                           hovertemplate = ~paste('Count: %{y}', '<br>',
+                                                                  'Date range: %{x}', 
+                                                                  '<extra></extra>', 
+                                                                  sep=" ")) %>%
+                           layout(xaxis = list(title = "", 
+                                               range = c(min(counts$strain_date), 
+                                                         max(counts$strain_date))),
+                                  yaxis = list(title = "", range = c(0, max(counts$n)*1.1)),
+                                  annotations = list(list(text= ~unique(country),
+                                                          xref = "paper",
+                                                          yref = "paper",
+                                                          yanchor = "center",
+                                                          xanchor = "center",
+                                                          align = "center",
+                                                          x = 0.5,
+                                                          y = 1.1,
+                                                          showarrow = FALSE)))) %>% 
+                subplot(nrows = 3, shareX = T, shareY = T, margin = 0.025) %>%
+                layout(annotations = list(list(text= "Date",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.22,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "Count",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = -0.1,
+                                               y = 0.5,
+                                               textangle = -90,
+                                               font = list(size = 14),
+                                               showarrow = FALSE)))
+            
+            # facet by province
+        } else if (input$region == 3) {
+            
+            # calc maximum count and use to set yaxis max
+            counts <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                subset(country %in% input$regionProvince) %>%
+                group_by(province, strain_date) %>% 
+                tally() 
+            # cumsum plot 
+            strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                subset(country %in% input$regionProvince) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           histfunc = "count",
+                                           x = ~strain_date,
+                                           color = I("#898a8c"),                
+                                           xbins = list(size = 86400000.0),
+                                           showlegend = F,
+                                           hovertemplate = ~paste('Count: %{y}', '<br>',
+                                                                  'Date range: %{x}', 
+                                                                  '<extra></extra>', 
+                                                                  sep=" ")) %>%
+                           layout(xaxis = list(title = "", 
+                                               range = c(min(counts$strain_date), 
+                                                         max(counts$strain_date))),
+                                  yaxis = list(title = "", 
+                                               range = c(0, max(counts$n)*1.1)),
+                                  annotations = list(list(text= ~unique(province),
+                                                          xref = "paper",
+                                                          yref = "paper",
+                                                          yanchor = "center",
+                                                          xanchor = "center",
+                                                          align = "center",
+                                                          x = 0.5,
+                                                          y = 1.1,
+                                                          showarrow = FALSE)))) %>% 
+                subplot(nrows = 3, shareX = T, shareY = T, margin = 0.025) %>%
+                layout(annotations = list(list(text= "Date",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = 0.5,
+                                               y = -0.22,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "Count",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               x = -0.1,
+                                               y = 0.5,
+                                               textangle = -90,
+                                               font = list(size = 14),
+                                               showarrow = FALSE)))
+        }
     })
     
     
     output$singlevsmulti <- renderPlotly({
         
-        
-        a <- plot_ly(type = "histogram") %>%
-            add_trace(data = strains_long %>%
-                          subset(single_mult == "Multi strain clusters"),
-                      histfunc = "count",
-                      x = ~strain_date,
-                      color = I("#898a8c"),    
-                      showlegend = F, 
-                      xbins = list(size = 86400000.0)) %>%
-            layout(xaxis = list(title = "Date"),
-                   annotations = list(list(text= "Count",
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           textangle = -90,
-                                           x = -0.05,
-                                           y = 0.3,
-                                           font = list(size = 14),
-                                           showarrow = FALSE),
-                                      list(text= "New strains identified as part of a multi-strain cluster",
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "left",
-                                           align = "left",
-                                           font = list(size = 14),
-                                           x = 0,
-                                           y = 1,
-                                           showarrow = FALSE)))
-        
-        b <- plot_ly(type = "histogram") %>%
-            add_trace(data = strains_long %>%
-                          subset(single_mult == "Single strain clusters"),
-                      histfunc = "count",
-                      x = ~strain_date,
-                      color = I("#898a8c"),     
-                      showlegend = F,
-                      xbins = list(size = 86400000.0)) %>%
-            layout(xaxis = list(title = "Date"),
-                   yaxis = list(range = c(0, max(strains_long %>%
-                                                     subset(single_mult == "Multi strain clusters") %>%
-                                                     group_by(strain_date) %>%
-                                                     count() %>%
-                                                     pull(n)))),
-                   annotations = list(list(text= "Count",
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           textangle = -90,
-                                           x = -0.05,
-                                           y = 0.5,
-                                           font = list(size = 14),
-                                           showarrow = FALSE),
-                                      list(text= "New strains identified as part of single-strain cluster",
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "left",
-                                           align = "left",
-                                           font = list(size = 14),
-                                           x = 0,
-                                           y = 1,
-                                           showarrow = FALSE)))
-        
-        subplot(b, a, nrows = 2, shareX = T, margin = 0.075)
-        
-        
+        # no faceting 
+        if (input$region == 1) {
+            
+            # multi strain count
+            multiplot <- plot_ly(type = "histogram") %>%
+                add_trace(data = strains_sh$data(withSelection = T) %>%
+                              filter(selected_ | is.na(selected_)) %>%
+                              subset(single_mult == "Multi strain clusters"),
+                          histfunc = "count",
+                          x = ~strain_date,
+                          color = I("#898a8c"),    
+                          showlegend = F, 
+                          xbins = list(size = 86400000.0)) %>%
+                layout(xaxis = list(title = "Date"),
+                       annotations = list(list(text= "Count",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               textangle = -90,
+                                               x = -0.05,
+                                               y = 0.3,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "New strains identified as part of a multi-strain cluster",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "left",
+                                               align = "left",
+                                               font = list(size = 14),
+                                               x = 0,
+                                               y = 1,
+                                               showarrow = FALSE)))
+            
+            # single strain counts
+            singleplot <- plot_ly(type = "histogram") %>%
+                add_trace(data = strains_sh$data(withSelection = T) %>%
+                              filter(selected_ | is.na(selected_)) %>%
+                              subset(single_mult == "Single strain clusters"),
+                          histfunc = "count",
+                          x = ~strain_date,
+                          color = I("#898a8c"),     
+                          showlegend = F,
+                          xbins = list(size = 86400000.0)) %>%
+                layout(xaxis = list(title = "Date"),
+                       yaxis = list(range = c(0, max(strains_sh$data(withSelection = T) %>%
+                                                         filter(selected_ | is.na(selected_)) %>%
+                                                         subset(single_mult == "Multi strain clusters") %>%
+                                                         group_by(strain_date) %>%
+                                                         count() %>%
+                                                         pull(n)))),
+                       annotations = list(list(text= "Count",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "center",
+                                               align = "center",
+                                               textangle = -90,
+                                               x = -0.05,
+                                               y = 0.5,
+                                               font = list(size = 14),
+                                               showarrow = FALSE),
+                                          list(text= "New strains identified as part of single-strain cluster",
+                                               xref = "paper",
+                                               yref = "paper",
+                                               yanchor = "center",
+                                               xanchor = "left",
+                                               align = "left",
+                                               font = list(size = 14),
+                                               x = 0,
+                                               y = 1,
+                                               showarrow = FALSE)))
+            
+            subplot(singleplot, multiplot, nrows = 2, shareX = T, margin = 0.075)
+            
+            # facet by country
+        } else if (input$region == 2) {
+            
+            multi <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                group_by(country, single_mult, strain_date) %>%
+                tally()
+            
+            ifelse(length(unique(multi$single_mult))>1, 
+                   (colors = c("#898a8c", "#373738")), 
+                   (colors = c("#898a8c")))
+            
+            strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                split(.$country) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           histfunc = "count",
+                                           x = ~strain_date,
+                                           color = ~single_mult, 
+                                           colors = colors, 
+                                           xbins = list(size = 86400000.0),
+                                           legendgroup = ~single_mult, 
+                                           showlegend = ifelse(which(names(strains_sh$data(withSelection = T) %>%
+                                                                               filter(selected_ | is.na(selected_)) %>%
+                                                                               split(.$country)) == unique(d$country))==1, TRUE, FALSE), 
+                                           hovertemplate = ~paste('Count: %{y}', '<br>',
+                                                                  'Date range: %{x}', 
+                                                                  '<extra></extra>', 
+                                                                  sep=" ")) %>%
+                           layout( barmode = 'overlay',
+                                   xaxis = list(title = ""),
+                                   yaxis = list(range = c(0, max(multi$n))),
+                                   annotations = list(list(text= ~unique(country),
+                                                           xref = "paper",
+                                                           yref = "paper",
+                                                           yanchor = "center",
+                                                           xanchor = "center",
+                                                           align = "center",
+                                                           x = 0.5,
+                                                           y = 1.1,
+                                                           showarrow = FALSE)))) %>% 
+                subplot(nrows = 3, shareX = T, shareY = T)
+            
+            # single <- strains_sh$data(withSelection = T) %>%
+            #     filter(selected_ | is.na(selected_)) %>%
+            #     subset(single_mult == "Single strain clusters") %>%
+            #     group_by(country, strain_date) %>%
+            #     tally()
+            # 
+            # # single strain 
+            # singleplot <- strains_sh$data() %>%
+            #     subset(single_mult == "Single strain clusters") %>%
+            
+            # strains_long %>% 
+            #     split(.$country) %>%
+            #     lapply(function(d) plot_ly(d,
+            #                                type = "histogram",
+            #                                histfunc = "count",
+            #                                x = ~strain_date,
+            #                                color = I("#898a8c"),
+            #                                xbins = list(size = 86400000.0),
+            #                                showlegend = F,
+            #                                hovertemplate = ~paste('Count: %{y}', '<br>',
+            #                                                       'Date range: %{x}',
+            #                                                       '<extra></extra>',
+            #                                                       sep=" ")) %>%
+            #                layout(xaxis = list(range = c(min(strains_long$strain_date),
+            #                                              max(strains_long$strain_date))),
+            #                       yaxis = list(range = c(0, max(multi$n))),
+            #                       annotations = list(list(text= ~unique(country),
+            #                                               xref = "paper",
+            #                                               yref = "paper",
+            #                                               yanchor = "center",
+            #                                               xanchor = "center",
+            #                                               align = "center",
+            #                                               x = 0.5,
+            #                                               y = 1.1,
+            #                                               showarrow = FALSE)))) %>%
+            #     subplot(nrows = 3, shareX = T, shareY = T)
+            # 
+            # subplot(multiplot, singleplot, margin = 0.05)
+            
+            # facet by province 
+        } else if (input$region == 3) {
+            
+            multi <- strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                subset(country %in% input$regionProvince) %>%
+                group_by(province, single_mult, strain_date) %>%
+                tally()
+            
+            ifelse(length(unique(multi$single_mult))>1, 
+                   (colors = c("#898a8c", "#373738")), 
+                   (colors = c("#898a8c")))
+            
+            strains_sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                subset(country %in% input$regionProvince) %>%
+                split(.$province) %>%
+                lapply(function(d) plot_ly(d, 
+                                           type = "histogram",
+                                           histfunc = "count",
+                                           x = ~strain_date,
+                                           color = ~single_mult, 
+                                           colors = colors, 
+                                           xbins = list(size = 86400000.0),
+                                           legendgroup = ~single_mult, 
+                                           showlegend = ifelse(which(names(strains_sh$data(withSelection = T) %>%
+                                                                               filter(selected_ | is.na(selected_)) %>%
+                                                                               subset(country %in% input$regionProvince) %>%
+                                                                               split(.$province)) == unique(d$province))==1, TRUE, FALSE), 
+                                           hovertemplate = ~paste('Count: %{y}', '<br>',
+                                                                  'Date range: %{x}', 
+                                                                  '<extra></extra>', 
+                                                                  sep=" ")) %>%
+                           layout( barmode = 'overlay',
+                                   xaxis = list(title = ""),
+                                   yaxis = list(range = c(0, max(multi$n))),
+                                   annotations = list(list(text= ~unique(province),
+                                                           xref = "paper",
+                                                           yref = "paper",
+                                                           yanchor = "center",
+                                                           xanchor = "center",
+                                                           align = "center",
+                                                           x = 0.5,
+                                                           y = 1.1,
+                                                           showarrow = FALSE)))) %>% 
+                subplot(nrows = 3, shareX = T, shareY = T)
+        }
     })
     
     # mapbox token 
