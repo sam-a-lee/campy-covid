@@ -14,7 +14,7 @@ sidebar <- dashboardSidebar(
               
               # ECC indices tab
               menuItem("ECC indices", tabName = "eccIndices"),
-              menuItem("Maps", tabName = "maps"),
+              menuItem("Cluster map", tabName = "maps"),
               
               # Data exploration tab
               menuItem("Explore the data", tabName = "exploreData",
@@ -209,18 +209,17 @@ body <- dashboardBody(
     tabItem(tabName = "maps",
             fluidRow(
               tabBox(
-                title = "Maps",
+                title = "Cluster map",
                 # The id lets us use input$tabset1 on the server to find the current tab
                 id = "tabset2",
                 width =12,
                 side = "right",
-                selected = "Maps",
+                selected = "Map",
                 tabPanel("Interpretation", 
                          HTML("")
                 ),
-                tabPanel("Maps",
-                         plotlyOutput("cluster_map", height = "100%"),
-                         plotlyOutput("strain_map", height = "100%")
+                tabPanel("Map",
+                         plotlyOutput("cluster_map", height = "100%")
                 )
               )
             )

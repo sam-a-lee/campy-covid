@@ -347,25 +347,27 @@ server <- function(input, output, session) {
         print("updating selectize inputs...")
         
         # update cluster sliders
-        updateSelectInput(inputId = "tp1_cluster", label = "TP1 cluster", choices = unique(vals$clusters$tp1_cluster),  selected = NULL)
-        updateSelectInput(inputId = "timepoint", label = "Timepoint", choices = unique(vals$clusters$timepoint), selected = NULL)
+        updateSelectInput(inputId = "tp1_cluster", label = "Cluster", choices = unique(vals$clusters$tp1_cluster),  selected = NULL)
+        updateSelectInput(inputId = "timepoint", label = "Time point", choices = unique(vals$clusters$timepoint), selected = NULL)
         updateSelectInput(inputId = "type", label = "Type", choices = unique(vals$clusters$type),  selected = NULL)
         updateSliderInput(inputId = "cluster_size_2", label = "Cluster size", min = min(vals$clusters$cluster_size_2), max =  max(vals$clusters$cluster_size_2), value = c(min(vals$clusters$cluster_size_2),  max(vals$clusters$cluster_size_2)))
-        updateSliderInput(inputId = "avg_date", label = "Avg date", min = min(vals$clusters$avg_date), max = max(vals$clusters$avg_date), value = c(min(vals$clusters$avg_date), max(vals$clusters$avg_date)))
-        updateSliderInput(inputId = "ecc_0.0.1", label = "ecc_0.0.1", min = min(vals$clusters$ecc_0.0.1, na.rm = T), max = max(vals$clusters$ecc_0.0.1, na.rm = T), value = c(min(vals$clusters$ecc_0.0.1, na.rm = T), max(vals$clusters$ecc_0.0.1, na.rm = T)))
-        updateSliderInput(inputId = "ecc_0.1.0", label = "ecc_0.1.0", min = min(vals$clusters$ecc_0.1.0, na.rm = T), max = max(vals$clusters$ecc_0.1.0, na.rm = T), value = c(min(vals$clusters$ecc_0.1.0, na.rm = T), max(vals$clusters$ecc_0.1.0, na.rm = T)))
-        updateSliderInput(inputId = "avg_latitude", label = "Avg latitude", min = min(vals$clusters$avg_latitude), max = max(vals$clusters$avg_latitude), value = c(min(vals$clusters$avg_latitude), max(vals$clusters$avg_latitude)))
-        updateSliderInput(inputId = "avg_longitude", label = "Avg longitude", min = min(vals$clusters$avg_longitude), max = max(vals$clusters$avg_longitude), value = c(min(vals$clusters$avg_longitude), max(vals$clusters$avg_longitude)))
+        updateSliderInput(inputId = "avg_date", label = "Cluster date", min = min(vals$clusters$avg_date), max = max(vals$clusters$avg_date), value = c(min(vals$clusters$avg_date), max(vals$clusters$avg_date)))
+        updateSliderInput(inputId = "ecc_0.0.1", label = "Temporal ECC", min = min(vals$clusters$ecc_0.0.1, na.rm = T), max = max(vals$clusters$ecc_0.0.1, na.rm = T), value = c(min(vals$clusters$ecc_0.0.1, na.rm = T), max(vals$clusters$ecc_0.0.1, na.rm = T)))
+        updateSliderInput(inputId = "ecc_0.1.0", label = "Geospatial ECC", min = min(vals$clusters$ecc_0.1.0, na.rm = T), max = max(vals$clusters$ecc_0.1.0, na.rm = T), value = c(min(vals$clusters$ecc_0.1.0, na.rm = T), max(vals$clusters$ecc_0.1.0, na.rm = T)))
+        updateSliderInput(inputId = "avg_latitude", label = "Average latitude", min = min(vals$clusters$avg_latitude), max = max(vals$clusters$avg_latitude), value = c(min(vals$clusters$avg_latitude), max(vals$clusters$avg_latitude)))
+        updateSliderInput(inputId = "avg_longitude", label = "Average longitude", min = min(vals$clusters$avg_longitude), max = max(vals$clusters$avg_longitude), value = c(min(vals$clusters$avg_longitude), max(vals$clusters$avg_longitude)))
         # update cluster delta sliders 
         sliderInput(inputId = "delta_cluster_size", label = "Delta cluster size", min = min(vals$clusters$delta_cluster_size), max = max(vals$clusters$delta_cluster_size), value = c(min(vals$clusters$delta_cluster_size), max(vals$clusters$delta_cluster_size)))
-        sliderInput(inputId = "num_novel_tp2_strains", label = "Novel TP2 strains", min = min(vals$clusters$num_novel_tp2_strains), max = max(vals$clusters$num_novel_tp2_strains), value = c(min(vals$clusters$num_novel_tp2_strains), max(vals$clusters$num_novel_tp2_strains)))
+        sliderInput(inputId = "num_novel_tp2_strains", label = "Number of new strains", min = min(vals$clusters$num_novel_tp2_strains), max = max(vals$clusters$num_novel_tp2_strains), value = c(min(vals$clusters$num_novel_tp2_strains), max(vals$clusters$num_novel_tp2_strains)))
         sliderInput(inputId = "overall_cluster_growth_rate", label = "Overall growth rate", min = min(vals$clusters$overall_cluster_growth_rate), max = max(vals$clusters$overall_cluster_growth_rate), value = c(min(vals$clusters$overall_cluster_growth_rate), max(vals$clusters$overall_cluster_growth_rate)))
         sliderInput(inputId = "cluster_novel_growth_rate", label = "Novel growth rate", min = min(vals$clusters$delta_cluster_size), max = max(vals$clusters$delta_cluster_size), value = c(min(vals$clusters$delta_cluster_size), max(vals$clusters$delta_cluster_size)))
-        sliderInput(inputId = "delta_ecc_0.0.1", label = "delta ecc_0.0.1", min = min(vals$clusters$delta_ecc_0.0.1, na.rm = T), max = max(vals$clusters$delta_ecc_0.0.1, na.rm = T), value = c(min(vals$clusters$delta_ecc_0.0.1, na.rm = T), max(vals$clusters$delta_ecc_0.0.1, na.rm = T)))
-        sliderInput(inputId = "delta_ecc_0.1.0", label = "delta ecc_0.1.0", min = min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max = max(vals$clusters$delta_ecc_0.1.0, na.rm = T), value = c(min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max(vals$clusters$delta_ecc_0.1.0, na.rm = T)))
+        sliderInput(inputId = "delta_ecc_0.0.1", label = "Delta temporal ECC", min = min(vals$clusters$delta_ecc_0.0.1, na.rm = T), max = max(vals$clusters$delta_ecc_0.0.1, na.rm = T), value = c(min(vals$clusters$delta_ecc_0.0.1, na.rm = T), max(vals$clusters$delta_ecc_0.0.1, na.rm = T)))
+        sliderInput(inputId = "delta_ecc_0.1.0", label = "Delta geospatial ECC", min = min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max = max(vals$clusters$delta_ecc_0.1.0, na.rm = T), value = c(min(vals$clusters$delta_ecc_0.1.0, na.rm = T), max(vals$clusters$delta_ecc_0.1.0, na.rm = T)))
         #update stain filters
         updateSelectInput(inputId = "country", label = "Country", choices = unique(vals$strains_long$country),  selected = NULL)
         updateSelectInput(inputId = "province", label = "Province", choices = unique(vals$strains_long$province),  selected = NULL)
+        # regional facet inputs
+        updateSelectizeInput(inputId = "regionProvince", label = "View provinces in: ", choices = unique(vals$strains_long$country), selected = NULL)
     })
     
     
@@ -657,7 +659,10 @@ server <- function(input, output, session) {
                           frame = ~timepoint, 
                           size = ~I(cluster_size_2),
                           color = ~I("#898a8c"), 
-                          hovertemplate = ~tp1_cluster,
+                          hovertemplate = ~paste('<b>', tp1_cluster,'</b>', '<br>',
+                                                 'Geospatial ECC:', ecc_0.1.0,
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           showlegend = FALSE,
                           marker = list(sizemode = "area", opacity = 0.5)) %>%
                 layout(xaxis = list(title = "Geospatial epicluster cohesion index",
@@ -683,7 +688,10 @@ server <- function(input, output, session) {
                           size = ~I(cluster_size_2),
                           color = ~I("#898a8c"), 
                           frame = ~timepoint, 
-                          hovertemplate = ~tp1_cluster,
+                          hovertemplate = ~paste('<b>', tp1_cluster,'</b>','<br>',
+                                                 'Temporal ECC:', ecc_0.0.1,
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           showlegend = FALSE,
                           marker = list(sizemode = "area", opacity = 0.5)) %>%
                 layout(xaxis = list(title = "Temporal epicluster cohesion index",
@@ -709,7 +717,11 @@ server <- function(input, output, session) {
                           frame = ~timepoint,  
                           size = ~I(cluster_size_2),
                           color = ~I("#898a8c"), 
-                          hovertemplate = ~tp1_cluster,
+                          hovertemplate = ~paste('<b>', tp1_cluster,'</b>', '<br>',
+                                                 'Geospatial ECC:', ecc_0.1.0, '<br>',
+                                                 'Temporal ECC:', ecc_0.0.1,
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           showlegend = FALSE, 
                           marker = list(sizemode = "area", opacity = 0.5)) %>%
                 layout(xaxis = list(title = "Geospatial epicluster cohesion index",
@@ -755,8 +767,10 @@ server <- function(input, output, session) {
                                            y = 1,
                                            color = I("#898a8c"),
                                            frame = ~timepoint, 
-                                           hovertemplate = ~tp1_cluster,
-                                           size = ~I(n),
+                                           hovertemplate = ~paste('<b>', tp1_cluster,'</b>', '<br>',
+                                                                  'Geospatial ECC:', ecc_0.1.0, '<br>',
+                                                                  '<extra></extra>',
+                                                                  sep = " "),                                           size = ~I(n),
                                            marker = list(sizemode = "area", opacity = 0.5),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(range = c(-0.05,1.05), title = "", zeroline = F),
@@ -796,8 +810,10 @@ server <- function(input, output, session) {
                                            y = 1,
                                            color = I("#898a8c"),
                                            frame = ~timepoint, 
-                                           hovertemplate = ~tp1_cluster,
-                                           size = ~I(n),
+                                           hovertemplate = ~paste('<b>', tp1_cluster,'</b>', '<br>',
+                                                                  'Temporal ECC:', ecc_0.0.1,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),                                           size = ~I(n),
                                            marker = list(sizemode = "area", opacity = 0.5),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(range = c(-0.05,1.05), title = "", zeroline = F),
@@ -838,8 +854,11 @@ server <- function(input, output, session) {
                                            y = ~ecc_0.1.0,
                                            color = I("#898a8c"),
                                            frame = ~timepoint, 
-                                           hovertemplate = ~tp1_cluster,
-                                           size = ~I(n),
+                                           hovertemplate = ~paste('<b>', tp1_cluster,'</b>', '<br>',
+                                                                  'Geospatial ECC:', ecc_0.1.0, '<br>',
+                                                                  'Temporal ECC:', ecc_0.0.1,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),                                           size = ~I(n),
                                            marker = list(sizemode = "area", opacity = 0.5),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(range = c(-0.05,1.05), title = ""),
@@ -896,8 +915,10 @@ server <- function(input, output, session) {
                                            y = 1,
                                            color = I("#898a8c"),
                                            frame = ~timepoint, 
-                                           hovertemplate = ~tp1_cluster,
-                                           size = ~I(n),
+                                           hovertemplate = ~paste('<b>', tp1_cluster,'</b>', '<br>',
+                                                                  'Geospatial ECC:', ecc_0.1.0, '<br>',
+                                                                  '<extra></extra>',
+                                                                  sep = " "),                                           size = ~I(n),
                                            marker = list(sizemode = "area", opacity = 0.5),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(range = c(-0.05,1.05), title = "", zeroline = F),
@@ -938,8 +959,10 @@ server <- function(input, output, session) {
                                            y = 1,
                                            color = I("#898a8c"),
                                            frame = ~timepoint, 
-                                           hovertemplate = ~tp1_cluster,
-                                           size = ~I(n),
+                                           hovertemplate = ~paste('<b>', tp1_cluster,'</b>', '<br>',
+                                                                  'Temporal ECC:', ecc_0.0.1,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),                                           size = ~I(n),
                                            marker = list(sizemode = "area", opacity = 0.5),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(range = c(-0.05,1.05), title = "", zeroline = F),
@@ -981,8 +1004,11 @@ server <- function(input, output, session) {
                                            y = ~ecc_0.1.0,
                                            color = I("#898a8c"),
                                            frame = ~timepoint, 
-                                           hovertemplate = ~tp1_cluster,
-                                           size = ~I(n),
+                                           hovertemplate = ~paste('<b>', tp1_cluster,'</b>', '<br>',
+                                                                  'Geospatial ECC:', ecc_0.1.0, '<br>',
+                                                                  'Temporal ECC:', ecc_0.0.1,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),                                           size = ~I(n),
                                            marker = list(sizemode = "area", opacity = 0.5),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(range = c(-0.05,1.05), title = ""),
@@ -1038,6 +1064,10 @@ server <- function(input, output, session) {
                           frame = ~timepoint,
                           color = I("#898a8c"),
                           xbins = list(size = 0.01),
+                          hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                 'Count:', '%{y}' ,
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           showlegend = FALSE) %>%
                 layout(xaxis = list(range = c(0,1),
                                     title = "Geospatial epicluster cohesion index"),
@@ -1071,6 +1101,10 @@ server <- function(input, output, session) {
                           frame = ~timepoint,
                           color = I("#898a8c"),
                           xbins = list(size = 0.01),
+                          hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                 'Count:', '%{y}' ,
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           showlegend = FALSE) %>%
                 layout(xaxis = list(range = c(-1,1),
                                     title = "Delta geospatial epicluster cohesion index"),
@@ -1105,6 +1139,10 @@ server <- function(input, output, session) {
                           frame = ~timepoint,
                           color = I("#898a8c"), 
                           xbins = list(size = 0.01),
+                          hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                 'Count:', '%{y}' ,
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           showlegend = FALSE) %>%
                 layout(xaxis = list(range = c(0,1),
                                     title = "Temporal epicluster cohesion index"),
@@ -1138,6 +1176,10 @@ server <- function(input, output, session) {
                           frame = ~timepoint,
                           color = I("#898a8c"), 
                           xbins = list(size = 0.01),
+                          hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                 'Count:', '%{y}' ,
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           showlegend = FALSE) %>%
                 layout(xaxis = list(range = c(-1,1),
                                     title = "Delta temporal epicluster cohesion index"),
@@ -1176,6 +1218,10 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
+                                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}' ,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(0,1), title = ""),
                                   yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
@@ -1212,6 +1258,10 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
+                                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}' ,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(0,1), title = ""),
                                   yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
@@ -1248,6 +1298,10 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
+                                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}' ,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(-1,1), title = ""),
                                   yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
@@ -1284,6 +1338,10 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
+                                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}' ,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(-1,1), title = ""),
                                   yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
@@ -1328,6 +1386,10 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
+                                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}' ,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(0,1), title = ""),
                                   yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
@@ -1366,6 +1428,10 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
+                                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}' ,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(0,1), title = ""),
                                   yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
@@ -1404,6 +1470,10 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
+                                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}' ,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(-1,1), title = ""),
                                   yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
@@ -1442,6 +1512,10 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
+                                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}' ,
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(-1,1), title = ""),
                                   yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
@@ -1482,22 +1556,23 @@ server <- function(input, output, session) {
         
         if (input$region ==1) {
             # change to change
-            plot_ly(type="scatterpolar",
-                    data = clusters_sh$data(withSelection = TRUE) %>%
-                        filter(selected_ | is.na(selected_)) %>%
-                        mutate(ecc_comb = ecc_direction_delta) %>%
-                        group_by(timepoint) %>%
-                        count(ecc_comb, .drop=FALSE) %>%
-                        full_join(directions, by = c('ecc_comb')) %>%
-                        mutate(cardinal = factor(cardinal, levels =c("N", "NNE", "NE", "ENE",
-                                                                     "E", "ESE", "SE", "SSE",
-                                                                     "S", "SSW", "SW", "WSW", 
-                                                                     "W", "WNW", "NW", "NNW"))),
-                    r = ~n,
-                    theta = ~degree_mid,
-                    color = I("#898a8c"),
-                    frame = ~timepoint, 
-                    fill = 'toself') %>%
+            
+            clusters_sh$data(withSelection = TRUE) %>%
+                filter(selected_ | is.na(selected_)) %>%
+                mutate(ecc_comb = ecc_direction_delta) %>%
+                group_by(timepoint) %>%
+                count(ecc_comb, .drop=FALSE) %>%
+                full_join(directions, by = c('ecc_comb')) %>% 
+                plot_ly(type="scatterpolar",
+                        r = ~n,
+                        theta = ~degree_mid,
+                        color = I("#898a8c"),
+                        frame = ~timepoint, 
+                        hovertemplate = ~paste('Transmission:', ecc_comb, '<br>',
+                                               'Count:', '%{r}', 
+                                               '<extra></extra>',
+                                               sep = " "),
+                        fill = 'toself') %>%
                 layout(showlegend = F,
                        margin = list(l = 100, r = 100),
                        polar = list(
@@ -1520,19 +1595,9 @@ server <- function(input, output, session) {
             # by country 
             strains_sh_gr$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
-                # group_by(country, tp1_cluster, timepoint) %>%
-                # summarize(ecc_0.0.1 = mean(ecc_0.0.1),
-                #           ecc_0.1.0 = mean(ecc_0.1.0),
-                #           ecc_comb = unique(as.character(ecc_direction_delta))) %>%
                 group_by(country, timepoint) %>%
-                #na.omit() %>%
                 count(ecc_comb, .drop=FALSE) %>%
                 full_join(directions, by = c('ecc_comb')) %>%
-                mutate(cardinal = factor(cardinal, 
-                                         levels =c("N", "NNE", "NE", "ENE",
-                                                   "E", "ESE", "SE", "SSE",
-                                                   "S", "SSW", "SW", "WSW", 
-                                                   "W", "WNW", "NW", "NNW"))) %>%
                 na.omit() %>%
                 arrange(cardinal) %>%
                 plot_ly(type="scatterpolar",
@@ -1541,6 +1606,10 @@ server <- function(input, output, session) {
                         split = ~country,
                         theta = ~degree_mid,
                         name = ~country,
+                        hovertemplate = ~paste('Transmission:', ecc_comb, '<br>',
+                                               'Count:', '%{r}', 
+                                               '<extra></extra>',
+                                               sep = " "),
                         color  = I("#898a8c"),
                         fill = "tonext") %>%
                 layout(margin = list(l = 100, r = 100),
@@ -1564,20 +1633,9 @@ server <- function(input, output, session) {
             # by province 
             strains_sh_gr$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
-                #subset(country %in% input$regionProvince) %>% 
-                #group_by(province, tp1_cluster, timepoint) %>%
-                #summarize(ecc_0.0.1 = mean(ecc_0.0.1),
-                #          ecc_0.1.0 = mean(ecc_0.1.0),
-                #          ecc_comb = unique(as.character(ecc_direction_delta))) %>%
                 group_by(province, timepoint) %>%
-                #na.omit() %>%
                 count(ecc_comb, .drop=FALSE) %>%
                 full_join(directions, by = c('ecc_comb')) %>%
-                mutate(cardinal = factor(cardinal, 
-                                         levels =c("N", "NNE", "NE", "ENE",
-                                                   "E", "ESE", "SE", "SSE",
-                                                   "S", "SSW", "SW", "WSW", 
-                                                   "W", "WNW", "NW", "NNW"))) %>%
                 na.omit() %>%
                 arrange(cardinal) %>%
                 plot_ly(type="scatterpolar",
@@ -1586,6 +1644,10 @@ server <- function(input, output, session) {
                         split = ~province,
                         theta = ~degree_mid,
                         name = ~province,
+                        hovertemplate = ~paste('Transmission:', ecc_comb, '<br>',
+                                               'Count:', '%{r}', 
+                                               '<extra></extra>',
+                                               sep = " "),
                         color  = I("#898a8c"),
                         fill = "tonext") %>%
                 layout(margin = list(l = 100, r = 100),
@@ -2798,41 +2860,14 @@ server <- function(input, output, session) {
                         color= I("#646566"),
                         size = ~log10(cluster_size_2)*10,
                         opacity = 0.6,
-                        hovertext = ~tp1_cluster) %>%
+                        hovertemplate = ~paste(tp1_cluster, '<br>',
+                                               'Avg distance between strains (km):', avg_geo_dist,
+                                               '<extra></extra>',
+                                               sep = " ")) %>%
             config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
             layout(mapbox = list(zoom = 1,
                                  style = 'light',
-                                 center = list(lon = 50, lat = 40)),
-                   title = list(text = "Clusters",
-                                x=0.1)) %>%
-            highlight(color = I("#1F78C8")) %>%            
-            animation_opts(1000, redraw = T, transition = 100) %>% 
-            animation_button(visible = T) %>%
-            animation_slider(active = 0)
-    })
-    
-    
-    output$strain_map <- renderPlotly({
-        
-        # set the color
-        col <- ifelse(length(unique(strains_sh$data() %>% pull(tp1_cluster)))>1, "#646566", "#1F78C8") 
-        
-        plot_mapbox(mode = 'scattermapbox') %>%
-            add_markers(data = strains_sh,
-                        name = "Clusters",
-                        x = ~longitude_jit,
-                        y = ~latitude_jit,
-                        frame = ~timepoint,
-                        color = I(col),
-                        size = I(5),
-                        opacity = 0.6,
-                        hovertext = ~tp1_cluster) %>%
-            config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
-            layout(mapbox = list(zoom =1,
-                                 style = 'light',
-                                 center = list(lon = 50, lat = 40)),
-                   title = list(text = "Strains",
-                                x=0.1)) %>%
+                                 center = list(lon = 50, lat = 40))) %>%
             highlight(color = I("#1F78C8")) %>%            
             animation_opts(1000, redraw = T, transition = 100) %>% 
             animation_button(visible = T) %>%
