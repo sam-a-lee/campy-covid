@@ -126,6 +126,7 @@ body <- dashboardBody(
     
     # strain visualizations 
     tabItem(tabName = "eccIndices",
+            h2('At the most recent time point there are: ', style = "color: #1F78C8; font-size: 38px; font-weight: bold;"),
             fluidRow(
               valueBoxOutput("activegrowth", width =4),
               valueBoxOutput("activespread", width =4),
@@ -141,10 +142,10 @@ body <- dashboardBody(
                 side = "right",
                 selected = "ECC bubble plots",
                 tabPanel("Interpretation", 
-                         HTML("<p>The <strong>geospatial epicluster cohesion index&nbsp;</strong>representes the relative mean distance (km) between strains and the geographical centre of the cluster. A larger geospatial epicluster cohesion index represents a greater mean distance between strains and the cluster centre.</p>
+                         HTML('<p>The <strong>geospatial epicluster cohesion index&nbsp;</strong>representes the relative mean distance (km) between strains and the geographical centre of the cluster. A larger geospatial epicluster cohesion index represents a greater mean distance between strains and the cluster centre.</p>
 <p>The <strong>temporal epicluster cohesion index&nbsp;</strong>representes the relative time (days) between identification of new strains that are part of a given cluster. A larger temporal epicluster cohesion index represents a greater amount of time between the identification of one strain to the next.&nbsp;</p>
 <p>As the geospatial and temporal epicluster cohesion indices are relative to the input data, the interpretation of these values will vary between inputted data sets. i.e. A geospatial epicluster cohesion index of 0.5 may represent a distance of 75 km in one data set, but 1032 km in another data set.&nbsp;</p>
-<p><br></p>")
+<p>The <strong>bubble plots&nbsp;</strong>show the geospatial and temporal epicluster indices of each individual cluster. The <strong>histograms</strong> allow examination of how the geospatial and temporal epicluster indices of clusters are shifting as a whole.</p>')
                 ),
                 tabPanel("ECC histograms",
                          plotlyOutput("ecc_histograms", height = "100%")
@@ -166,7 +167,7 @@ body <- dashboardBody(
                 tabPanel("Interpretation", 
                          HTML("<p><strong>Cluster transmission</strong> is determined by examining the<em>&nbsp;<strong>change in geospatial and temporal epicluster cohesions indices</strong></em>, and translating these differences into cluster spread and transmission, respectively. Specifically, an increase in the geospatial index indicates that the cluster is becoming more disperse (i.e. spreading geographically), whereas a decrease in the geosptial index indicates that cluster spread is becoming more isolated (i.e. strains have been identified in fewer areas than before). An increase in the temporal index indicates the length of time between identification of each new strain is increasing, and therefore the transmission of the cluster is slowing. Conversely, a decrease in the temporal index indicates that new strains are being identified more rapidly and suggests transmission is increasing.&nbsp;</p>
 <p>We can view the changes in geospatial and temporal indices by plotting them against one another and drawing vectors, which we call &quot;<strong>change vectors</strong>&quot;.&nbsp;</p>
-<p>To ease and spead the intepreation of change vectors, we convert them to an angle and plot them on a 16-rose compass that describes how the spread and transmission are changing. We summarize this information using a <strong>radar plot</strong>, which describes the number of clusters displaying a given change in spread and transmission.&nbsp;</p>
+<p>To ease the intepreation of change vectors, we convert them to an angle and plot them on a 16-rose compass that describes how the spread and transmission are changing. We summarize this information using a <strong>radar plot</strong>, which describes the number of clusters displaying a given change in spread and transmission.&nbsp;</p>
 <p><br></p>")
                 ),
                 tabPanel("Change vectors",
@@ -188,15 +189,21 @@ body <- dashboardBody(
                 side = "right",
                 selected = "Cluster growth",
                 tabPanel("Interpretation", 
-                         HTML("")
+                         HTML("<p>Growth visualizations display changes in the number of strains identified by cluster or by date.&nbsp;</p>
+<p><strong><u>Cluster growth metrics:</u></strong> determine the overall and novel growth rate of clusters. The <strong>overall growth rate</strong> is determined by looking at <em>all</em> strains (previously identified strains and novel strains) that have joined a given cluster from one time point to the next. The <strong>novel</strong><strong>&nbsp;growth rate</strong> is determined by examining the number of <em>novel</em> strains (not previously identified) that have a joined a cluster from one time point to the next.</p>
+<p><strong><u>Strains by cluster:</u></strong> includes visualizations of the <strong>number of novel strains</strong> identified by date for each cluster, as well as the <strong>cumulative number of strains&nbsp;</strong>that are identified in each cluster.&nbsp;</p>
+<p><strong><u>Strains by date:</u></strong> visualizes the overall number of <strong>new strains identified by date</strong>. Data are not separated by cluster. Data can be binned by day, month, or year.</p>
+<p><strong><u>Single vs multi strain:</u></strong> displays the number of novel strains identified by date that are part of multi strain cluster or single strain clusters.</p>
+<p><br></p>
+<p>&nbsp;&nbsp;</p>")
                 ),
                 tabPanel("Single vs multi strain clusters",
                          plotlyOutput("singlevsmulti", height = "100%")
                 ),
-                tabPanel("New strains by date",
+                tabPanel("Strains by date",
                          plotlyOutput("newstrainsbydate", height = "100%")
                 ),
-                tabPanel("New strains by cluster",
+                tabPanel("Strains by cluster",
                          plotlyOutput("strainsbycluster", height = "100%")
                 ),
                 tabPanel("Cluster growth",
@@ -216,7 +223,7 @@ body <- dashboardBody(
                 side = "right",
                 selected = "Map",
                 tabPanel("Interpretation", 
-                         HTML("")
+                         HTML("<p>The map displays each cluster, plotted at the average latitude and longitude of all strains included in that cluster. The area of the cluster is proportional to the number of strains included in that cluster. </p>")
                 ),
                 tabPanel("Map",
                          plotlyOutput("cluster_map", height = "100%")

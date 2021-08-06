@@ -542,36 +542,41 @@ server <- function(input, output, session) {
     ################################
     # cluster movement value boxes #
     ################################
-    
+
     output$activegrowth <- renderValueBox({
-        
         valueBox(
             subtitle = "clusters actively growing",
-            value = sum(clusters_r()$overall_cluster_growth_rate >= 3)
+            value =    clusters_r() %>% 
+                subset(as.numeric(timepoint) == max(as.numeric(timepoint))) %>%
+                subset(overall_cluster_growth_rate >= 3) %>% 
+                nrow()
         )
     })
     
     output$activespread <- renderValueBox({
         valueBox(
             subtitle = "clusters actively spreading",
-            value = sum(na.omit(clusters_r()$ecc_spread)=="Dispersed")
+            value = clusters_r() %>% 
+                subset(as.numeric(timepoint) == max(as.numeric(timepoint))) %>%
+                subset(ecc_spread == "Dispersed") %>% 
+                nrow()
         )
     })
     
     output$sigtransmission <- renderValueBox({
         valueBox(
-            subtitle = "clusters with significant local transmission",
-            value = nrow(clusters_r() %>% 
-                             slice(which(clusters_r()$ecc_spread=="Isolated")) %>% 
-                             subset(overall_cluster_growth_rate >= 3))
+            subtitle = "clusters with local transmission",
+            value = clusters_r() %>% 
+                slice(which(clusters_r()$ecc_spread=="Isolated")) %>%                 
+                subset(as.numeric(timepoint) == max(as.numeric(timepoint))) %>%
+                subset(overall_cluster_growth_rate >= 3) %>%
+                nrow()
         )
     })
     
     
-    
     # radio plot for ecc explanation of cluster spread
     output$ecc_radar <- renderPlotly({
-        
         
         # #time point to time point
         # plot_ly(type="scatterpolar",
@@ -656,6 +661,7 @@ server <- function(input, output, session) {
                           type = "scatter",
                           mode = "markers", 
                           x = ~ecc_0.1.0,
+                          y = 1,
                           frame = ~timepoint, 
                           size = ~I(cluster_size_2),
                           color = ~I("#898a8c"), 
@@ -685,6 +691,7 @@ server <- function(input, output, session) {
                           type = "scatter",
                           mode = "markers", 
                           x = ~ecc_0.0.1,
+                          y = 1,
                           size = ~I(cluster_size_2),
                           color = ~I("#898a8c"), 
                           frame = ~timepoint, 
@@ -1555,7 +1562,6 @@ server <- function(input, output, session) {
     output$radar <- renderPlotly({
         
         if (input$region ==1) {
-            # change to change
             
             clusters_sh$data(withSelection = TRUE) %>%
                 filter(selected_ | is.na(selected_)) %>%
@@ -1563,12 +1569,14 @@ server <- function(input, output, session) {
                 group_by(timepoint) %>%
                 count(ecc_comb, .drop=FALSE) %>%
                 full_join(directions, by = c('ecc_comb')) %>% 
+                subset(n>0) %>%
                 plot_ly(type="scatterpolar",
                         r = ~n,
                         theta = ~degree_mid,
-                        color = I("#898a8c"),
+                        color  = I("#898a8c"),
+                        #color = I(ifelse(sum(clusters_sh$data(withSelection = TRUE) %>% pull(selected_))>0, "#1F78C8", "#898a8c")),
                         frame = ~timepoint, 
-                        hovertemplate = ~paste('Transmission:', ecc_comb, '<br>',
+                        hovertemplate = ~paste('<b>', ecc_comb, '</b>', '<br>',
                                                'Count:', '%{r}', 
                                                '<extra></extra>',
                                                sep = " "),
@@ -1599,6 +1607,7 @@ server <- function(input, output, session) {
                 count(ecc_comb, .drop=FALSE) %>%
                 full_join(directions, by = c('ecc_comb')) %>%
                 na.omit() %>%
+                subset(n>0) %>%
                 arrange(cardinal) %>%
                 plot_ly(type="scatterpolar",
                         frame = ~timepoint,
@@ -1606,7 +1615,7 @@ server <- function(input, output, session) {
                         split = ~country,
                         theta = ~degree_mid,
                         name = ~country,
-                        hovertemplate = ~paste('Transmission:', ecc_comb, '<br>',
+                        hovertemplate = ~paste('<b>', ecc_comb, '</b>', '<br>',
                                                'Count:', '%{r}', 
                                                '<extra></extra>',
                                                sep = " "),
@@ -1644,7 +1653,7 @@ server <- function(input, output, session) {
                         split = ~province,
                         theta = ~degree_mid,
                         name = ~province,
-                        hovertemplate = ~paste('Transmission:', ecc_comb, '<br>',
+                        hovertemplate = ~paste('<b>', ecc_comb, '</b>', '<br>',
                                                'Count:', '%{r}', 
                                                '<extra></extra>',
                                                sep = " "),
@@ -1692,6 +1701,11 @@ server <- function(input, output, session) {
                           color = I(op$colour),
                           showlegend = F,
                           opacity = 1,
+                          hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                 'Delta geospatial ECC:', '%{x}', '<br>',
+                                                 'Delta temporal ECC:', '%{y}', 
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           size=I(0)) %>%
                 # set range and overlay arrow annotations
                 layout(xaxis = list(range = c(-1, 1.5), 
@@ -1719,27 +1733,32 @@ server <- function(input, output, session) {
                                            mode='markers',
                                            x = ~delta_ecc_0.1.0, # geographical
                                            y = ~delta_ecc_0.0.1, # temporal 
-                                           split = ~tp1_cluster,
+                                           name = ~tp1_cluster,
                                            #legendgroup = ~tp1_cluster,
                                            #opacity = I(op$opacity),
                                            #frame = ~timepoint,
                                            color = I("#898a8c"),
                                            showlegend = F,
                                            opacity = 1,
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Delta geospatial ECC:', '%{x}', '<br>',
+                                                                  'Delta temporal ECC:', '%{y}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            size=I(1)) %>%
                            layout(xaxis = list(range = c(-1, 1),
                                                title = ""),
                                   yaxis = list(range = c(-1, 1),
-                                               title = ""),
-                                  annotations = list(list(text= ~unique(country),
-                                                          xref = "paper",
-                                                          yref = "paper",
-                                                          yanchor = "center",
-                                                          xanchor = "center",
-                                                          align = "center",
-                                                          x = 0.5,
-                                                          y = 1.1,
-                                                          showarrow = FALSE)))) %>%
+                                               title = "")) %>%
+                           add_annotations(text= ~unique(country),
+                                           xref = "paper",
+                                           yref = "paper",
+                                           yanchor = "center",
+                                           xanchor = "center",
+                                           align = "center",
+                                           x = 0.5,
+                                           y = 1.1,
+                                           showarrow = FALSE)) %>%
                 subplot(nrows = 3, shareX = T, shareY = T) %>%
                 layout(annotations = list(list(text= "Delta geospatial epicluster cohesion index",
                                                xref = "paper",
@@ -1782,6 +1801,11 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            showlegend = F,
                                            opacity = 1,
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Delta geospatial ECC:', '%{x}', '<br>',
+                                                                  'Delta temporal ECC:', '%{y}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            size=I(1)) %>%
                            layout(xaxis = list(range = c(-1, 1),
                                                title = ""),
@@ -1833,6 +1857,11 @@ server <- function(input, output, session) {
                           y = ~overall_cluster_growth_rate,
                           color = I("#898a8c"),
                           showlegend = F,
+                          hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                 'Overall growth rate:', '%{y}', '<br>', 
+                                                 'Time point:', '%{x}', 
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           frame=~timepoint) %>%
                 layout(yaxis = list(rangemode = "tozero", 
                                     title = "Overall growth rate"),
@@ -1865,6 +1894,11 @@ server <- function(input, output, session) {
                           y = ~cluster_novel_growth_rate,
                           color = I("#898a8c"),
                           showlegend = F,
+                          hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                 'Novel growth rate:', '%{y}', '<br>', 
+                                                 'Time point:', '%{x}', 
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           frame=~timepoint) %>%
                 layout(yaxis = list(rangemode = "tozero",
                                     title = "Novel growth rate"),
@@ -1959,6 +1993,11 @@ server <- function(input, output, session) {
                                            frame = ~timepoint,
                                            hovertext = ~tp1_cluster,
                                            color = I("#898a8c"),
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Ovwerall growth rate:', '%{y}', '<br>', 
+                                                                  'Time point:', '%{x}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(title = ""), 
                                   yaxis = list(title = "",
@@ -2004,6 +2043,11 @@ server <- function(input, output, session) {
                                            frame = ~timepoint,
                                            hovertext = ~tp1_cluster,
                                            color = I("#898a8c"),
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Novel growth rate:', '%{y}', '<br>', 
+                                                                  'Time point:', '%{x}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(title = ""), 
                                   yaxis = list(title = "",
@@ -2110,6 +2154,11 @@ server <- function(input, output, session) {
                                            frame = ~timepoint,
                                            hovertext = ~tp1_cluster,
                                            color = I("#898a8c"),
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Overall growth rate:', '%{y}', '<br>', 
+                                                                  'Time point:', '%{x}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(title = ""), 
                                   yaxis = list(title = "",
@@ -2155,6 +2204,11 @@ server <- function(input, output, session) {
                                            frame = ~timepoint,
                                            hovertext = ~tp1_cluster,
                                            color = I("#898a8c"),
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Novel growth rate:', '%{y}', '<br>', 
+                                                                  'Time point:', '%{x}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            showlegend = FALSE) %>%
                            layout(xaxis = list(title = ""), 
                                   yaxis = list(title = "",
@@ -2214,10 +2268,47 @@ server <- function(input, output, session) {
                           x = ~strain_date,
                           y = ~n, 
                           name = ~tp1_cluster, 
+                          hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                 'Date:', '%{x}', '<br>', 
+                                                 'Count:', '%{y}', 
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           showlegend = F) %>%
-                layout(yaxis = list(rangemode = "tozero",
-                                    title = "Number of novel strains identified"),
-                       xaxis = list(title = "Time point")) %>%
+                layout(yaxis = list(rangemode = "tozero"),
+                       xaxis = list(tickvals = as.list( strains_long %>%
+                                                            group_by(present_at_tp1) %>%
+                                                            filter(strain_date == min(strain_date)) %>%
+                                                            distinct(strain_date) %>%
+                                                            pull(strain_date) %>%
+                                                            sort()),
+                                    ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                    group_by(present_at_tp1) %>% 
+                                                                                    filter(strain_date == min(strain_date)) %>% 
+                                                                                    distinct(strain_date) %>% 
+                                                                                    pull(strain_date) %>% 
+                                                                                    order())))),
+                                    tickmode = "array")) %>%
+                add_annotations(text= "Timepoint",
+                                xref = "paper",
+                                yref = "paper",
+                                yanchor = "center",
+                                xanchor = "center",
+                                align = "center",
+                                x = 0.5,
+                                y = -0.1,
+                                font = list(size = 14),
+                                showarrow = FALSE) %>%
+                add_annotations(text= "Number of novel strains identified",
+                                xref = "paper",
+                                yref = "paper",
+                                yanchor = "center",
+                                xanchor = "center",
+                                align = "center",
+                                x = -0.1,
+                                y = 0.5,
+                                textangle = -90,
+                                font = list(size = 14),
+                                showarrow = FALSE) %>%
                 highlight(color = "#1F78C8")
             
             # need to aggregate data for cumsum 
@@ -2234,15 +2325,52 @@ server <- function(input, output, session) {
                           color = I("#898a8c"),
                           x = ~strain_date,
                           y = ~cumsum, 
-                          name = ~tp1_cluster, 
+                          name = ~tp1_cluster,
+                          hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                 'Date:', '%{x}', '<br>', 
+                                                 'Count:', '%{y}', 
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           showlegend = F) %>%
-                layout(yaxis = list(rangemode = "tozero",
-                                    title = "Cumulative number of strains identified"),
-                       xaxis = list(title = "Time point")) %>%
+                layout(yaxis = list(rangemode = "tozero"),
+                       xaxis = list(tickvals = as.list( strains_long %>%
+                                                            group_by(present_at_tp1) %>%
+                                                            filter(strain_date == min(strain_date)) %>%
+                                                            distinct(strain_date) %>%
+                                                            pull(strain_date) %>%
+                                                            sort()),
+                                    ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                    group_by(present_at_tp1) %>% 
+                                                                                    filter(strain_date == min(strain_date)) %>% 
+                                                                                    distinct(strain_date) %>% 
+                                                                                    pull(strain_date) %>% 
+                                                                                    order())))),
+                                    tickmode = "array")) %>%
+                add_annotations(text= "Timepoint",
+                                xref = "paper",
+                                yref = "paper",
+                                yanchor = "center",
+                                xanchor = "center",
+                                align = "center",
+                                x = 0.5,
+                                y = -0.1,
+                                font = list(size = 14),
+                                showarrow = FALSE) %>%
+                add_annotations(text= "Cumulative number of strains identified",
+                                xref = "paper",
+                                yref = "paper",
+                                yanchor = "center",
+                                xanchor = "center",
+                                align = "center",
+                                x = -0.1,
+                                y = 0.5,
+                                textangle = -90,
+                                font = list(size = 14),
+                                showarrow = FALSE) %>%
                 highlight(color = "#1F78C8")
             
             # subplot mountain and cumsum together 
-            subplot(mountain, cumplot, nrows = 1, margin = 0.025)
+            subplot(mountain, cumplot, nrows = 1, margin = 0.05)
             
             # facet by country     
         } else if (input$region == 2) {
@@ -2263,8 +2391,26 @@ server <- function(input, output, session) {
                                            x = ~strain_date,
                                            y = ~n, 
                                            name = ~tp1_cluster, 
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Date:', '%{x}', '<br>', 
+                                                                  'Count:', '%{y}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            showlegend = F) %>%
-                           layout(xaxis = list(title = ""),
+                           layout(xaxis = list(title = "",
+                                               tickvals = as.list( strains_long %>%
+                                                                       group_by(present_at_tp1) %>%
+                                                                       filter(strain_date == min(strain_date)) %>%
+                                                                       distinct(strain_date) %>%
+                                                                       pull(strain_date) %>%
+                                                                       sort()),
+                                               ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                               group_by(present_at_tp1) %>% 
+                                                                                               filter(strain_date == min(strain_date)) %>% 
+                                                                                               distinct(strain_date) %>% 
+                                                                                               pull(strain_date) %>% 
+                                                                                               order())))),
+                                               tickmode = "array"),
                                   yaxis = list(title = "",
                                                range = c(0, max(na.omit(counts$n))*1.1)),
                                   annotations = list(list(text= ~unique(country),
@@ -2318,8 +2464,26 @@ server <- function(input, output, session) {
                                            x = ~strain_date,
                                            y = ~cumsum, 
                                            name = ~tp1_cluster, 
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Date:', '%{x}', '<br>', 
+                                                                  'Count:', '%{y}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            showlegend = F) %>%
-                           layout(xaxis = list(title = ""),
+                           layout(xaxis = list(title = "",
+                                               tickvals = as.list( strains_long %>%
+                                                                       group_by(present_at_tp1) %>%
+                                                                       filter(strain_date == min(strain_date)) %>%
+                                                                       distinct(strain_date) %>%
+                                                                       pull(strain_date) %>%
+                                                                       sort()),
+                                               ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                               group_by(present_at_tp1) %>% 
+                                                                                               filter(strain_date == min(strain_date)) %>% 
+                                                                                               distinct(strain_date) %>% 
+                                                                                               pull(strain_date) %>% 
+                                                                                               order())))),
+                                               tickmode = "array"),
                                   yaxis = list(title = "",
                                                range = c(0, max(na.omit(cumsum$cumsum))*1.1)),
                                   annotations = list(list(text= ~unique(country),
@@ -2333,7 +2497,7 @@ server <- function(input, output, session) {
                                                           showarrow = FALSE))) %>%
                            highlight(color = "#1F78C8")) %>% 
                 subplot(nrows = 3, shareX = T, shareY=T, margin = 0.025) %>%
-                layout(annotations = list(list(text= "Date",
+                layout(annotations = list(list(text= "Time point",
                                                xref = "paper",
                                                yref = "paper",
                                                yanchor = "center",
@@ -2378,8 +2542,26 @@ server <- function(input, output, session) {
                                            x = ~strain_date,
                                            y = ~n, 
                                            name = ~tp1_cluster, 
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Date:', '%{x}', '<br>', 
+                                                                  'Count:', '%{y}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            showlegend = F) %>%
-                           layout(xaxis = list(title = ""),
+                           layout(xaxis = list(title = "",
+                                               tickvals = as.list( strains_long %>%
+                                                                       group_by(present_at_tp1) %>%
+                                                                       filter(strain_date == min(strain_date)) %>%
+                                                                       distinct(strain_date) %>%
+                                                                       pull(strain_date) %>%
+                                                                       sort()),
+                                               ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                               group_by(present_at_tp1) %>% 
+                                                                                               filter(strain_date == min(strain_date)) %>% 
+                                                                                               distinct(strain_date) %>% 
+                                                                                               pull(strain_date) %>% 
+                                                                                               order())))),
+                                               tickmode = "array"),
                                   yaxis = list(title = "",
                                                range = c(0, max(na.omit(counts$n))*1.1)),
                                   annotations = list(list(text= ~unique(province),
@@ -2434,8 +2616,26 @@ server <- function(input, output, session) {
                                            x = ~strain_date,
                                            y = ~cumsum, 
                                            name = ~tp1_cluster, 
+                                           hovertemplate = ~paste('<b>', tp1_cluster, '</b>', '<br>',
+                                                                  'Date:', '%{x}', '<br>', 
+                                                                  'Count:', '%{y}', 
+                                                                  '<extra></extra>',
+                                                                  sep = " "),
                                            showlegend = F) %>%
-                           layout(xaxis = list(title = ""),
+                           layout(xaxis = list(title = "",
+                                               tickvals = as.list( strains_long %>%
+                                                                       group_by(present_at_tp1) %>%
+                                                                       filter(strain_date == min(strain_date)) %>%
+                                                                       distinct(strain_date) %>%
+                                                                       pull(strain_date) %>%
+                                                                       sort()),
+                                               ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                               group_by(present_at_tp1) %>% 
+                                                                                               filter(strain_date == min(strain_date)) %>% 
+                                                                                               distinct(strain_date) %>% 
+                                                                                               pull(strain_date) %>% 
+                                                                                               order())))),
+                                               tickmode = "array"),
                                   yaxis = list(title = "",
                                                range = c(0, max(na.omit(cumsum$cumsum))*1.1)),
                                   annotations = list(list(text= ~unique(province),
@@ -2449,7 +2649,7 @@ server <- function(input, output, session) {
                                                           showarrow = FALSE))) %>%
                            highlight(color = "#1F78C8")) %>% 
                 subplot(nrows = 3, shareX = T, shareY=T, margin = 0.025) %>%
-                layout(annotations = list(list(text= "Date",
+                layout(annotations = list(list(text= "Time point",
                                                xref = "paper",
                                                yref = "paper",
                                                yanchor = "center",
@@ -2489,7 +2689,20 @@ server <- function(input, output, session) {
                     hovertemplate = ~paste('Count: %{y}', '<br>',
                                            'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
                 layout(barmode = "stack",
-                       xaxis = list(title = "Date"),
+                       xaxis = list(title = "Time point",
+                                    tickvals = as.list( strains_long %>%
+                                                            group_by(present_at_tp1) %>%
+                                                            filter(strain_date == min(strain_date)) %>%
+                                                            distinct(strain_date) %>%
+                                                            pull(strain_date) %>%
+                                                            sort()),
+                                    ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                    group_by(present_at_tp1) %>% 
+                                                                                    filter(strain_date == min(strain_date)) %>% 
+                                                                                    distinct(strain_date) %>% 
+                                                                                    pull(strain_date) %>% 
+                                                                                    order())))),
+                                    tickmode = "array"),
                        yaxis = list(title = "Number of new strains identified"),
                        updatemenus = list( list(
                            active = -1,
@@ -2548,7 +2761,7 @@ server <- function(input, output, session) {
                                                           y = 1.1,
                                                           showarrow = FALSE)))) %>% 
                 subplot(nrows = 3, shareX = T, shareY = T, margin = 0.025) %>%
-                layout(annotations = list(list(text= "Date",
+                layout(annotations = list(list(text= "Time point",
                                                xref = "paper",
                                                yref = "paper",
                                                yanchor = "center",
@@ -2610,7 +2823,7 @@ server <- function(input, output, session) {
                                                           y = 1.1,
                                                           showarrow = FALSE)))) %>% 
                 subplot(nrows = 3, shareX = T, shareY = T, margin = 0.025) %>%
-                layout(annotations = list(list(text= "Date",
+                layout(annotations = list(list(text= "Time point",
                                                xref = "paper",
                                                yref = "paper",
                                                yanchor = "center",
@@ -2649,8 +2862,25 @@ server <- function(input, output, session) {
                           x = ~strain_date,
                           color = I("#898a8c"),    
                           showlegend = F, 
+                          hovertemplate = ~paste('Count:', '%{y}', '<br>',
+                                                 'Date:', '%{x}', '<br>', 
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           xbins = list(size = 86400000.0)) %>%
-                layout(xaxis = list(title = "Date"),
+                layout(xaxis = list(title = "Time point",
+                                    tickvals = as.list( strains_long %>%
+                                                            group_by(present_at_tp1) %>%
+                                                            filter(strain_date == min(strain_date)) %>%
+                                                            distinct(strain_date) %>%
+                                                            pull(strain_date) %>%
+                                                            sort()),
+                                    ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                    group_by(present_at_tp1) %>% 
+                                                                                    filter(strain_date == min(strain_date)) %>% 
+                                                                                    distinct(strain_date) %>% 
+                                                                                    pull(strain_date) %>% 
+                                                                                    order())))),
+                                    tickmode = "array"),
                        annotations = list(list(text= "Count",
                                                xref = "paper",
                                                yref = "paper",
@@ -2682,6 +2912,11 @@ server <- function(input, output, session) {
                           x = ~strain_date,
                           color = I("#898a8c"),     
                           showlegend = F,
+                          showlegend = F, 
+                          hovertemplate = ~paste('Count:', '%{y}', '<br>',
+                                                 'Date:', '%{x}', '<br>', 
+                                                 '<extra></extra>',
+                                                 sep = " "),
                           xbins = list(size = 86400000.0)) %>%
                 layout(xaxis = list(title = "Date"),
                        yaxis = list(range = c(0, max(strains_sh$data(withSelection = T) %>%
@@ -2745,7 +2980,20 @@ server <- function(input, output, session) {
                                                                   '<extra></extra>', 
                                                                   sep=" ")) %>%
                            layout( barmode = 'overlay',
-                                   xaxis = list(title = ""),
+                                   xaxis = list(title = "",
+                                                tickvals = as.list( strains_long %>%
+                                                                        group_by(present_at_tp1) %>%
+                                                                        filter(strain_date == min(strain_date)) %>%
+                                                                        distinct(strain_date) %>%
+                                                                        pull(strain_date) %>%
+                                                                        sort()),
+                                                ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                                group_by(present_at_tp1) %>% 
+                                                                                                filter(strain_date == min(strain_date)) %>% 
+                                                                                                distinct(strain_date) %>% 
+                                                                                                pull(strain_date) %>% 
+                                                                                                order())))),
+                                                tickmode = "array"),
                                    yaxis = list(range = c(0, max(multi$n))),
                                    annotations = list(list(text= ~unique(country),
                                                            xref = "paper",
@@ -2831,7 +3079,20 @@ server <- function(input, output, session) {
                                                                   '<extra></extra>', 
                                                                   sep=" ")) %>%
                            layout( barmode = 'overlay',
-                                   xaxis = list(title = ""),
+                                   xaxis = list(title = "",
+                                                tickvals = as.list( strains_long %>%
+                                                                        group_by(present_at_tp1) %>%
+                                                                        filter(strain_date == min(strain_date)) %>%
+                                                                        distinct(strain_date) %>%
+                                                                        pull(strain_date) %>%
+                                                                        sort()),
+                                                ticktext = as.list( as.character(seq(length(strains_long %>% 
+                                                                                                group_by(present_at_tp1) %>% 
+                                                                                                filter(strain_date == min(strain_date)) %>% 
+                                                                                                distinct(strain_date) %>% 
+                                                                                                pull(strain_date) %>% 
+                                                                                                order())))),
+                                                tickmode = "array"),
                                    yaxis = list(range = c(0, max(multi$n))),
                                    annotations = list(list(text= ~unique(province),
                                                            xref = "paper",
