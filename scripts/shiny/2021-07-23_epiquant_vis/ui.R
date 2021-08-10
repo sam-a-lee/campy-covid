@@ -120,9 +120,7 @@ body <- dashboardBody(
   tags$head(tags$style('#bubbletemp .box-header{ display: none}')),
   tags$head(tags$style('#bubbleboth .box-header{ display: none}')),
   
-  
   tabItems(
-    
     
     # strain visualizations 
     tabItem(tabName = "eccIndices",
@@ -280,10 +278,8 @@ body <- dashboardBody(
                   title = "Select file for upload",
                   # prompt to upload file 
                   fileInput("userFile", "Choose file",
-                            multiple = TRUE,
-                            accept = c("text/csv/xlsx",
-                                       "text/comma-separated-values,text/plain",
-                                       ".csv", ".txt", ".xlsx")),
+                            multiple = FALSE,
+                            accept = c(".csv", ".txt", ".xlsx", ".tsv")),
                   # check box for header
                   checkboxInput("header", "Header", TRUE),
                   
