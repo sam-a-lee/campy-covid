@@ -241,14 +241,11 @@ server <- function(input, output, session) {
                       across(where(is.integer), ~mean(.x), .names = "{.col}"),
                       across(where(is.numeric), ~mean(.x), .names = "{.col}"))
         
-        # select only complete cases
-        # clusters_cc <- na.omit(clusters)
-        
         # now reshape the data 
         # grep generalizable to many data points
-        clusters_long <- data.table::melt(setDT(clusters), 
-                                          measure.vars=list(colnames(clusters)[grep("longitude", colnames(clusters))], 
-                                                            colnames(clusters)[grep("latitude", colnames(clusters))],
+        clusters.long <- data.table::melt(setDT(clusters), 
+                                          measure.vars=list(colnames(clusters)[grep(".longitude", colnames(clusters))], 
+                                                            colnames(clusters)[grep(".latitude", colnames(clusters))],
                                                             colnames(clusters)[grep("t0.ecc.0.0.1", colnames(clusters))],
                                                             colnames(clusters)[grep("t0.ecc.0.1.0", colnames(clusters))],
                                                             colnames(clusters)[grep("date", colnames(clusters))],
@@ -263,9 +260,11 @@ server <- function(input, output, session) {
                                                        "temp.average.cluster.distance.days", "geo.average.cluster.distance.km",
                                                        "cluster.size.1"))
         
+        clusters.long$average.date <- ymd(clusters.long$average.date)
+        
         # write to reactive vals df 
         # to be displayed in table later
-        vals$clusters <- clusters_long
+        vals$clusters <- clusters.long
         
         print("formatting strain data...")
         
@@ -283,15 +282,15 @@ server <- function(input, output, session) {
                                                            colnames(strains)[grep("cluster.size.1.2", colnames(strains))]),
                                          variable.name='timepoint', value.name=c("ecc.0.0.1", "ecc.0.1.0",
                                                                                  "cluster.size.1.2"))
-
+        
         # make column for strain date instead of having three separate columns
-        strains.long$strain.date <- paste(strains.long$day, strains.long$month, strains.long$year, sep = "-")
+        strains.long$strain.date <- dmy(paste(strains.long$day, strains.long$month, strains.long$year, sep = "-"))
         
         # categorize as single vs multistrain
         # >2 because counts are +1 of actual value 
         strains.long <- strains.long %>% 
             mutate(single.mult = ifelse(cluster.size.1.2>2,"Multi strain clusters","Single strain clusters"))
-
+        
         # write out to reactive vals object
         vals$strains.long <- strains.long
         
@@ -335,6 +334,10 @@ server <- function(input, output, session) {
         print("creating reactive cluster data...")
         req(vals$clusters)
         data <- vals$clusters 
+        print(head(vals$clusters))
+        
+        print("printing cluster size input")
+        print(input$cluster.size.1.2)
         
         # get top n
         topn <- {if (input$number != "all") as.numeric(input$number) else nrow(data)}
@@ -343,19 +346,19 @@ server <- function(input, output, session) {
             {if (!is.null(input$tp1.cluster)) filter(., tp1.cluster %in% input$tp1.cluster)  else . } %>%
             {if (!is.null(input$timepoint)) filter(., timepoint %in% input$timepoint)  else . } %>%
             {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
-            # filter(cluster.size.1.2 >= input$cluster.size.1.2[1]) %>% filter(cluster.size.1.2 <= input$cluster.size.1.2[2]) %>%
-            # filter(average.date >= input$average.date[1]) %>% filter(average.date <= input$average.date[2]) %>%
-            # filter(ecc.0.0.1 >= input$ecc.0.0.1[1]) %>% filter(ecc.0.0.1 <= input$ecc.0.0.1[2]) %>%
-            # filter(ecc.0.1.0 >= input$ecc.0.1.0[1]) %>% filter(ecc.0.1.0 <= input$ecc.0.1.0[2]) %>%
-            # filter(average.latitude >= input$average.latitude[1]) %>%  filter(average.latitude <= input$average.latitude[2]) %>%
-            # filter(average.longitude >= input$average.longitude[1]) %>% filter(average.longitude <= input$average.longitude[2])  %>%
+            filter(cluster.size.1.2 >= input$cluster.size.1.2[1] & cluster.size.1.2 <= input$cluster.size.1.2[2]) %>%
+            filter(average.date >= input$average.date[1] & average.date <= input$average.date[2]) %>%
+            filter(ecc.0.0.1 >= input$ecc.0.0.1[1] & ecc.0.0.1 <= input$ecc.0.0.1[2]) %>%
+            filter(ecc.0.1.0 >= input$ecc.0.1.0[1] & ecc.0.1.0 <= input$ecc.0.1.0[2]) %>%
+            filter(average.latitude >= input$average.latitude[1] & average.latitude <= input$average.latitude[2]) %>%
+            filter(average.longitude >= input$average.longitude[1] & average.longitude <= input$average.longitude[2]) %>%
             # delta filters
-            # filter(actual.cluster.size.tp2.size.tp1.size >= input$actual.cluster.size.tp2.size.tp1.size[1] & actual.cluster.size.tp2.size.tp1.size <= input$actual.cluster.size.tp2.size.tp1.size[2]) %>%
-            # filter(number.of.novels.in.the.tp2.match >= input$number.of.novels.in.the.tp2.match[1] & number.of.novels.in.the.tp2.match <= input$number.of.novels.in.the.tp2.match[2]) %>%
-            # filter(actual.growth.rate.tp2.size.tp1.size.tp1.size >= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[1] & actual.growth.rate.tp2.size.tp1.size.tp1.size <= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[2]) %>%
-            # filter(novel.growth.tp2.size.tp2.size.number.of.novels >= input$novel.growth.tp2.size.tp2.size.number.of.novels[1] & novel.growth.tp2.size.tp2.size.number.of.novels <= input$novel.growth.tp2.size.tp2.size.number.of.novels[2]) %>%
-            # filter(delta.ecc.0.0.1 >= input$delta.ecc.0.0.1[1] & delta.ecc.0.0.1 <= input$delta.ecc.0.0.1[2]) %>%
-            # filter(delta.ecc.0.1.0 >= input$delta.ecc.0.1.0[1] & delta.ecc.0.1.0 <= input$delta.ecc.0.1.0[2])%>%
+             filter(actual.cluster.size.tp2.size.tp1.size >= input$actual.cluster.size.tp2.size.tp1.size[1] & actual.cluster.size.tp2.size.tp1.size <= input$actual.cluster.size.tp2.size.tp1.size[2]) %>%
+             filter(number.of.novels.in.the.tp2.match >= input$number.of.novels.in.the.tp2.match[1] & number.of.novels.in.the.tp2.match <= input$number.of.novels.in.the.tp2.match[2]) %>%
+             filter(actual.growth.rate.tp2.size.tp1.size.tp1.size >= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[1] & actual.growth.rate.tp2.size.tp1.size.tp1.size <= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[2]) %>%
+             filter(novel.growth.tp2.size.tp2.size.number.of.novels >= input$novel.growth.tp2.size.tp2.size.number.of.novels[1] & novel.growth.tp2.size.tp2.size.number.of.novels <= input$novel.growth.tp2.size.tp2.size.number.of.novels[2]) %>%
+             filter(delta.ecc.0.0.1 >= input$delta.ecc.0.0.1[1] & delta.ecc.0.0.1 <= input$delta.ecc.0.0.1[2]) %>%
+             filter(delta.ecc.0.1.0 >= input$delta.ecc.0.1.0[1] & delta.ecc.0.1.0 <= input$delta.ecc.0.1.0[2])%>%
             
             # data subsetting 
             {if (input$subsets==1) arrange(., desc(abs(cluster.size.1.2))) else . }  %>%
@@ -374,19 +377,19 @@ server <- function(input, output, session) {
     
     
     # cluster shared data frame 
-    clusters_sh <- SharedData$new(clusters_r, group = "clusters")
+    clusters.sh <- SharedData$new(clusters_r, group = "clusters")
     
     
     # all strain filtering 
     strains_r <- reactive({
         print("creating reactive strain data...")
-        req(vals$strains.long,clusters_sh)
+        req(vals$strains.long,clusters.sh)
         
         vals$strains.long %>%
             {if (!is.null(input$country)) filter(., country %in% input$country)  else . } %>%
             {if (!is.null(input$province)) filter(., province %in% input$province)  else . } %>%
             # filter by shared cluster selections
-            filter(tp1.cluster %in% (clusters_sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1.cluster)))
+            filter(tp1.cluster %in% (clusters.sh$data(withSelection = TRUE) %>% filter(selected_ | is.na(selected_)) %>% pull(tp1.cluster)))
     })
     
     strains_r_group <- reactive({
@@ -398,7 +401,7 @@ server <- function(input, output, session) {
                 summarize(n = n(),
                           ecc.0.0.1 = mean(ecc.0.0.1),
                           ecc.0.1.0 = mean(ecc.0.1.0),
-                          ecc.comb = unique(as.character(ecc_direction_delta))) %>%
+                          ecc.comb = unique(as.character(delta.ecc.direction))) %>%
                 rowid_to_column(., var = "rowid") %>%
                 group_by(country)
             
@@ -409,7 +412,7 @@ server <- function(input, output, session) {
                 summarize(n = n(),
                           ecc.0.0.1 = mean(ecc.0.0.1),
                           ecc.0.1.0 = mean(ecc.0.1.0),
-                          ecc.comb = unique(as.character(ecc_direction_delta))) %>%
+                          ecc.comb = unique(as.character(delta.ecc.direction))) %>%
                 rowid_to_column(., var = "rowid") %>%
                 group_by(province)
         } else {
@@ -420,8 +423,8 @@ server <- function(input, output, session) {
     })
     
     # strain shared data
-    strains_sh <- SharedData$new(strains_r, group = "strains")
-    strains_sh_gr <- SharedData$new(strains_r_group,  group = "strains_grouped")
+    strains.sh <- SharedData$new(strains_r, group = "strains")
+    strains.sh_gr <- SharedData$new(strains_r_group,  group = "strains_grouped")
     
     #################################
     # data frames displayed in tabs #
@@ -429,7 +432,7 @@ server <- function(input, output, session) {
     
     # clusters
     output$clusters_dt <- renderDataTable({
-        datatable(clusters_sh,
+        datatable(clusters.sh,
                   extensions = c('Select', 'Buttons','Scroller'),
                   #extension = 'Scroller', 
                   options = list(
@@ -446,7 +449,7 @@ server <- function(input, output, session) {
     
     # strains
     output$strains_dt <- renderDataTable({
-        datatable(data = strains_sh,
+        datatable(data = strains.sh,
                   extensions = c('Select', 'Buttons','Scroller'),
                   options = list(
                       select = list(style = 'os', items = 'row'),
@@ -528,89 +531,12 @@ server <- function(input, output, session) {
     })
     
     
-    # radio plot for ecc explanation of cluster spread
-    output$ecc_radar <- renderPlotly({
-        
-        # #time point to time point
-        # plot_ly(type="scatterpolar",
-        #         data = clusters_long %>%
-        #             mutate(ecc.comb = ecc_direction) %>%
-        #             group_by(timepoint) %>%
-        #             count(ecc.comb, .drop=FALSE) %>%
-        #             full_join(directions, by = c('ecc.comb')),
-        #         r = ~n,
-        #         theta = ~degree.mid,
-        #         frame = ~timepoint,
-        #         showlegend = F,
-        #         connectgaps = T,
-        #         color =  I("#1F78C8"),
-        #         fill = 'toself') %>%
-        #     layout(showlegend = F,
-        #            margin = list(
-        #                l = 100, r = 100),
-        #            polar = list(
-        #                radialaxis = list(
-        #                    range =c(0,max(clusters_long %>%
-        #                                       mutate(ecc.comb = ecc_direction) %>%
-        #                                       group_by(timepoint) %>%
-        #                                       count(ecc.comb, .drop=FALSE) %>%
-        #                                       full_join(directions, by = c('ecc.comb')) %>% 
-        #                                       pull(n)))),
-        #                angularaxis = list(
-        #                    rotation = 90,
-        #                    direction = 'clockwise',
-        #                    tickmode = 'array',
-        #                    tickvals = c(0, 45,  90, 135, 180,
-        #                                 225, 270, 315),
-        #                    ticktext = c("Slower spread", 
-        #                                 HTML(paste("Slower spread,", "<br>", "more concentrated")), 
-        #                                 HTML(paste("More ", "<br>", "concentrated", sep="")), 
-        #                                 HTML(paste("Faster spread,", "<br>", "more concentrated")),
-        #                                 "Faster spread",   
-        #                                 HTML(paste("Faster spread,", "<br>", "more disperse")),
-        #                                 HTML(paste("More ", "<br>", "disperse", sep="")),
-        #                                 HTML(paste("Slower spread,", "<br>", "more disperse"))))))
-        
-        
-        # change to change
-        plot_ly(type="scatterpolar",
-                data = clusters_sh$data(withSelection = TRUE) %>%
-                    mutate(selfact = selection_factor(.),
-                           ecc.comb = delta.ecc.direction) %>%
-                    group_by(selfact) %>%
-                    distinct(tp1.cluster, .keep_all = T) %>%
-                    count(ecc.comb, .drop=FALSE) %>%
-                    full_join(directions, by = c('ecc.comb')),
-                r = ~n,
-                theta = ~degree.mid,
-                color = ~selfact,
-                colors = c("#1F78C8", "red"),
-                fill = 'toself') %>%
-            layout(showlegend = F,
-                   margin = list(l = 100, r = 100),
-                   polar = list(
-                       angularaxis = list(
-                           rotation = 90,
-                           direction = 'clockwise',
-                           tickmode = 'array',
-                           tickvals = c(0, 45,  90, 135, 180,
-                                        225, 270, 315),
-                           ticktext = c("Slower spread",
-                                        HTML(paste("Slower spread,", "<br>", "more concentrated")),
-                                        HTML(paste("More ", "<br>", "concentrated", sep="")),
-                                        HTML(paste("Faster spread,", "<br>", "more concentrated")),
-                                        "Faster spread",
-                                        HTML(paste("Faster spread,", "<br>", "more disperse")),
-                                        HTML(paste("More ", "<br>", "disperse", sep="")),
-                                        HTML(paste("Slower spread,", "<br>", "more disperse"))))))
-    })
-    
     output$bubble <- renderPlotly({
         
         # no faceting
         if(input$region == 1) {
             a <- plot_ly() %>%
-                add_trace(data = clusters_sh, 
+                add_trace(data = clusters.sh, 
                           type = "scatter",
                           mode = "markers", 
                           x = ~ecc.0.1.0,
@@ -640,7 +566,7 @@ server <- function(input, output, session) {
                 highlight(color = "#1F78C8")
             
             b <- plot_ly() %>%
-                add_trace(data = clusters_sh, 
+                add_trace(data = clusters.sh, 
                           type = "scatter",
                           mode = "markers", 
                           x = ~ecc.0.0.1,
@@ -669,7 +595,7 @@ server <- function(input, output, session) {
                 highlight(color = "#1F78C8")
             
             c <- plot_ly() %>%
-                add_trace(data = clusters_sh,
+                add_trace(data = clusters.sh,
                           type = "scatter",
                           mode = "markers", 
                           x = ~ecc.0.1.0,
@@ -715,7 +641,7 @@ server <- function(input, output, session) {
             
         } else if (input$region == 2 ){
             
-            geo <- strains_sh$data(withSelection=T) %>%
+            geo <- strains.sh$data(withSelection=T) %>%
                 group_by(country, tp1.cluster, timepoint) %>%
                 summarize(n = n(),
                           ecc.0.1.0 = mean(ecc.0.1.0)) %>%
@@ -747,7 +673,7 @@ server <- function(input, output, session) {
                                                      showarrow = FALSE)) %>%
                            highlight(color = "#1F78C8")
                 ) %>%
-                subplot(nrows = 3,   shareX = T) %>%
+                subplot(nrows = ceiling(length(unique(strains.sh$data() %>% pull(country)))/4),   shareX = T) %>%
                 layout(annotations = list(text= "Geospatial epicluster cohesion index",
                                           xref = "paper",
                                           yref = "paper",
@@ -759,7 +685,7 @@ server <- function(input, output, session) {
                                           font = list(size = 14),
                                           showarrow = FALSE))
             
-            temp <-  strains_sh$data(withSelection=T)  %>%
+            temp <-  strains.sh$data(withSelection=T)  %>%
                 group_by(country, tp1.cluster, timepoint) %>%
                 summarize(n = n(),
                           ecc.0.0.1 = mean(ecc.0.0.1)) %>%
@@ -790,7 +716,7 @@ server <- function(input, output, session) {
                                                      showarrow = FALSE)) %>%
                            highlight(color = "#1F78C8")
                 ) %>% 
-                subplot(nrows = 3, shareX = T) %>%
+                subplot(nrows = ceiling(length(unique(strains.sh$data() %>% pull(country)))/4), shareX = T) %>%
                 layout(annotations = list(text= "Temporal epicluster cohesion index",
                                           xref = "paper",
                                           yref = "paper",
@@ -802,7 +728,7 @@ server <- function(input, output, session) {
                                           font = list(size = 14),
                                           showarrow = FALSE))
             
-            both <- strains_sh$data(withSelection=T)  %>%
+            both <- strains.sh$data(withSelection=T)  %>%
                 group_by(country, tp1.cluster, timepoint) %>%
                 summarize(n = n(),
                           ecc.0.0.1 = mean(ecc.0.0.1),
@@ -835,7 +761,7 @@ server <- function(input, output, session) {
                                                      showarrow = FALSE)) %>%
                            highlight(color = "#1F78C8")
                 ) %>% 
-                subplot(nrows = 3, shareX = T) %>%
+                subplot(nrows = ceiling(length(unique(strains.sh$data() %>% pull(country)))/4), shareX = T) %>%
                 layout(annotations = list( list(text= "Geospatial epicluster cohesion index",
                                                 xref = "paper",
                                                 yref = "paper",
@@ -863,7 +789,7 @@ server <- function(input, output, session) {
             
         } else if (input$region == 3) {
             
-            geo <- strains_sh$data(withSelection=T)  %>%
+            geo <- strains.sh$data(withSelection=T)  %>%
                 subset(country %in% input$regionProvince) %>%
                 group_by(province, tp1.cluster, timepoint) %>%
                 summarize(n = n(),
@@ -907,7 +833,7 @@ server <- function(input, output, session) {
                                           font = list(size = 14),
                                           showarrow = FALSE))
             
-            temp <- strains_sh$data(withSelection=T)  %>%
+            temp <- strains.sh$data(withSelection=T)  %>%
                 subset(country %in% input$regionProvince) %>%
                 group_by(province, tp1.cluster, timepoint) %>%
                 summarize(n = n(),
@@ -951,7 +877,7 @@ server <- function(input, output, session) {
                                           font = list(size = 14),
                                           showarrow = FALSE))
             
-            both <- strains_sh$data(withSelection=T)  %>%
+            both <- strains.sh$data(withSelection=T)  %>%
                 subset(country %in% input$regionProvince) %>%
                 group_by(province, tp1.cluster, timepoint) %>%
                 summarize(n = n(),
@@ -1019,7 +945,7 @@ server <- function(input, output, session) {
         if(input$region == 1){
             # no faceting 
             geo <- plot_ly() %>%
-                add_trace(data = strains_sh,
+                add_trace(data = strains.sh,
                           type = "histogram",
                           x = ~ecc.0.1.0,
                           frame = ~timepoint,
@@ -1032,7 +958,7 @@ server <- function(input, output, session) {
                           showlegend = FALSE) %>%
                 layout(xaxis = list(range = c(0,1),
                                     title = "Geospatial epicluster cohesion index"),
-                       yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                       yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
                                                           filter(selected_ | is.na(selected_))))),
                        annotations = list(list(text= "Geospatial epicluster cohesion index",
                                                xref = "paper",
@@ -1056,7 +982,7 @@ server <- function(input, output, session) {
                 highlight(color = "#1F78C8")
             
             delta_geo <- plot_ly() %>%
-                add_trace(data = strains_sh,
+                add_trace(data = strains.sh,
                           type = "histogram",
                           x = ~delta.ecc.0.1.0,
                           frame = ~timepoint,
@@ -1069,7 +995,7 @@ server <- function(input, output, session) {
                           showlegend = FALSE) %>%
                 layout(xaxis = list(range = c(-1,1),
                                     title = "Delta geospatial epicluster cohesion index"),
-                       yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                       yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
                                                           filter(selected_ | is.na(selected_))))),
                        annotations = list(list(text= "Delta geospatial epicluster cohesion index",
                                                xref = "paper",
@@ -1094,7 +1020,7 @@ server <- function(input, output, session) {
             
             
             temp <- plot_ly() %>%
-                add_trace(data = strains_sh,
+                add_trace(data = strains.sh,
                           type = "histogram",
                           x = ~ecc.0.0.1,
                           frame = ~timepoint,
@@ -1107,7 +1033,7 @@ server <- function(input, output, session) {
                           showlegend = FALSE) %>%
                 layout(xaxis = list(range = c(0,1),
                                     title = "Temporal epicluster cohesion index"),
-                       yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                       yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
                                                           filter(selected_ | is.na(selected_))))),
                        annotations = list(list(text= "Temporal epicluster cohesion index",
                                                xref = "paper",
@@ -1131,7 +1057,7 @@ server <- function(input, output, session) {
                 highlight(color = "#1F78C8")
             
             delta_temp <- plot_ly() %>%
-                add_trace(data = strains_sh,
+                add_trace(data = strains.sh,
                           type = "histogram",
                           x = ~delta.ecc.0.0.1,
                           frame = ~timepoint,
@@ -1144,7 +1070,7 @@ server <- function(input, output, session) {
                           showlegend = FALSE) %>%
                 layout(xaxis = list(range = c(-1,1),
                                     title = "Delta temporal epicluster cohesion index"),
-                       yaxis = list(range = c(0, nrow(strains_sh$data(withSelection = T) %>%
+                       yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
                                                           filter(selected_ | is.na(selected_))))),
                        annotations = list(list(text= "Delta temporal epicluster cohesion index",
                                                xref = "paper",
@@ -1171,7 +1097,7 @@ server <- function(input, output, session) {
             
         } else if (input$region == 2){
             
-            geo <- strains_sh$data(withSelection=T)  %>% 
+            geo <- strains.sh$data(withSelection=T)  %>% 
                 split(.$country) %>%
                 lapply(function(d) plot_ly(d, 
                                            type = "histogram",
@@ -1185,7 +1111,7 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(0,1), title = ""),
-                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                  yaxis = list(range = c(0, max( strains.sh$data(withSelection=T) %>%
                                                                      group_by(country, timepoint) %>%
                                                                      count(cut_width(ecc.0.1.0,width=0.01)) %>%
                                                                      pull(n))*1.1)),
@@ -1211,7 +1137,7 @@ server <- function(input, output, session) {
                                                 font = list(size = 14),
                                                 showarrow = FALSE)))
             
-            temp <- strains_sh$data(withSelection=T) %>% 
+            temp <- strains.sh$data(withSelection=T) %>% 
                 split(.$country) %>%
                 lapply(function(d) plot_ly(d, 
                                            type = "histogram",
@@ -1225,7 +1151,7 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(0,1), title = ""),
-                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                  yaxis = list(range = c(0, max( strains.sh$data(withSelection=T) %>%
                                                                      group_by(country, timepoint) %>%
                                                                      count(cut_width(ecc.0.0.1, width=0.01)) %>%
                                                                      pull(n))*1.1)),
@@ -1251,7 +1177,7 @@ server <- function(input, output, session) {
                                                 font = list(size = 14),
                                                 showarrow = FALSE)))
             
-            delta_geo <- strains_sh$data(withSelection=T) %>%
+            delta_geo <- strains.sh$data(withSelection=T) %>%
                 split(.$country) %>%
                 lapply(function(d) plot_ly(d, 
                                            type = "histogram",
@@ -1265,7 +1191,7 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(-1,1), title = ""),
-                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                  yaxis = list(range = c(0, max( strains.sh$data(withSelection=T) %>%
                                                                      group_by(country, timepoint) %>%
                                                                      count(cut_width(delta.ecc.0.1.0, width=0.01)) %>%
                                                                      pull(n))*1.1)),
@@ -1291,7 +1217,7 @@ server <- function(input, output, session) {
                                                 font = list(size = 14),
                                                 showarrow = FALSE)))
             
-            delta_temp <- strains_sh$data(withSelection=T) %>% 
+            delta_temp <- strains.sh$data(withSelection=T) %>% 
                 split(.$country) %>%
                 lapply(function(d) plot_ly(d, 
                                            type = "histogram",
@@ -1305,7 +1231,7 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(-1,1), title = ""),
-                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                  yaxis = list(range = c(0, max( strains.sh$data(withSelection=T) %>%
                                                                      group_by(country, timepoint) %>%
                                                                      count(cut_width(delta.ecc.0.0.1, width=0.01)) %>%
                                                                      pull(n))*1.1)),
@@ -1338,7 +1264,7 @@ server <- function(input, output, session) {
         } else if (input$region == 3) {
             
             # by province
-            geo <- strains_sh$data(withSelection=T)  %>% 
+            geo <- strains.sh$data(withSelection=T)  %>% 
                 subset(country %in% input$regionProvince) %>%
                 split(.$province) %>%
                 lapply(function(d) plot_ly(d, 
@@ -1353,7 +1279,7 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(0,1), title = ""),
-                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                  yaxis = list(range = c(0, max( strains.sh$data(withSelection=T) %>%
                                                                      subset(country %in% input$regionProvince) %>%
                                                                      group_by(province, timepoint) %>%
                                                                      count(cut_width(ecc.0.1.0,width=0.01)) %>%
@@ -1380,7 +1306,7 @@ server <- function(input, output, session) {
                                                 font = list(size = 14),
                                                 showarrow = FALSE)))
             
-            temp <- strains_sh$data(withSelection=T) %>% 
+            temp <- strains.sh$data(withSelection=T) %>% 
                 subset(country %in% input$regionProvince) %>%
                 split(.$province) %>%
                 lapply(function(d) plot_ly(d, 
@@ -1395,7 +1321,7 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(0,1), title = ""),
-                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                  yaxis = list(range = c(0, max( strains.sh$data(withSelection=T) %>%
                                                                      subset(country %in% input$regionProvince) %>%
                                                                      group_by(province, timepoint) %>%
                                                                      count(cut_width(ecc.0.0.1, width=0.01)) %>%
@@ -1422,7 +1348,7 @@ server <- function(input, output, session) {
                                                 font = list(size = 14),
                                                 showarrow = FALSE)))
             
-            delta_geo <- strains_sh$data(withSelection=T) %>%
+            delta_geo <- strains.sh$data(withSelection=T) %>%
                 subset(country %in% input$regionProvince) %>%
                 split(.$province) %>%
                 lapply(function(d) plot_ly(d, 
@@ -1437,7 +1363,7 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(-1,1), title = ""),
-                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                  yaxis = list(range = c(0, max( strains.sh$data(withSelection=T) %>%
                                                                      subset(country %in% input$regionProvince) %>%
                                                                      group_by(province, timepoint) %>%
                                                                      count(cut_width(delta.ecc.0.1.0, width=0.01)) %>%
@@ -1464,7 +1390,7 @@ server <- function(input, output, session) {
                                                 font = list(size = 14),
                                                 showarrow = FALSE)))
             
-            delta_temp <- strains_sh$data(withSelection=T) %>% 
+            delta_temp <- strains.sh$data(withSelection=T) %>% 
                 subset(country %in% input$regionProvince) %>%
                 split(.$province) %>%
                 lapply(function(d) plot_ly(d, 
@@ -1479,7 +1405,7 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            frame = ~timepoint) %>%
                            layout(xaxis = list(range = c(-1,1), title = ""),
-                                  yaxis = list(range = c(0, max( strains_sh$data(withSelection=T) %>%
+                                  yaxis = list(range = c(0, max( strains.sh$data(withSelection=T) %>%
                                                                      subset(country %in% input$regionProvince) %>%
                                                                      group_by(province, timepoint) %>%
                                                                      count(cut_width(delta.ecc.0.0.1, width=0.01)) %>%
@@ -1513,11 +1439,12 @@ server <- function(input, output, session) {
         }
     })
     
+    
     output$radar <- renderPlotly({
         
         if (input$region ==1) {
             
-            clusters_sh$data(withSelection = TRUE) %>%
+            clusters.sh$data(withSelection = TRUE) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 mutate(ecc.comb = delta.ecc.direction) %>%
                 group_by(timepoint) %>%
@@ -1528,7 +1455,7 @@ server <- function(input, output, session) {
                         r = ~n,
                         theta = ~degree.mid,
                         color  = I("#898a8c"),
-                        #color = I(ifelse(sum(clusters_sh$data(withSelection = TRUE) %>% pull(selected_))>0, "#1F78C8", "#898a8c")),
+                        #color = I(ifelse(sum(clusters.sh$data(withSelection = TRUE) %>% pull(selected_))>0, "#1F78C8", "#898a8c")),
                         frame = ~timepoint, 
                         hovertemplate = ~paste('<b>', ecc.comb, '</b>', '<br>',
                                                'Count:', '%{r}', 
@@ -1555,7 +1482,7 @@ server <- function(input, output, session) {
         } else if (input$region == 2) {
             
             # by country 
-            strains_sh_gr$data(withSelection = T) %>%
+            strains.sh_gr$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 group_by(country, timepoint) %>%
                 count(ecc.comb, .drop=FALSE) %>%
@@ -1594,7 +1521,7 @@ server <- function(input, output, session) {
             
         } else if (input$region == 3){
             # by province 
-            strains_sh_gr$data(withSelection = T) %>%
+            strains.sh_gr$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 group_by(province, timepoint) %>%
                 count(ecc.comb, .drop=FALSE) %>%
@@ -1639,13 +1566,13 @@ server <- function(input, output, session) {
         if (input$region == 1) {
             
             # opacity settings
-            op <- clusters_sh$data(withSelection = T)
+            op <- clusters.sh$data(withSelection = T)
             op$opacity <- ifelse(op$selected_ | is.na(op$selected_), 0.6, 0.6*0.3)
             op$colour <- ifelse(op$selected_ , "#1F78C8","#898a8c")
             
             plot_ly(type = "scatter", mode="markers") %>% 
                 #add segment to connect each point to origin
-                add_trace(data = clusters_sh,
+                add_trace(data = clusters.sh,
                           x = ~delta.ecc.0.1.0, # geographical
                           y = ~delta.ecc.0.0.1, # temporal 
                           split = ~tp1.cluster,
@@ -1678,7 +1605,7 @@ server <- function(input, output, session) {
             # facet by country  
         } else if (input$region == 2) {
             
-            strains_sh$data(withSelection = T) %>%
+            strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 distinct(country, tp1.cluster, .keep_all = T) %>%
                 split(.$country) %>%
@@ -1688,9 +1615,6 @@ server <- function(input, output, session) {
                                            x = ~delta.ecc.0.1.0, # geographical
                                            y = ~delta.ecc.0.0.1, # temporal 
                                            name = ~tp1.cluster,
-                                           #legendgroup = ~tp1.cluster,
-                                           #opacity = I(op$opacity),
-                                           #frame = ~timepoint,
                                            color = I("#898a8c"),
                                            showlegend = F,
                                            opacity = 1,
@@ -1739,7 +1663,7 @@ server <- function(input, output, session) {
             # facet by province
         } else if (input$region == 3) {
             
-            strains_sh$data(withSelection = T) %>%
+            strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 subset(country %in% input$regionProvince) %>% 
                 distinct(province, tp1.cluster, .keep_all = T) %>%
@@ -1749,9 +1673,6 @@ server <- function(input, output, session) {
                                            mode='markers',
                                            x = ~delta.ecc.0.1.0, # geographical
                                            y = ~delta.ecc.0.0.1, # temporal 
-                                           #legendgroup = ~tp1.cluster,
-                                           #opacity = I(op$opacity),
-                                           #frame = ~timepoint,
                                            color = I("#898a8c"),
                                            showlegend = F,
                                            opacity = 1,
@@ -1804,7 +1725,7 @@ server <- function(input, output, session) {
         
         if (input$region == 1) {
             
-            a <- plot_ly(data = clusters_sh) %>%
+            a <- plot_ly(data = clusters.sh) %>%
                 add_trace(type = "scatter",
                           mode = "markers",
                           x = ~timepoint,
@@ -1841,7 +1762,7 @@ server <- function(input, output, session) {
                                                showarrow = FALSE)))%>%
                 highlight(color = "#1F78C8")
             
-            b <- plot_ly(data = clusters_sh) %>%
+            b <- plot_ly(data = clusters.sh) %>%
                 add_trace(type = "scatter",
                           mode = "markers",
                           x = ~timepoint,
@@ -1883,7 +1804,7 @@ server <- function(input, output, session) {
         } else if (input$region == 2) {
             
             bycountry <- 
-                strains_sh$data(withSelection=T) %>%
+                strains.sh$data(withSelection=T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 mutate(country = as.factor(country),
                        timepoint = as.factor(timepoint),
@@ -2043,7 +1964,7 @@ server <- function(input, output, session) {
         } else if (input$region == 3) {
             
             byprovince <- 
-                strains_sh$data(withSelection=T) %>%
+                strains.sh$data(withSelection=T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 subset(country %in% input$regionProvince) %>%
                 mutate(province = as.factor(province),
@@ -2077,10 +1998,6 @@ server <- function(input, output, session) {
                     subset(tp1==1) %>%
                     group_by(province, tp1.cluster) %>%
                     summarize(n=sum(na.omit(n)))
-                
-                # from vasena
-                #actual_growth_rate = ((tp2_cl_size - tp1_cl_size) / tp1_cl_size) %>% round(., digits = 3), 
-                #new_growth = (tp2_cl_size / (tp2_cl_size - num_novs)) %>% round(., digits = 3))
                 
                 overall_name <- paste("overall", i, sep="_")
                 novel_name <- paste("novel", i, sep="_")
@@ -2209,8 +2126,8 @@ server <- function(input, output, session) {
         if (input$region == 1) {
             
             # tally counts by cluster and strain date 
-            counts <- strains_sh$data(withSelection = T) %>%
-                filter(selected_ | is.na(selected_)) %>%
+            counts <- strains.sh$data(withSelection = T) %>%
+                filter(selected_ | is.na(selected_)) %>% 
                 group_by(tp1.cluster, strain.date) %>%
                 tally()
             
@@ -2229,13 +2146,13 @@ server <- function(input, output, session) {
                                                  sep = " "),
                           showlegend = F) %>%
                 layout(yaxis = list(rangemode = "tozero"),
-                       xaxis = list(tickvals = as.list(strains_sh$data() %>%
-                                                            group_by(tp1) %>%
-                                                            filter(strain.date == min(strain.date)) %>%
-                                                            distinct(strain.date) %>%
-                                                            pull(strain.date) %>%
-                                                            sort()),
-                                    ticktext = as.list( as.character(seq(length(strains_sh$data() %>% 
+                       xaxis = list(tickvals = as.list(strains.sh$data() %>%
+                                                           group_by(tp1) %>%
+                                                           filter(strain.date == min(strain.date)) %>%
+                                                           distinct(strain.date) %>%
+                                                           pull(strain.date) %>%
+                                                           sort()),
+                                    ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
                                                                                     group_by(tp1) %>% 
                                                                                     filter(strain.date == min(strain.date)) %>% 
                                                                                     distinct(strain.date) %>% 
@@ -2266,7 +2183,7 @@ server <- function(input, output, session) {
                 highlight(color = "#1F78C8")
             
             # need to aggregate data for cumsum 
-            cumsum <- strains_sh$data(withSelection = T) %>%
+            cumsum <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 group_by(tp1.cluster, strain.date) %>% 
                 tally(!is.na(strain)) %>% 
@@ -2287,13 +2204,13 @@ server <- function(input, output, session) {
                                                  sep = " "),
                           showlegend = F) %>%
                 layout(yaxis = list(rangemode = "tozero"),
-                       xaxis = list(tickvals = as.list(strains_sh$data() %>%
-                                                            group_by(tp1) %>%
-                                                            filter(strain.date == min(strain.date)) %>%
-                                                            distinct(strain.date) %>%
-                                                            pull(strain.date) %>%
-                                                            sort()),
-                                    ticktext = as.list( as.character(seq(length(strains_sh$data() %>% 
+                       xaxis = list(tickvals = as.list(strains.sh$data() %>%
+                                                           group_by(tp1) %>%
+                                                           filter(strain.date == min(strain.date)) %>%
+                                                           distinct(strain.date) %>%
+                                                           pull(strain.date) %>%
+                                                           sort()),
+                                    ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
                                                                                     group_by(tp1) %>% 
                                                                                     filter(strain.date == min(strain.date)) %>% 
                                                                                     distinct(strain.date) %>% 
@@ -2330,7 +2247,7 @@ server <- function(input, output, session) {
         } else if (input$region == 2) {
             
             # tally counts by country, cluster, and date
-            counts <- strains_sh$data(withSelection = T) %>%
+            counts <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 group_by(country, tp1.cluster, strain.date) %>%
                 tally()
@@ -2352,13 +2269,13 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            showlegend = F) %>%
                            layout(xaxis = list(title = "",
-                                               tickvals = as.list( strains.long %>%
+                                               tickvals = as.list( strains.sh$data(withSelection = T) %>%
                                                                        group_by(tp1) %>%
                                                                        filter(strain.date == min(strain.date)) %>%
                                                                        distinct(strain.date) %>%
                                                                        pull(strain.date) %>%
                                                                        sort()),
-                                               ticktext = as.list( as.character(seq(length(strains.long %>% 
+                                               ticktext = as.list( as.character(seq(length(strains.sh$data(withSelection = T) %>% 
                                                                                                group_by(tp1) %>% 
                                                                                                filter(strain.date == min(strain.date)) %>% 
                                                                                                distinct(strain.date) %>% 
@@ -2402,7 +2319,7 @@ server <- function(input, output, session) {
             
             # aggregate data by country, cluster, and strain date 
             # take cumsum of counts 
-            cumsum <- strains_sh$data(withSelection = T) %>%
+            cumsum <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 group_by(country, tp1.cluster, strain.date) %>% 
                 tally(!is.na(strain)) %>% 
@@ -2425,13 +2342,13 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            showlegend = F) %>%
                            layout(xaxis = list(title = "",
-                                               tickvals = as.list( strains.long %>%
+                                               tickvals = as.list( strains.sh$data(withSelection = T) %>%
                                                                        group_by(tp1) %>%
                                                                        filter(strain.date == min(strain.date)) %>%
                                                                        distinct(strain.date) %>%
                                                                        pull(strain.date) %>%
                                                                        sort()),
-                                               ticktext = as.list( as.character(seq(length(strains.long %>% 
+                                               ticktext = as.list( as.character(seq(length(strains.sh$data(withSelection = T) %>% 
                                                                                                group_by(tp1) %>% 
                                                                                                filter(strain.date == min(strain.date)) %>% 
                                                                                                distinct(strain.date) %>% 
@@ -2480,7 +2397,7 @@ server <- function(input, output, session) {
         } else if (input$region == 3) {
             
             # tally counts by province, cluster, and date
-            counts <- strains_sh$data(withSelection = T) %>%
+            counts <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 subset(country %in% input$regionProvince) %>%
                 group_by(province, tp1.cluster, strain.date) %>%
@@ -2503,13 +2420,13 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            showlegend = F) %>%
                            layout(xaxis = list(title = "",
-                                               tickvals = as.list( strains.long %>%
+                                               tickvals = as.list( strains.sh$data(withSelection = T) %>%
                                                                        group_by(tp1) %>%
                                                                        filter(strain.date == min(strain.date)) %>%
                                                                        distinct(strain.date) %>%
                                                                        pull(strain.date) %>%
                                                                        sort()),
-                                               ticktext = as.list( as.character(seq(length(strains.long %>% 
+                                               ticktext = as.list( as.character(seq(length(strains.sh$data(withSelection = T) %>% 
                                                                                                group_by(tp1) %>% 
                                                                                                filter(strain.date == min(strain.date)) %>% 
                                                                                                distinct(strain.date) %>% 
@@ -2553,7 +2470,7 @@ server <- function(input, output, session) {
             
             # aggregate data by province, cluster, and strain date 
             # take cumsum of counts 
-            cumsum <- strains_sh$data(withSelection = T) %>%
+            cumsum <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 subset(country %in% input$regionProvince) %>%
                 group_by(province, tp1.cluster, strain.date) %>% 
@@ -2577,13 +2494,13 @@ server <- function(input, output, session) {
                                                                   sep = " "),
                                            showlegend = F) %>%
                            layout(xaxis = list(title = "",
-                                               tickvals = as.list( strains.long %>%
+                                               tickvals = as.list( strains.sh$data(withSelection = T) %>%
                                                                        group_by(tp1) %>%
                                                                        filter(strain.date == min(strain.date)) %>%
                                                                        distinct(strain.date) %>%
                                                                        pull(strain.date) %>%
                                                                        sort()),
-                                               ticktext = as.list( as.character(seq(length(strains.long %>% 
+                                               ticktext = as.list( as.character(seq(length(strains.sh$data(withSelection = T) %>% 
                                                                                                group_by(tp1) %>% 
                                                                                                filter(strain.date == min(strain.date)) %>% 
                                                                                                distinct(strain.date) %>% 
@@ -2635,7 +2552,7 @@ server <- function(input, output, session) {
         # no faceting
         if (input$region == 1) {
             plot_ly(type = "histogram",
-                    data = strains_sh,
+                    data = strains.sh,
                     histfunc = "count",
                     x = ~strain.date,
                     color = I("#898a8c"),                
@@ -2644,13 +2561,13 @@ server <- function(input, output, session) {
                                            'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
                 layout(barmode = "stack",
                        xaxis = list(title = "Time point",
-                                    tickvals = as.list(strains_sh$data() %>%
-                                                            group_by(tp1) %>%
-                                                            filter(strain.date == min(strain.date)) %>%
-                                                            distinct(strain.date) %>%
-                                                            pull(strain.date) %>%
-                                                            sort()),
-                                    ticktext = as.list( as.character(seq(length(strains_sh$data() %>% 
+                                    tickvals = as.list(strains.sh$data() %>%
+                                                           group_by(tp1) %>%
+                                                           filter(strain.date == min(strain.date)) %>%
+                                                           distinct(strain.date) %>%
+                                                           pull(strain.date) %>%
+                                                           sort()),
+                                    ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
                                                                                     group_by(tp1) %>% 
                                                                                     filter(strain.date == min(strain.date)) %>% 
                                                                                     distinct(strain.date) %>% 
@@ -2682,13 +2599,13 @@ server <- function(input, output, session) {
         } else if (input$region == 2) {
             
             # calc maximum count and use to set yaxis max
-            counts <- strains_sh$data(withSelection = T) %>%
+            counts <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 group_by(country, strain.date) %>% 
                 tally() 
             # cumsum plot 
             
-            strains_sh$data(withSelection = T) %>%
+            strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 split(.$country) %>%
                 lapply(function(d) plot_ly(d, 
@@ -2742,14 +2659,14 @@ server <- function(input, output, session) {
         } else if (input$region == 3) {
             
             # calc maximum count and use to set yaxis max
-            counts <- strains_sh$data(withSelection = T) %>%
+            counts <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 subset(country %in% input$regionProvince) %>%
                 group_by(province, strain.date) %>% 
                 tally() 
             
             # cumsum plot 
-            strains_sh$data(withSelection = T) %>%
+            strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 subset(country %in% input$regionProvince) %>%
                 split(.$province) %>%
@@ -2811,7 +2728,7 @@ server <- function(input, output, session) {
             
             # multi strain count
             multiplot <- plot_ly(type = "histogram") %>%
-                add_trace(data = strains_sh$data(withSelection = T) %>%
+                add_trace(data = strains.sh$data(withSelection = T) %>%
                               filter(selected_ | is.na(selected_)) %>%
                               subset(single.mult == "Multi strain clusters"),
                           histfunc = "count",
@@ -2824,13 +2741,13 @@ server <- function(input, output, session) {
                                                  sep = " "),
                           xbins = list(size = 86400000.0)) %>%
                 layout(xaxis = list(title = "Time point",
-                                    tickvals = as.list( strains_sh$data() %>%
+                                    tickvals = as.list( strains.sh$data() %>%
                                                             group_by(tp1) %>%
                                                             filter(strain.date == min(strain.date)) %>%
                                                             distinct(strain.date) %>%
                                                             pull(strain.date) %>%
                                                             sort()),
-                                    ticktext = as.list( as.character(seq(length(strains_sh$data() %>% 
+                                    ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
                                                                                     group_by(tp1) %>% 
                                                                                     filter(strain.date == min(strain.date)) %>% 
                                                                                     distinct(strain.date) %>% 
@@ -2861,7 +2778,7 @@ server <- function(input, output, session) {
             
             # single strain counts
             singleplot <- plot_ly(type = "histogram") %>%
-                add_trace(data = strains_sh$data(withSelection = T) %>%
+                add_trace(data = strains.sh$data(withSelection = T) %>%
                               filter(selected_ | is.na(selected_)) %>%
                               subset(single.mult == "Single strain clusters"),
                           histfunc = "count",
@@ -2875,7 +2792,7 @@ server <- function(input, output, session) {
                                                  sep = " "),
                           xbins = list(size = 86400000.0)) %>%
                 layout(xaxis = list(title = "Date"),
-                       yaxis = list(range = c(0, max(strains_sh$data(withSelection = T) %>%
+                       yaxis = list(range = c(0, max(strains.sh$data(withSelection = T) %>%
                                                          filter(selected_ | is.na(selected_)) %>%
                                                          subset(single.mult == "Multi strain clusters") %>%
                                                          group_by(strain.date) %>%
@@ -2908,7 +2825,7 @@ server <- function(input, output, session) {
             # facet by country
         } else if (input$region == 2) {
             
-            multi <- strains_sh$data(withSelection = T) %>%
+            multi <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 group_by(country, single.mult, strain.date) %>%
                 tally()
@@ -2917,7 +2834,7 @@ server <- function(input, output, session) {
                    (colors = c("#898a8c", "#373738")), 
                    (colors = c("#898a8c")))
             
-            strains_sh$data(withSelection = T) %>%
+            strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 split(.$country) %>%
                 lapply(function(d) plot_ly(d, 
@@ -2928,7 +2845,7 @@ server <- function(input, output, session) {
                                            colors = colors, 
                                            xbins = list(size = 86400000.0),
                                            legendgroup = ~single.mult, 
-                                           showlegend = ifelse(which(names(strains_sh$data(withSelection = T) %>%
+                                           showlegend = ifelse(which(names(strains.sh$data(withSelection = T) %>%
                                                                                filter(selected_ | is.na(selected_)) %>%
                                                                                split(.$country)) == unique(d$country))==1, TRUE, FALSE), 
                                            hovertemplate = ~paste('Count: %{y}', '<br>',
@@ -2937,13 +2854,13 @@ server <- function(input, output, session) {
                                                                   sep=" ")) %>%
                            layout( barmode = 'overlay',
                                    xaxis = list(title = "",
-                                                tickvals = as.list( strains.long %>%
-                                                                        group_by(tp1) %>%
-                                                                        filter(strain.date == min(strain.date)) %>%
-                                                                        distinct(strain.date) %>%
-                                                                        pull(strain.date) %>%
-                                                                        sort()),
-                                                ticktext = as.list( as.character(seq(length(strains.long %>% 
+                                                tickvals = as.list(strains.sh$data() %>%
+                                                                       group_by(tp1) %>%
+                                                                       filter(strain.date == min(strain.date)) %>%
+                                                                       distinct(strain.date) %>%
+                                                                       pull(strain.date) %>%
+                                                                       sort()),
+                                                ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
                                                                                                 group_by(tp1) %>% 
                                                                                                 filter(strain.date == min(strain.date)) %>% 
                                                                                                 distinct(strain.date) %>% 
@@ -2962,14 +2879,14 @@ server <- function(input, output, session) {
                                                            showarrow = FALSE)))) %>% 
                 subplot(nrows = 3, shareX = T, shareY = T)
             
-            # single <- strains_sh$data(withSelection = T) %>%
+            # single <- strains.sh$data(withSelection = T) %>%
             #     filter(selected_ | is.na(selected_)) %>%
             #     subset(single.mult == "Single strain clusters") %>%
             #     group_by(country, strain.date) %>%
             #     tally()
             # 
             # # single strain 
-            # singleplot <- strains_sh$data() %>%
+            # singleplot <- strains.sh$data() %>%
             #     subset(single.mult == "Single strain clusters") %>%
             
             # strains.long %>% 
@@ -3004,7 +2921,7 @@ server <- function(input, output, session) {
             # facet by province 
         } else if (input$region == 3) {
             
-            multi <- strains_sh$data(withSelection = T) %>%
+            multi <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 subset(country %in% input$regionProvince) %>%
                 group_by(province, single.mult, strain.date) %>%
@@ -3014,7 +2931,7 @@ server <- function(input, output, session) {
                    (colors = c("#898a8c", "#373738")), 
                    (colors = c("#898a8c")))
             
-            strains_sh$data(withSelection = T) %>%
+            strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
                 subset(country %in% input$regionProvince) %>%
                 split(.$province) %>%
@@ -3026,7 +2943,7 @@ server <- function(input, output, session) {
                                            colors = colors, 
                                            xbins = list(size = 86400000.0),
                                            legendgroup = ~single.mult, 
-                                           showlegend = ifelse(which(names(strains_sh$data(withSelection = T) %>%
+                                           showlegend = ifelse(which(names(strains.sh$data(withSelection = T) %>%
                                                                                filter(selected_ | is.na(selected_)) %>%
                                                                                subset(country %in% input$regionProvince) %>%
                                                                                split(.$province)) == unique(d$province))==1, TRUE, FALSE), 
@@ -3036,13 +2953,13 @@ server <- function(input, output, session) {
                                                                   sep=" ")) %>%
                            layout( barmode = 'overlay',
                                    xaxis = list(title = "",
-                                                tickvals = as.list( strains.long %>%
+                                                tickvals = as.list( strains.sh$data() %>%
                                                                         group_by(tp1) %>%
                                                                         filter(strain.date == min(strain.date)) %>%
                                                                         distinct(strain.date) %>%
                                                                         pull(strain.date) %>%
                                                                         sort()),
-                                                ticktext = as.list( as.character(seq(length(strains.long %>% 
+                                                ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
                                                                                                 group_by(tp1) %>% 
                                                                                                 filter(strain.date == min(strain.date)) %>% 
                                                                                                 distinct(strain.date) %>% 
@@ -3069,7 +2986,7 @@ server <- function(input, output, session) {
     
     output$cluster_map <- renderPlotly({
         plot_mapbox(mode = 'scattermapbox') %>%
-            add_markers(data = clusters_sh,
+            add_markers(data = clusters.sh,
                         name = "Clusters",
                         x = ~average.longitude,
                         y = ~average.latitude,
@@ -3078,7 +2995,7 @@ server <- function(input, output, session) {
                         size = ~log10(cluster.size.1.2)*10,
                         opacity = 0.6,
                         hovertemplate = ~paste(tp1.cluster, '<br>',
-                                               'Avg distance between strains (km):', avg_geo_dist,
+                                               'Avg distance between strains (km):', geo.average.cluster.distance.km,
                                                '<extra></extra>',
                                                sep = " ")) %>%
             config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
@@ -3098,9 +3015,9 @@ server <- function(input, output, session) {
 
 
 
-# P <- plot_ly(data = clusters_long)
-# for(k in 1:nrow(clusters_long)) {
-#     dfk <- clusters_long[k,c("delta.ecc.0.1.0", "delta.ecc.0.0.1", "tp1.cluster", "timepoint")]
+# P <- plot_ly(data = clusters.long)
+# for(k in 1:nrow(clusters.long)) {
+#     dfk <- clusters.long[k,c("delta.ecc.0.1.0", "delta.ecc.0.0.1", "tp1.cluster", "timepoint")]
 #     P <- add_trace(P,
 #                    y=c(0,~delta.ecc.0.0.1),
 #                    x=c(0,~delta.ecc.0.1.0),
@@ -3122,7 +3039,7 @@ server <- function(input, output, session) {
 
 # 
 # plot_ly() %>%
-#     add_trace(data = clusters_long, 
+#     add_trace(data = clusters.long, 
 #               type = "scatter",
 #               mode = "markers", 
 #               x = ~ecc.0.1.0,

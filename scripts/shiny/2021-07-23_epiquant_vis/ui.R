@@ -39,22 +39,22 @@ sidebar <- dashboardSidebar(
                        # cluster filters
                        menuItem('Cluster filters', tabName = "clusterFilters",
                                 #cluster filters
-                                selectizeInput("tp1_cluster", "TP1 cluster", c(1,2,3,4,5),  selected = NULL, multiple = T),
+                                selectizeInput("tp1.cluster", "TP1 cluster", c(1,2,3,4,5),  selected = NULL, multiple = T),
                                 selectizeInput("timepoint", "Timepoint", c(1,2), selected = NULL, multiple = T),
                                 selectizeInput("type", "Type", c(1,2,3,4), selected = NULL, multiple = T),
-                                sliderInput(inputId = "cluster_size_2", label = "Cluster size", min = 0, max = 10000, value = c(1, 10000)),
-                                sliderInput(inputId = "avg_date", label = "Avg date", min = as.Date("2020-01-01"), max = as.Date("2025-01-01"), value = c(as.Date("2020-01-01"), as.Date("2025-01-01"))),
-                                sliderInput(inputId = "ecc_0.0.1", label = "ecc_0.0.1", min = 0, max = 1, value = c(0, 1)),
-                                sliderInput(inputId = "ecc_0.1.0", label = "ecc_0.1.0", min = 0, max = 1, value = c(0, 1)),
-                                sliderInput(inputId = "avg_latitude", label = "Avg latitude", min = -90, max = 90, value = c(-90, 90)),
-                                sliderInput(inputId = "avg_longitude", label = "Avg longitude", min = -180, max = 180, value = c(-180, 180)),
+                                sliderInput(inputId = "cluster.size.1.2", label = "Cluster size", min = 0, max = 10000, value = c(1, 10000)),
+                                sliderInput(inputId = "average.date", label = "Average date", min = as.Date("2020-01-01"), max = as.Date("2025-01-01"), value = c(as.Date("2020-01-01"), as.Date("2025-01-01"))),
+                                sliderInput(inputId = "ecc.0.0.1", label = "Temporal ECC", min = 0, max = 1, value = c(0, 1)),
+                                sliderInput(inputId = "ecc.0.1.0", label = "Geospatial ECC", min = 0, max = 1, value = c(0, 1)),
+                                sliderInput(inputId = "average.latitude", label = "Average latitude", min = -90, max = 90, value = c(-90, 90)),
+                                sliderInput(inputId = "average.longitude", label = "Average longitude", min = -180, max = 180, value = c(-180, 180)),
                                 # delta filters
-                                sliderInput(inputId = "delta_cluster_size", label = "Delta cluster size", min = -10000, max = 10000, value = c(-10000, 10000)),
-                                sliderInput(inputId = "num_novel_tp2_strains", label = "Novel TP2 strains", min = 0, max = 10000, value = c(0, 10000)),
-                                sliderInput(inputId = "cluster_novel_growth_rate", label = "Novel growth rate", min = 0, max = 100, value = c(0, 100)),
-                                sliderInput(inputId = "overall_cluster_growth_rate", label = "Overall growth rate", min = 0, max = 100, value = c(0, 100)),
-                                sliderInput(inputId = "delta_ecc_0.0.1", label = "delta ecc_0.0.1", min = -1, max = 1, value = c(-1,1)),
-                                sliderInput(inputId = "delta_ecc_0.1.0", label = "delta ecc_0.1.0", min = -1, max = 1, value = c(-1,1))
+                                sliderInput(inputId = "actual.cluster.size.tp2.size.tp1.size", label = "Delta cluster size", min = -10000, max = 10000, value = c(-10000, 10000)),
+                                sliderInput(inputId = "number.of.novels.in.the.tp2.match", label = "Number of new strains", min = 0, max = 10000, value = c(0, 10000)),
+                                sliderInput(inputId = "novel.growth.tp2.size.tp2.size.number.of.novels", label = "Novel growth rate", min = 0, max = 100, value = c(0, 100)),
+                                sliderInput(inputId = "actual.growth.rate.tp2.size.tp1.size.tp1.size", label = "Overall growth rate", min = 0, max = 100, value = c(0, 100)),
+                                sliderInput(inputId = "delta.ecc.0.0.1", label = "Delta temporal ECC", min = -1, max = 1, value = c(-1,1)),
+                                sliderInput(inputId = "delta.ecc.0.1.0", label = "Delta geosptial ECC", min = -1, max = 1, value = c(-1,1))
                        ),
                        
                        #strain filters
