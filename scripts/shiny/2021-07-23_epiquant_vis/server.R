@@ -18,6 +18,7 @@ library(geosphere) # for directions between points
 library(shinydashboardPlus) # for collapsable boxes
 library(data.table) # for melting
 library(rvest) # for downloading cardinal table 
+library(shinyalert)
 #library(shinyjqui) # for resizable boxes 
 
 
@@ -80,32 +81,68 @@ server <- function(input, output, session) {
     
     # read data frame into reactive values
     observeEvent(input$userFile, {
+        
+        # get extension
+        # read in file depending on extension 
         ext <- tools::file_ext(input$userFile$datapath)
         
         # csv files 
         if (ext == "csv") {
-            vals$data.raw <- read.csv(file = input$userFile$datapath, 
+            vals$tmp <- read.csv(file = input$userFile$datapath, 
                                       header = input$header)
         } 
         
         # tsv files
         if (ext == "tsv") {
-            vals$data.raw <- fread(file = input$userFile$datapath, 
+            vals$tmp <- fread(file = input$userFile$datapath, 
                                    header = input$header) 
         }
         
         # excel files
         if (ext == "xlsx") {
-            vals$data.raw <- readxl::read_xlsx(file = input$userFile$datapath, 
-                                               header = input$header)
+            vals$tmp <- readxl::read_xlsx(path = input$userFile$datapath, 
+                                               col_names = input$header)
         }
         
         # text files
         if (ext == "txt") {
-            vals$data.raw <- read.delim(file = input$userFile$datapath, 
+            vals$tmp <- read.delim(file = input$userFile$datapath, 
                                         header = input$header)
         }
         
+        tmp <- vals$tmp
+        
+        # rename columns, remove spaces, all lowercase
+        # remove redundant periods and those at end of name
+        print("naming nicely...")
+        
+        colnames(tmp) <- make.names(colnames(tmp), unique=TRUE, allow_ = F) %>%
+            tolower() %>%
+            gsub("([[:punct:]])\\1+", "\\1", .) %>%
+            gsub("[.]$", "", .)
+        
+        # columns needed
+        # should be here unless user messed with epiquant output
+        # only unique names with tp[0-9] removed
+        req.cols <- c("strain", "country", "province", "city", "latitude", "longitude",
+                      "day", "month", "year", "tp", "actual.cluster", "cluster", "cluster.size.1",
+                      "t0.ecc.0.1.0", "t0.ecc.0.0.1", "delta.ecc.0.1.0", "delta.ecc.0.0.1",
+                      "average.date", "temp.average.cluster.distance.days", "average.latitude",
+                      "average.longitude", "geo.average.cluster.distance.km", "first.time.this.cluster.was.seen.in",
+                      "last.time.this.cluster.was.seen.in", "cluster.size.1.2", "actual.cluster.size.size.size",
+                      "number.of.additional.strains.in.the.match", "number.of.novels.in.the.match",
+                      "actual.growth.rate.size.size.size", "novel.growth.size.size.number.of.novels",
+                      "type")
+        
+        present.cols <- unique(str_remove_all(colnames(tmp), "tp[0-9][.]|[.]tp[0-9]|(?<=tp)[0-9]"))
+        
+        
+        if (all(present.cols %in% req.cols)) {
+            vals$data.raw <- tmp        
+        } else {
+            shinyalert("Column Error", "File is missing required columns. Please check input file.", type = "error")
+            returnValue()
+        }
         
     }, ignoreNULL = T)
     
@@ -115,6 +152,8 @@ server <- function(input, output, session) {
     
     observeEvent(vals$data.raw, {
         
+        
+        req(vals$data.raw)
         print("new data!")
         
         # get data 
@@ -123,14 +162,6 @@ server <- function(input, output, session) {
         #################
         # clean eccdata #
         #################
-        
-        # rename columns, remove spaces, all lowercase
-        # remove redundant periods and those at end of name
-        print("naming nicely...")
-        colnames(eccdata) <- make.names(colnames(eccdata), unique=TRUE, allow_ = F) %>%
-            tolower() %>%
-            gsub("([[:punct:]])\\1+", "\\1", .) %>%
-            gsub("[.]$", "", .)
         
         # remove 0 for now as its causing problems
         # eccdata <- eccdata %>% subset(tp1.cluster != 0 )
@@ -353,12 +384,12 @@ server <- function(input, output, session) {
             filter(average.latitude >= input$average.latitude[1] & average.latitude <= input$average.latitude[2]) %>%
             filter(average.longitude >= input$average.longitude[1] & average.longitude <= input$average.longitude[2]) %>%
             # delta filters
-             filter(actual.cluster.size.tp2.size.tp1.size >= input$actual.cluster.size.tp2.size.tp1.size[1] & actual.cluster.size.tp2.size.tp1.size <= input$actual.cluster.size.tp2.size.tp1.size[2]) %>%
-             filter(number.of.novels.in.the.tp2.match >= input$number.of.novels.in.the.tp2.match[1] & number.of.novels.in.the.tp2.match <= input$number.of.novels.in.the.tp2.match[2]) %>%
-             filter(actual.growth.rate.tp2.size.tp1.size.tp1.size >= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[1] & actual.growth.rate.tp2.size.tp1.size.tp1.size <= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[2]) %>%
-             filter(novel.growth.tp2.size.tp2.size.number.of.novels >= input$novel.growth.tp2.size.tp2.size.number.of.novels[1] & novel.growth.tp2.size.tp2.size.number.of.novels <= input$novel.growth.tp2.size.tp2.size.number.of.novels[2]) %>%
-             filter(delta.ecc.0.0.1 >= input$delta.ecc.0.0.1[1] & delta.ecc.0.0.1 <= input$delta.ecc.0.0.1[2]) %>%
-             filter(delta.ecc.0.1.0 >= input$delta.ecc.0.1.0[1] & delta.ecc.0.1.0 <= input$delta.ecc.0.1.0[2])%>%
+            filter(actual.cluster.size.tp2.size.tp1.size >= input$actual.cluster.size.tp2.size.tp1.size[1] & actual.cluster.size.tp2.size.tp1.size <= input$actual.cluster.size.tp2.size.tp1.size[2]) %>%
+            filter(number.of.novels.in.the.tp2.match >= input$number.of.novels.in.the.tp2.match[1] & number.of.novels.in.the.tp2.match <= input$number.of.novels.in.the.tp2.match[2]) %>%
+            filter(actual.growth.rate.tp2.size.tp1.size.tp1.size >= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[1] & actual.growth.rate.tp2.size.tp1.size.tp1.size <= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[2]) %>%
+            filter(novel.growth.tp2.size.tp2.size.number.of.novels >= input$novel.growth.tp2.size.tp2.size.number.of.novels[1] & novel.growth.tp2.size.tp2.size.number.of.novels <= input$novel.growth.tp2.size.tp2.size.number.of.novels[2]) %>%
+            filter(delta.ecc.0.0.1 >= input$delta.ecc.0.0.1[1] & delta.ecc.0.0.1 <= input$delta.ecc.0.0.1[2]) %>%
+            filter(delta.ecc.0.1.0 >= input$delta.ecc.0.1.0[1] & delta.ecc.0.1.0 <= input$delta.ecc.0.1.0[2])%>%
             
             # data subsetting 
             {if (input$subsets==1) arrange(., desc(abs(cluster.size.1.2))) else . }  %>%
