@@ -281,6 +281,7 @@ body <- dashboardBody(
                             multiple = FALSE,
                             accept = c(".csv", ".txt", ".xlsx", ".tsv")),
                   useShinyalert(),  # Set up shinyalert
+
                   # check box for header
                   checkboxInput("header", "Header", TRUE),
                   
