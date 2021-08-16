@@ -3,6 +3,7 @@
 ##################
 library(shinydashboard)
 library(plotly)
+library(shinyalert)
 
 
 # this is the title that appears over the side bar
