@@ -222,7 +222,11 @@ body <- dashboardBody(
                 side = "right",
                 selected = "Map",
                 tabPanel("Interpretation", 
-                         HTML("<p>The map displays each cluster, plotted at the average latitude and longitude of all strains included in that cluster. The area of the cluster is proportional to the number of strains included in that cluster. </p>")
+                         HTML("<p>The <strong>map</strong> displays each cluster, plotted at the average latitude and longitude of all strains included in that cluster. The area of the cluster is proportional to the number of strains included in that cluster.</p>
+<p>The<strong>&nbsp;polar plot</strong> displays the <em><strong>cardinal direction of cluster movement</strong></em> from one time point to the next. The length which the bars extend are proportional to the number of clusters displaying movement in a given direction.&nbsp;</p>")
+                ),
+                tabPanel("Cluster movement",
+                         plotlyOutput("cardinal_movement", height = "100%")
                 ),
                 tabPanel("Map",
                          plotlyOutput("cluster_map", height = "100%")

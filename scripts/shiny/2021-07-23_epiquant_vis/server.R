@@ -88,21 +88,27 @@ server <- function(input, output, session) {
     # csv, tsv, excel, txt files 
     if (ext == "csv") {
       vals$tmp <- read.csv(file = input$userFile$datapath, 
-                           header = input$header)
+                           header = input$header,
+                           sep = input$separator)
       print("new data!")
       
     } else if (ext == "tsv") {
       vals$tmp <- fread(file = input$userFile$datapath, 
-                        header = input$header) 
+                        header = input$header, 
+                        sep = input$separator) 
       print("new data!")
+      
     } else if (ext == "xlsx") {
       vals$tmp <- readxl::read_xlsx(path = input$userFile$datapath, 
                                     col_names = input$header)
       print("new data!")
+      
     } else if (ext == "txt") {
       vals$tmp <- read.delim(file = input$userFile$datapath, 
-                             header = input$header)
+                             header = input$header, 
+                             sep = input$separator)
       print("new data!")
+      
     } else {
       shinyalert("Unsupported file type", "File types .csv, .tsv, .xlsx, and .txt supported.", type = "error")
       returnValue()
@@ -275,13 +281,17 @@ server <- function(input, output, session) {
                                                         colnames(clusters)[grep("cluster.size.1.2", colnames(clusters))],
                                                         colnames(clusters)[grep("temp.average", colnames(clusters))],
                                                         colnames(clusters)[grep("geo.average", colnames(clusters))],
-                                                        colnames(clusters)[grep("cluster.size.1$", colnames(clusters))]),
+                                                        colnames(clusters)[grep("cluster.size.1$", colnames(clusters))],
+                                                        colnames(clusters)[grep("first.time", colnames(clusters))],
+                                                        colnames(clusters)[grep("last.time", colnames(clusters))]),
                                       variable.name='timepoint',
                                       value.name=c('average.longitude', 'average.latitude', 
                                                    "ecc.0.0.1", "ecc.0.1.0",
                                                    "average.date", "cluster.size.1.2", 
                                                    "temp.average.cluster.distance.days", "geo.average.cluster.distance.km",
-                                                   "cluster.size.1"))
+                                                   "cluster.size.1", 
+                                                   "first.time.cluster.seen",
+                                                   "last.time.cluster.seen"))
     
     clusters.long$average.date <- ymd(clusters.long$average.date)
     
@@ -302,8 +312,10 @@ server <- function(input, output, session) {
     strains.long <- data.table::melt(setDT(strains),
                                      measure.vars=list(colnames(strains)[grep("t0.ecc.0.0.1", colnames(strains))],
                                                        colnames(strains)[grep("t0.ecc.0.1.0", colnames(strains))],
+                                                       colnames(strains)[grep("cluster.size.1$", colnames(strains))],
                                                        colnames(strains)[grep("cluster.size.1.2", colnames(strains))]),
                                      variable.name='timepoint', value.name=c("ecc.0.0.1", "ecc.0.1.0",
+                                                                             "cluster.size.1",
                                                                              "cluster.size.1.2"))
     
     # make column for strain date instead of having three separate columns
@@ -422,25 +434,10 @@ server <- function(input, output, session) {
   output$clusters_dt <- renderDataTable({
     datatable(clusters.sh,
               extensions = c('Select', 'Buttons','Scroller'),
-              #extension = 'Scroller', 
               options = list(
-                select = list(
-                  style = 'os', items = 'row'),
-                dom = 'Blfrtip',
-                rowId = 0,
-                buttons = list('selectRows', 'selectAll', 'selectNone', 'csv', 'excel'),
-                deferRender = TRUE,
-                scrollY = 500,
-                scrollX = 600,
-                scroller = TRUE),
-              selection = 'none')
-  }, server=F)
-  
-  # strains
-  output$strains_dt <- renderDataTable({
-    datatable(data = strains.sh,
-              extensions = c('Select', 'Buttons','Scroller'),
-              options = list(
+                columnDefs = list(
+                  list(visible=FALSE, 
+                       targets=c(2:6, 8, 11, 13:19, 23, 24, 29, 30))),
                 select = list(
                   style = 'os', 
                   items = 'row'),
@@ -451,8 +448,63 @@ server <- function(input, output, session) {
                 scrollY = 500,
                 scrollX = 600,
                 scroller = TRUE),
-              selection = 'none',
-    )
+              colnames = c("Cluster" = "tp1.cluster",
+                           "Type" = "type",
+                           "Transmission speed" = "delta.ecc.speed",
+                           "Transmission spread" = "delta.ecc.spread",
+                           "Movement direction" = "delta.cardinal.long",
+                           "Number of additonal strains" = "actual.cluster.size.tp2.size.tp1.size",
+                           "Number of additional previously identified strains" = "number.of.additional.tp1.strains.in.the.tp2.match",
+                           "Number of additional novel strains" = "number.of.novels.in.the.tp2.match",
+                           "Delta geosptial ECC" = "delta.ecc.0.1.0",
+                           "Delta temporal ECC" = "delta.ecc.0.0.1",
+                           "Overall growth rate" = "actual.growth.rate.tp2.size.tp1.size.tp1.size",
+                           "Novel growth rate" = "novel.growth.tp2.size.tp2.size.number.of.novels",
+                           "Time point" = "timepoint",
+                           "Centroid longitude" = "average.longitude",
+                           "Centroid latitude" = "average.latitude",
+                           "Temporal ECC" = "ecc.0.0.1",
+                           "Geospatial ECC" = "ecc.0.1.0",
+                           "Average cluster date" = "average.date",
+                           "Cluster size +1" = "cluster.size.1.2",
+                           "Average time (days) between strains" = "temp.average.cluster.distance.days",
+                           "Average distance (km) between strains" = "geo.average.cluster.distance.km",
+                           "Cluster size" = "cluster.size.1",
+                           "First time cluster seen" = "first.time.cluster.seen",
+                           "Last time cluster seen" = "last.time.cluster.seen"),
+              selection = 'none')
+  }, server=F)
+  
+  # strains
+  output$strains_dt <- renderDataTable({
+    datatable(data = strains.sh,
+              extensions = c('Select', 'Buttons','Scroller'),
+              options = list(
+                columnDefs = list(
+                  list(visible=FALSE, 
+                       targets=c(7:9, 11, 14:49))),
+                select = list(
+                  style = 'os', 
+                  items = 'row'),
+                dom = 'Blfrtip',
+                rowId = 0,
+                buttons = list('selectRows', 'selectAll', 'selectNone', 'csv', 'excel'),
+                deferRender = TRUE,
+                scrollY = 500,
+                scrollX = 600,
+                scroller = TRUE),              
+              colnames = c("Strain" = "strain",
+                           "Country" = "country",
+                           "Province" = "province",
+                           "City" = "city",
+                           "Latitude" = "latitude",
+                           "Longitude" = "longitude",
+                           "Present at TP1" = "tp1",
+                           "Cluster" = "tp1.cluster",
+                           "Present at TP2" = "tp2",
+                           "Date" = "strain.date",
+                           "Single or multi strain cluster" = "single.mult"),
+              selection = 'none')
   }, server=F)
   
   # filtered data table
@@ -460,6 +512,9 @@ server <- function(input, output, session) {
     datatable(vals$data_proc,
               extensions = c('Buttons','Scroller'),
               options = list(
+                columnDefs = list(
+                  list(visible=FALSE, 
+                       targets=c(7:9, 11, 17, 46, 47, 50, 51))),
                 dom = 'Blfrtip',
                 rowId = 0,
                 buttons = list('csv', 'excel'),
@@ -467,6 +522,49 @@ server <- function(input, output, session) {
                 scrollY = 500,
                 scrollX = 600,
                 scroller = TRUE),
+              colnames = c("Stain" = "strain",
+                           "Country" = "country",
+                           "Province" = "province", 
+                           "City" = "city", 
+                           "Latitude" = "latitude",
+                           "Longitude" = "longitude", 
+                           "Present at TP1" = "tp1", 
+                           "TP1 cluster" = "tp1.cluster", 
+                           "TP1 cluster size" = "tp1.cluster.size.1", 
+                           "TP1 geospatial ECC" = "tp1.t0.ecc.0.1.0", 
+                           "TP1 temporal ECC" = "tp1.t0.ecc.0.0.1", 
+                           "Present at TP2" = "tp2", 
+                           "TP2 cluster" = "tp2.cluster",
+                           "TP2 cluster size" = "tp2.cluster.size.1", 
+                           "TP2 geosptial ECC" = "tp2.t0.ecc.0.1.0", 
+                           "TP2 temporal ECC" = "tp2.t0.ecc.0.0.1",
+                           "Delta geospatial ECC" = "delta.ecc.0.1.0", 
+                           "Delta temporal ECC" = "delta.ecc.0.0.1", 
+                           "Average TP1 cluster date" = "average.tp1.date", 
+                           "Average time (days) between TP1 strains" ="tp1.temp.average.cluster.distance.days", 
+                           "TP1 centroid latitude" = "average.tp1.latitude",
+                           "TP1 centroid longitude" = "average.tp1.longitude", 
+                           "Average distance (km) between TP1 strains" = "tp1.geo.average.cluster.distance.km", 
+                           "Average TP2 cluster date" ="average.tp2.date", 
+                           "Average time (days) between TP2 strains" = "tp2.temp.average.cluster.distance.days", 
+                           "TP2 centroid latitude" = "average.tp2.latitude", 
+                           "TP2 centroid longitude" = "average.tp2.longitude", 
+                           "Average distance (km) between TP2 strains" = "tp2.geo.average.cluster.distance.km", 
+                           "First time cluster seen in TP1" = "first.time.this.cluster.was.seen.in.tp1", 
+                           "Last time cluster seen in TP1" = "last.time.this.cluster.was.seen.in.tp1", 
+                           "First time cluster seen in TP2" = "first.time.this.cluster.was.seen.in.tp2",
+                           "Last time cluster seen TP2" = "last.time.this.cluster.was.seen.in.tp2", 
+                           "TP1 cluster size +1" = "tp1.cluster.size.1.2", 
+                           "TP2 cluster size +1" = "tp2.cluster.size.1.2", 
+                           "Delta cluster size" = "actual.cluster.size.tp2.size.tp1.size", 
+                           "Number of previously identifed strains in TP2 cluster" = "number.of.additional.tp1.strains.in.the.tp2.match",
+                           "Number of novel strains in TP2 cluster" = "number.of.novels.in.the.tp2.match", 
+                           "Overall growth rate" = "actual.growth.rate.tp2.size.tp1.size.tp1.size", 
+                           'Novel growth rate' = "novel.growth.tp2.size.tp2.size.number.of.novels", 
+                           "Type" = "type",
+                           "Cluster transmission speed" = "delta.ecc.speed", 
+                           "Cluster transmission spread" =  "delta.ecc.spread", 
+                           "Cluster movement direction" = "delta.cardinal.long"),
               selection = 'none')
   })
   
@@ -482,6 +580,26 @@ server <- function(input, output, session) {
                 scrollY = 500,
                 scrollX = 600,
                 scroller = TRUE),
+              colnames = c("Present at TP1" = "TP1", 
+                           "TP1 cluster size" = "TP1 cluster size (1)",
+                           "TP1 geospatial ECC" = "TP1_T0_ECC.0.1.0", 
+                           "TP1 temporal ECC" = "TP1_T0_ECC.0.0.1", 
+                           "Present at TP2" = "TP2", 
+                           "TP2 cluster size" = "TP2 cluster size (1)", 
+                           "TP2 geosptial ECC" = "TP2_T0_ECC.0.1.0", 
+                           "TP2 temporal ECC" = "TP2_T0_ECC.0.0.1", 
+                           "Delta geospatial ECC" = "delta_ECC_0.1.0",
+                           "Delta temporal ECC" = "delta_ECC_0.0.1", 
+                           "TP1 centroid date" =  "Average TP1 date", 
+                          "Average time (days) between TP1 strains" =  "TP1 temp average cluster distance (days)", 
+                          "TP1 centroid latitude" =  "Average TP1 latitude", 
+                          "TP1 centroid longitude" = "Average TP1 longitude",
+                          "Average distance (km) between TP1 strains" = "TP1 geo average cluster distance (km)", 
+                          "TP2 centroid date" =  "Average TP2 date",
+                          "Average time (days) between TP2 strains" = "TP2 temp average cluster distance (days)", 
+                          "TP2 centroid latitude" = "Average TP2 latitude", 
+                          "TP2 centroid longitude" = "Average TP2 longitude", 
+                          "Average distance (km) between TP2 strains" = "TP2 geo average cluster distance (km)"),
               selection = 'none')
   })
   
@@ -3369,6 +3487,40 @@ server <- function(input, output, session) {
   })
   
   
+  # polar plot describing cardinal direction of change
+  output$cardinal_movement <- renderPlotly({
+    # format data
+    clusters.sh$data(withSelection = TRUE) %>%
+      mutate(selfact = selection_factor(.),
+             cardinal = delta.cardinal) %>%
+      group_by(selfact) %>%
+      distinct(tp1.cluster, .keep_all = T) %>%
+      count(cardinal, .drop=FALSE) %>%
+      full_join(directions, by = c('cardinal')) %>%
+      # initialize plot
+      plot_ly(type="barpolar",
+              r = ~n,
+              theta = ~degree.mid,
+              opacity = 0.7,
+              name = ~cardinal,
+              hovertemplate = ~paste('<b>', cardinal, '</b><br>',
+                                     'Count: ', n, '<br>',
+                                     '<extra></extra>', sep=""),
+              color = ~selfact, 
+              colors = c("#1F78C8", "red")) %>%
+      layout(showlegend = F,
+             polar = list(
+               angularaxis = list(
+                 rotation = 90,
+                 direction = 'clockwise',
+                 tickmode = 'array',
+                 tickvals = c(0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5,180,
+                              202.5, 225, 247.5, 270, 292.5, 315, 337.5),
+                 ticktext = c("N", "NNE", "NE", "ENE", "E", "ESE", "SE",
+                              "SSE", "S", "SSW", "SW", "WSW", "W", "WNW",
+                              "NW", "NNW"))))
+  })
+  
   ###################################################
   # plotly click events for regional faceted graphs #
   ###################################################
@@ -3674,9 +3826,7 @@ server <- function(input, output, session) {
     print(d)
   })
   
-  
-  
-  
+
   ##################################################
   # plotly double click events to reset everything #
   ##################################################
