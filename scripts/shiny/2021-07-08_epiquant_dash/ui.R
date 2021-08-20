@@ -265,8 +265,6 @@ body <- dashboardBody(
               )
             ), 
             
-            
-            
             # fluid row 5
             fluidRow(
               # single vs multi strain histogram 

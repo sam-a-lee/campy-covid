@@ -2,6 +2,7 @@
 # server #
 ##########
 
+# load libraries required for dashboard side 
 library(shinydashboard) # the shiny dashboard
 library(readxl) # for reading xlsx files 
 library(shiny) # for running shiny apps
@@ -18,49 +19,55 @@ library(geosphere) # for directions between points
 library(shinydashboardPlus) # for collapsable boxes
 library(data.table) # for melting
 library(rvest) # for downloading cardinal table 
-library(shinyalert)
-#library(shinyjqui) # for resizable boxes 
+library(shinyalert) # for alters on data loading
 
 
 ############# 
 # functions #
 #############
 
+# these functions are used within the server to calculate cardinal movement and cluster transmission descriptions
+
+# calculates the angle between two points
 angle <- function(x,y) { 
   z <- x + 1i * y
   res <- 90 - Arg(z) / pi * 180
   res %% 360
 }
 
+# read in table describing cardinal direction and degrees for a 16-rose compass 
 page <- read_html('http://snowfence.umn.edu/Components/winddirectionanddegreeswithouttable3.htm')
 directions.raw <- page %>% html_node('td table') %>% html_table(header = TRUE)
 
+# clean up table 
 directions <- directions.raw %>% 
   set_names(~tolower(sub(' Direction', '', .x))) %>% 
   slice(-1) %>% 
   separate(degree, c('degree_min', 'degree_max'), sep = '\\s+-\\s+', convert = TRUE)
 
-# create a new column and assign a "speed" and a "spread"
+# create a new column in direction and assign a cluster transmission "speed" 
 directions$ecc.speed <- c("Slower", "Slower", "Slower", "Slower",
                           "No change", "Faster", "Faster", "Faster",
                           "Faster", "Faster", "Faster", "Faster", 
                           "No change", "Slower", "Slower", "Slower")
 
+# create a new column in direction and assign a cluster transmission "spread"
 directions$ecc.spread <- c("No change", "Isolated", "Isolated", "Isolated",
                            "Isolated", "Isolated", "Isolated", "Isolated",
                            "No change", "Dispersed", "Dispersed", "Dispersed", 
                            "Dispersed", "Dispersed", "Dispersed", "Dispersed")
 
+# create a new column in table that creates a combined description of cluster transmission speed and spread
 directions$ecc.comb <- c("Slower", "Slower/Slower, isolated", "Slower, Isolated", "Isolated/Slower, isolated",
                          "Isolated", "Isolated/Faster, isolated", "Faster, Isolated", "Faster/Faster, isolated",
                          "Faster", "Faster/Faster, dispersed", "Faster, dispersed", "Dispersed/Faster, dispersed", 
                          "Dispersed", "Dispersed/Slower, dispersed", "Slower, dispersed", "Slower/Slower, dispersed")
 
-# add midpoints
+# create a new column for the degree mid point between two cardinal directions 
 directions$degree.mid<- c(0,22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180, 202.5,225, 247.5, 270, 292.5, 315, 337.5)
 
 
-
+# this is the actual service side 
 server <- function(input, output, session) { 
   
   ############################
@@ -110,16 +117,18 @@ server <- function(input, output, session) {
       print("new data!")
       
     } else {
+      # this doesnt really catch
+      # if the user uploads e.g. word doc the app crashes 
       shinyalert("Unsupported file type", "File types .csv, .tsv, .xlsx, and .txt supported.", type = "error")
       returnValue()
     }
     
+    # create tmp file for modifying colnames of user inputted file 
     tmp <- vals$tmp
     
     # rename columns, remove spaces, all lowercase
     # remove redundant periods and those at end of name
     print("naming nicely...")
-    
     colnames(tmp) <- make.names(colnames(tmp), unique=TRUE, allow_ = F) %>%
       tolower() %>%
       gsub("([[:punct:]])\\1+", "\\1", .) %>%
@@ -138,11 +147,14 @@ server <- function(input, output, session) {
                   "actual.growth.rate.size.size.size", "novel.growth.size.size.number.of.novels",
                   "type")
     
+    # get unique columns in user inputted data 
     present.cols <- unique(str_remove_all(colnames(tmp), "tp[0-9][.]|[.]tp[0-9]|(?<=tp)[0-9]"))
     
+    # check that the inputted data contains at least one instance of each required column
     if (all(present.cols %in% req.cols)) {
       vals$data.raw <- tmp        
     } else {
+      # this error is thrown in missing columns or if wrong delimiter selected 
       shinyalert("Column error", "File is missing required columns. Please check input file.", type = "error")
       returnValue()
     }
@@ -153,17 +165,16 @@ server <- function(input, output, session) {
   # process user data #
   #####################
   
+  # when user enters new data, run the following chunk
   observeEvent(vals$data.raw, {
     
-    req(vals$data.raw)
+    req(vals$data.raw) # must not be null
+    # pull out to new variable for modifying
     eccdata <- vals$data.raw
     
     #################
     # clean eccdata #
     #################
-    
-    # remove 0 for now as its causing problems
-    # eccdata <- eccdata %>% subset(tp1.cluster != 0 )
     
     print("coverting classes...")
     # convert columns to appropriate types
@@ -172,9 +183,9 @@ server <- function(input, output, session) {
     eccdata <- lapply(eccdata, type.convert, as.is = T)
     eccdata <- bind_rows(eccdata)
     
-    ##################################
-    # calculate cluster transmission #
-    ##################################
+    ###########################################
+    # calculate cluster transmission movement #
+    ###########################################
     
     eccdata <- eccdata %>% 
       mutate(delta.ecc.angle = angle(delta.ecc.0.1.0, delta.ecc.0.0.1))
@@ -293,6 +304,7 @@ server <- function(input, output, session) {
                                                    "first.time.cluster.seen",
                                                    "last.time.cluster.seen"))
     
+    # convert date format 
     clusters.long$average.date <- ymd(clusters.long$average.date)
     
     # write to reactive vals df 
@@ -429,6 +441,9 @@ server <- function(input, output, session) {
   #################################
   # data frames displayed in tabs #
   #################################
+
+  # renaming of columns in datatable output is based on two time points
+  # will need to be modified/generalized for additional time points 
   
   # clusters
   output$clusters_dt <- renderDataTable({
@@ -608,6 +623,11 @@ server <- function(input, output, session) {
   # cluster movement value boxes #
   ################################
   
+  # these values were arbitrarily selected
+  # in future, should be selected empirically
+  # thought: will these cutoffs differ based on weekly, monthly, user defined time points?
+   
+  # active growth defined as 3x growth
   output$activegrowth <- renderValueBox({
     valueBox(
       subtitle = "clusters actively growing",
@@ -618,6 +638,8 @@ server <- function(input, output, session) {
     )
   })
   
+  # active spread defined as just a value of dispersed
+  # perhaps more appropriate to select a range of delta ecc values?
   output$activespread <- renderValueBox({
     valueBox(
       subtitle = "clusters actively spreading",
@@ -628,6 +650,9 @@ server <- function(input, output, session) {
     )
   })
   
+  # significant local transmission defined based on isolated spread and 
+  # cluster growth rate less than 3
+  # better to select based on range of ECC values? 
   output$sigtransmission <- renderValueBox({
     valueBox(
       subtitle = "clusters with local transmission",
@@ -643,6 +668,10 @@ server <- function(input, output, session) {
   ############################
   # reactive vals for facets #
   ############################
+  
+  # store "mini" data frames in reactiveValues
+  # allows these data frames to be pulled and modified for manual brushing
+  # then auto updating of graphs
   
   # initialize reactiveValues holder
   plotvals <- reactiveValues()
@@ -842,10 +871,15 @@ server <- function(input, output, session) {
   # plots #
   #########
   
+  # ECC bubble plots 
+  # size of bubbles proportial to cluster size 
+  
   output$bubble <- renderPlotly({
     
     # no faceting
     if(input$region == 1) {
+      
+      # geospatial bubble plot
       geo <- plot_ly() %>%
         add_trace(data = clusters.sh, 
                   type = "scatter",
@@ -877,6 +911,7 @@ server <- function(input, output, session) {
                  showarrow = FALSE)) %>%
         highlight(color = "#1F78C8") 
       
+      # temporal bubble plot 
       temp <- plot_ly() %>%
         add_trace(data = clusters.sh, 
                   type = "scatter",
@@ -907,6 +942,7 @@ server <- function(input, output, session) {
                                   showarrow = FALSE)) %>%
         highlight(color = "#1F78C8") 
       
+      # geosptial and temporal ECC values plotted against one another bubble plot 
       both <- plot_ly() %>%
         add_trace(data = clusters.sh,
                   type = "scatter",
@@ -959,6 +995,7 @@ server <- function(input, output, session) {
       
       df <- plotvals$bubble_c
       
+      # geospatial bubble plot
       geo <- df %>%
         lapply(function(d) plot_ly(d, # group and summarize here?
                                    # catch statement for less than 3 groups?
@@ -1006,6 +1043,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # temporal bubble plot
       temp <- df %>%
         lapply(function(d) plot_ly(d,                          
                                    type = "scatter",
@@ -1052,6 +1090,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # bubble plot of temporal ECC plotted against geospatial ECC
       both <- df %>%
         lapply(function(d) plot_ly(d,                          
                                    type = "scatter",
@@ -1122,6 +1161,7 @@ server <- function(input, output, session) {
       
       df <- plotvals$bubble_p
       
+      # geospatial bubble plot 
       geo <- df %>%
         lapply(function(d) plot_ly(d,                          
                                    type = "scatter",
@@ -1169,6 +1209,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # temporal bubble plot
       temp <- df %>%
         lapply(function(d) plot_ly(d,                          
                                    type = "scatter",
@@ -1216,6 +1257,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # bubble plot of temporal ECC plotted against geospatial ECC
       both <- df %>%
         lapply(function(d) plot_ly(d,                          
                                    type = "scatter",
@@ -1287,11 +1329,15 @@ server <- function(input, output, session) {
     
   })
   
+  # histogram plots of ECC values
+  # bin size = 0.01 
   
   output$ecc_histograms <- renderPlotly({
-    
+   
+     # no faceting 
     if(input$region == 1){
-      # no faceting 
+      
+      # geospatial ECC histogram
       geo <- plot_ly() %>%
         add_trace(data = strains.sh,
                   type = "histogram",
@@ -1303,7 +1349,8 @@ server <- function(input, output, session) {
                                          'Count:', '%{y}' ,
                                          '<extra></extra>',
                                          sep = " "),
-                  showlegend = FALSE) %>%
+                  showlegend = FALSE,
+                  source = "histogram") %>%
         layout(xaxis = list(range = c(0,1),
                             title = "Geospatial epicluster cohesion index"),
                yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
@@ -1328,8 +1375,11 @@ server <- function(input, output, session) {
                       y = 0.3,
                       textangle = -90,
                       showarrow = FALSE))) %>%
-        highlight(color = "#1F78C8")
+        highlight(color = "#1F78C8") %>%
+        event_register("plotly_click") %>%
+        event_register("plotly_doubleclick")
       
+      # delta geospatial ecc histogram
       delta_geo <- plot_ly() %>%
         add_trace(data = strains.sh,
                   type = "histogram",
@@ -1341,7 +1391,8 @@ server <- function(input, output, session) {
                                          'Count:', '%{y}' ,
                                          '<extra></extra>',
                                          sep = " "),
-                  showlegend = FALSE) %>%
+                  showlegend = FALSE,
+                  source = "histogram") %>%
         layout(xaxis = list(range = c(-1,1),
                             title = "Delta geospatial epicluster cohesion index"),
                yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
@@ -1366,9 +1417,11 @@ server <- function(input, output, session) {
                       y = 0.3,
                       textangle = -90,
                       showarrow = FALSE))) %>%
-        highlight(color = "#1F78C8")
+        highlight(color = "#1F78C8") %>%
+        event_register("plotly_click") %>%
+        event_register("plotly_doubleclick")
       
-      
+      # temporal histogram
       temp <- plot_ly() %>%
         add_trace(data = strains.sh,
                   type = "histogram",
@@ -1380,7 +1433,8 @@ server <- function(input, output, session) {
                                          'Count:', '%{y}' ,
                                          '<extra></extra>',
                                          sep = " "),
-                  showlegend = FALSE) %>%
+                  showlegend = FALSE,
+                  source = "histogram") %>%
         layout(xaxis = list(range = c(0,1),
                             title = "Temporal epicluster cohesion index"),
                yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
@@ -1405,8 +1459,11 @@ server <- function(input, output, session) {
                       y = 0.3,
                       textangle = -90,
                       showarrow = FALSE))) %>%
-        highlight(color = "#1F78C8")
+        highlight(color = "#1F78C8") %>%
+        event_register("plotly_click") %>%
+        event_register("plotly_doubleclick")
       
+      # delta temporal ECC histogram
       delta_temp <- plot_ly() %>%
         add_trace(data = strains.sh,
                   type = "histogram",
@@ -1418,7 +1475,8 @@ server <- function(input, output, session) {
                                          'Count:', '%{y}' ,
                                          '<extra></extra>',
                                          sep = " "),
-                  showlegend = FALSE) %>%
+                  showlegend = FALSE,
+                  source = "histogram") %>%
         layout(xaxis = list(range = c(-1,1),
                             title = "Delta temporal epicluster cohesion index"),
                yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
@@ -1443,15 +1501,19 @@ server <- function(input, output, session) {
                       y = 0.3,
                       textangle = -90,
                       showarrow = FALSE))) %>%
-        highlight(color = "#1F78C8")
+        highlight(color = "#1F78C8") %>%
+        event_register("plotly_click") %>%
+        event_register("plotly_doubleclick")
       
       subplot(subplot(geo, temp, nrows=1,  margin = 0.025),
               subplot(delta_geo, delta_temp, nrows=1, margin = 0.025), 
               nrows=2, 
               margin = 0.075) 
       
-    } else if (input$region == 2){
+      # faceted by country
+    } else if (input$region == 2) {
       
+      # geosptial histogram
       geo <- strains.sh$data() %>%
         split(.$country) %>%
         lapply(function(d) plot_ly(d, 
@@ -1511,6 +1573,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # temporal ecc histogram
       temp <- strains.sh$data() %>%
         split(.$country) %>%
         lapply(function(d) plot_ly(d, 
@@ -1570,6 +1633,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # delta geospatial ecc
       delta_geo <-strains.sh$data() %>%
         split(.$country) %>%
         lapply(function(d) plot_ly(d, 
@@ -1628,7 +1692,8 @@ server <- function(input, output, session) {
                showarrow = FALSE))) %>%
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
-      
+
+      # delta temporal ecc histogram
       delta_temp <- strains.sh$data() %>%
         split(.$country) %>%
         lapply(function(d) plot_ly(d, 
@@ -1695,13 +1760,14 @@ server <- function(input, output, session) {
         layout(height = ceiling(length(unique(strains.sh$data() %>% 
                                                 pull(country)))/4)*200)
       
+      # facet by province
     } else if (input$region == 3) {
       
       df <- strains.sh$data(withSelection=T)  %>% 
         subset(country %in% input$regionProvince) %>%
         split(.$province)
       
-      # by province
+      # geospatial ecc histogram
       geo <- df %>%
         lapply(function(d) plot_ly(d, 
                                    type = "histogram",
@@ -1762,6 +1828,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # temporal ecc histogram
       temp <- df %>%
         lapply(function(d) plot_ly(d, 
                                    type = "histogram",
@@ -1822,6 +1889,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # delta geospatial ecc histogram
       delta_geo <- df %>%
         lapply(function(d) plot_ly(d, 
                                    type = "histogram",
@@ -1882,6 +1950,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # delta temporal ecc histogram
       delta_temp <- df %>%
         lapply(function(d) plot_ly(d, 
                                    type = "histogram",
@@ -1951,9 +2020,10 @@ server <- function(input, output, session) {
     }
   })
   
-  
+  # radar plots to describe speed and spread of cluster transmission
   output$radar <- renderPlotly({
     
+    # no faceting 
     if (input$region ==1) {
       
       clusters.sh$data(withSelection = TRUE) %>%
@@ -1973,7 +2043,8 @@ server <- function(input, output, session) {
                                        'Count:', '%{r}', 
                                        '<extra></extra>',
                                        sep = " "),
-                fill = 'toself') %>%
+                fill = 'toself',
+                source = "radar") %>%
         layout(showlegend = F,
                margin = list(l = 100, 
                              r = 100),
@@ -1989,10 +2060,11 @@ server <- function(input, output, session) {
                                                             "Faster spread",
                                                             HTML(paste("Faster spread,", "<br>", "more disperse")),
                                                             HTML(paste("More ", "<br>", "disperse", sep="")),
-                                                            HTML(paste("Slower spread,", "<br>", "more disperse"))))))
+                                                            HTML(paste("Slower spread,", "<br>", "more disperse")))))) 
+     
+      # facet by country 
     } else if (input$region == 2) {
       
-      # by country 
       plotvals$radar_c %>%
         group_by(country, timepoint) %>%
         count(ecc.comb, .drop=FALSE) %>%
@@ -2028,9 +2100,9 @@ server <- function(input, output, session) {
                                                             HTML(paste("More ", "<br>", "disperse", sep="")),
                                                             HTML(paste("Slower spread,", "<br>", "more disperse"))))))
       
+      # facet by province
     } else if (input$region == 3){
-      
-      # by province 
+       
       plotvals$radar_p %>%
         group_by(province, timepoint) %>%
         count(ecc.comb, .drop=FALSE) %>%
@@ -2067,7 +2139,7 @@ server <- function(input, output, session) {
     }
   })
   
-  
+  # change vector plot from which the cluster transmission speed and spread is defined
   output$changevector <- renderPlotly({
     
     # no faceting 
@@ -2243,12 +2315,18 @@ server <- function(input, output, session) {
     }
   })
   
+  # cluster growth
+  # presently a single point 
+  # when more time points added, this will be a line graph animation
+  # (for now just a marker)
   
   output$cluster_growth <- renderPlotly({
     
+    # no faceting 
     if (input$region == 1) {
       
-      a <- plot_ly(data = clusters.sh) %>%
+      # overall growth rate
+      overall <- plot_ly(data = clusters.sh) %>%
         add_trace(type = "scatter",
                   mode = "markers",
                   x = ~timepoint,
@@ -2286,7 +2364,8 @@ server <- function(input, output, session) {
                       showarrow = FALSE)))%>%
         highlight(color = "#1F78C8")
       
-      b <- plot_ly(data = clusters.sh) %>%
+      # novel growth rate
+      novel <- plot_ly(data = clusters.sh) %>%
         add_trace(type = "scatter",
                   mode = "markers",
                   x = ~timepoint,
@@ -2324,9 +2403,13 @@ server <- function(input, output, session) {
                       showarrow = FALSE))) %>%
         highlight(color = "#1F78C8")
       
-      subplot(a, b, nrows = 1, margin = 0.025)
+      subplot(overall, novel, nrows = 1, margin = 0.025)
       
+      # facet by country
     } else if (input$region == 2) {
+      
+      # these calculations are repeated to grab some values for setting axes
+      # could be cleaned up by putting everything in reactiveValues?
       
       bycountry <- 
         strains.sh$data(withSelection=T) %>%
@@ -2380,6 +2463,7 @@ server <- function(input, output, session) {
       overall_max <- max(na.omit(long_df$overall)[!is.infinite(na.omit(long_df$overall))])
       novel_max <- max(na.omit(long_df$novel)[!is.infinite(na.omit(long_df$novel))])
       
+      # overall growth rate
       overall <- plotvals$growth_c  %>%
         lapply(function(d) plot_ly(d,
                                    type = "scatter",
@@ -2436,7 +2520,8 @@ server <- function(input, output, session) {
                showarrow = FALSE))) %>%
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
-      
+    
+      # novel growth rate
       novel <- plotvals$growth_c %>%
         lapply(function(d) plot_ly(d,
                                    type = "scatter",
@@ -2498,7 +2583,11 @@ server <- function(input, output, session) {
         layout(height = ceiling(length(unique(long_df %>% 
                                                 pull(country)))/4)*100)
       
+      # facet by province
     } else if (input$region == 3) {
+      
+      # these calculations are repeated to grab some values for setting axes
+      # could be cleaned up by putting everything in reactiveValues?
       
       byprovince <- 
         strains.sh$data(withSelection=T) %>%
@@ -2553,6 +2642,7 @@ server <- function(input, output, session) {
       overall_max <- max(na.omit(long_df$overall)[!is.infinite(na.omit(long_df$overall))])
       novel_max <- max(na.omit(long_df$novel)[!is.infinite(na.omit(long_df$novel))])
       
+      # overall growth rate
       overall <-  plotvals$growth_p %>%
         lapply(function(d) plot_ly(d,
                                    type = "scatter",
@@ -2610,6 +2700,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_click') %>%
         event_register(event = 'plotly_doubleclick')
       
+      # novel growth rate
       novel <- plotvals$growth_p %>%
         lapply(function(d) plot_ly(d,
                                    type = "scatter",
@@ -2673,6 +2764,9 @@ server <- function(input, output, session) {
     }
   }) 
   
+  # strain by cluster plots include number of novel strains identified by cluster
+  # and cumulative strains identified bu cluster
+  
   output$strainsbycluster <- renderPlotly({
     
     # no faceting 
@@ -2685,6 +2779,7 @@ server <- function(input, output, session) {
         tally()
       
       # mountain plot
+      # novel strains identifed
       mountain <- plot_ly(data = counts) %>%
         add_trace(type = "scatter",
                   mode = "line",
@@ -2743,6 +2838,7 @@ server <- function(input, output, session) {
         mutate(cumsum = cumsum(n))
       
       # cumsum plot 
+      # cumulative strains identified
       cumplot <- plot_ly(data = cumsum) %>%
         add_trace(type = "scatter",
                   mode = "line",
@@ -2811,6 +2907,7 @@ server <- function(input, output, session) {
         mutate(cumsum = cumsum(n)) 
       
       # mountain plot 
+      # novel strains identified
       mountain <- plotvals$strainbycluster_c %>%
         lapply(function(d) plot_ly(d, 
                                    type = "scatter",
@@ -2884,6 +2981,7 @@ server <- function(input, output, session) {
         event_register(event = 'plotly_doubleclick')
       
       # cumsum plot 
+      # cumulative strains identified
       cumplot <- plotvals$cumsum_c %>% 
         lapply(function(d) plot_ly(d, 
                                    type = "scatter",
@@ -2970,6 +3068,7 @@ server <- function(input, output, session) {
         tally()
       
       # mountain plot 
+      # novel strains identified
       mountain <- plotvals$strainbycluster_p %>%
         lapply(function(d) plot_ly(d, 
                                    type = "scatter",
@@ -3049,6 +3148,7 @@ server <- function(input, output, session) {
         mutate(cumsum = cumsum(n))
       
       # cumsum plot 
+      # cumulative strains identified
       cumplot <- plotvals$cumsum_p %>%
         lapply(function(d) plot_ly(d, 
                                    type = "scatter",
@@ -3127,10 +3227,14 @@ server <- function(input, output, session) {
     }
   })
   
+  # number of new strains identified by date
+  # not separated by cluster
+  
   output$newstrainsbydate <- renderPlotly({
     
     # no faceting
     if (input$region == 1) {
+      
       plot_ly(type = "histogram",
               data = strains.sh,
               histfunc = "count",
@@ -3357,6 +3461,8 @@ server <- function(input, output, session) {
     }
   })
   
+  # single vs multstrains by date
+  # no regional faceting as overall very small number of single strain clusters
   
   output$singlevsmulti <- renderPlotly({
     
@@ -3810,8 +3916,7 @@ server <- function(input, output, session) {
     plotvals$cumsum_p <- cumsum_p
   })
   
-  
-  # if clicking on faceted strains by cluster
+  # if clicking on histogram faceted by country
   observeEvent(event_data("plotly_click", source = "histogram_c"), {
     
     # pull vars needed to get info for subsetting
@@ -3825,7 +3930,28 @@ server <- function(input, output, session) {
     
     print(d)
   })
+
   
+  # if clicking on faceted strains by cluster
+  observeEvent(event_data("plotly_click", source = "strainsbycluster_c"), {
+
+    bubble_c <- plotvals$bubble_c
+    growth_c <- plotvals$growth_c
+    strainbycluster_c <- plotvals$strainbycluster_c
+    cumsum_c <- plotvals$cumsum_c
+
+    # pull vars needed to get info for subsetting
+    d <- event_data("plotly_click", source = "strainsbycluster_c")
+    x <- d %>% pull(x)
+    y <- d %>% pull(y)
+    i <- d %>% mutate(curveNumber = curveNumber + 1) %>% pull(curveNumber)
+    l <-  length(unique(strains.sh$data(withSelection = T) %>%
+                          pull(country)))
+    j <- NULL
+
+    print(d)
+  })
+
 
   ##################################################
   # plotly double click events to reset everything #
@@ -3930,23 +4056,4 @@ server <- function(input, output, session) {
   
 }
 
-# # if clicking on faceted strains by cluster
-# observeEvent(event_data("plotly_click", source = "strainsbycluster_c"), {
-#   
-#   bubble_c <- plotvals$bubble_c
-#   growth_c <- plotvals$growth_c
-#   strainbycluster_c <- plotvals$strainbycluster_c
-#   cumsum_c <- plotvals$cumsum_c
-#   
-#   # pull vars needed to get info for subsetting 
-#   d <- event_data("plotly_click", source = "strainsbycluster_c")
-#   x <- d %>% pull(x)
-#   y <- d %>% pull(y)
-#   i <- d %>% mutate(curveNumber = curveNumber + 1) %>% pull(curveNumber) 
-#   l <-  length(unique(strains.sh$data(withSelection = T) %>%
-#                         pull(country)))
-#   j <- NULL
-#   
-#   print(d)
-# })
-# 
+

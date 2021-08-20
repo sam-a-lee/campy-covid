@@ -29,3 +29,6 @@ The app also includes tables for cluster-related data, strain-related data, as w
 Users can click on visualizations or table rows to highlight all information related to a given cluster, strain, etc. Multiple selections can be made using the appropriate key for your operating system (e.g. hold command and click for Mac). Deselection is accomplished by double clicking. *Brushing works best when data are not faceted by region and is currently under development.* 
 
 
+### Issues to resolve
+1. **Faceting when <=2 regions selected**. When two or fewer regions selected, plotly will not facet. 
+2. **Brushing**. Automatic brushing does not work on faceted plots as shared data must be aggregated. Brushing must be added manually. Additionally, on data that is not faceted, some visualizations are generated using cluster-based data while others are generated using strain-based data. These brushes are not linked and will need to be manually. 
