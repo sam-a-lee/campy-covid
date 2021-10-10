@@ -1,6 +1,5 @@
-##########
-# server #
-##########
+# Title: RShiny interactive CGM visualizations
+# Authors: Sam, Guangzhi, Vasena, Dillon, Ed
 
 # load libraries required for dashboard side 
 library(shinydashboard) # the shiny dashboard
@@ -21,51 +20,24 @@ library(data.table) # for melting
 library(rvest) # for downloading cardinal table 
 library(shinyalert) # for alters on data loading
 
+# wide <- read.delim(here("input_data", "weekly", "Wide_merged_cluster_results.tsv"))
+
 
 ############# 
 # functions #
 #############
 
-# these functions are used within the server to calculate cardinal movement and cluster transmission descriptions
+# this function calculates the angle between cluster point 1 and point 2
+source(here("scripts", "functions", "2021-09-25_point_angle.R"))
 
-# calculates the angle between two points
-angle <- function(x,y) { 
-  z <- x + 1i * y
-  res <- 90 - Arg(z) / pi * 180
-  res %% 360
-}
+# this function imports a table with cardinal directions and angles
+# can also be used to describe cluster transmission
+source(here("scripts", "functions", "2021-09-25_cluster_movement_direction.R"))
 
-# read in table describing cardinal direction and degrees for a 16-rose compass 
-page <- read_html('http://snowfence.umn.edu/Components/winddirectionanddegreeswithouttable3.htm')
-directions.raw <- page %>% html_node('td table') %>% html_table(header = TRUE)
 
-# clean up table 
-directions <- directions.raw %>% 
-  set_names(~tolower(sub(' Direction', '', .x))) %>% 
-  slice(-1) %>% 
-  separate(degree, c('degree_min', 'degree_max'), sep = '\\s+-\\s+', convert = TRUE)
-
-# create a new column in direction and assign a cluster transmission "speed" 
-directions$ecc.speed <- c("Slower", "Slower", "Slower", "Slower",
-                          "No change", "Faster", "Faster", "Faster",
-                          "Faster", "Faster", "Faster", "Faster", 
-                          "No change", "Slower", "Slower", "Slower")
-
-# create a new column in direction and assign a cluster transmission "spread"
-directions$ecc.spread <- c("No change", "Isolated", "Isolated", "Isolated",
-                           "Isolated", "Isolated", "Isolated", "Isolated",
-                           "No change", "Dispersed", "Dispersed", "Dispersed", 
-                           "Dispersed", "Dispersed", "Dispersed", "Dispersed")
-
-# create a new column in table that creates a combined description of cluster transmission speed and spread
-directions$ecc.comb <- c("Slower", "Slower/Slower, isolated", "Slower, Isolated", "Isolated/Slower, isolated",
-                         "Isolated", "Isolated/Faster, isolated", "Faster, Isolated", "Faster/Faster, isolated",
-                         "Faster", "Faster/Faster, dispersed", "Faster, dispersed", "Dispersed/Faster, dispersed", 
-                         "Dispersed", "Dispersed/Slower, dispersed", "Slower, dispersed", "Slower/Slower, dispersed")
-
-# create a new column for the degree mid point between two cardinal directions 
-directions$degree.mid<- c(0,22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180, 202.5,225, 247.5, 270, 292.5, 315, 337.5)
-
+##########
+# server #
+##########
 
 # this is the actual service side 
 server <- function(input, output, session) { 
@@ -74,8 +46,7 @@ server <- function(input, output, session) {
   # set max file upload size #
   ############################
   
-  # default size too small
-  # set max file size to 1 gb
+  # default size too small; set max file size to 1 gb
   options(shiny.maxRequestSize=1048576000)
   
   #######################################
@@ -224,6 +195,7 @@ server <- function(input, output, session) {
     # centre on directions 
     eccdata$delta.cardinal <- sapply(eccdata$delta.bearing, function(x){
       
+      if(!is.na(x)) {
       if(x <= 11.25 & x >= 0) {return("N")}
       if(x > 11.25 & x <= 33.75) {return("NNE")}
       if(x > 33.75 & x <= 56.25) {return("NE")}
@@ -242,6 +214,9 @@ server <- function(input, output, session) {
       if(x < -33.75 & x >= -56.25) {return("NW")}
       if(x < -11.25 & x >= -33.75) {return("NNW")}
       if(x < 0 & x >= -11.25) {return("N")}
+      } else {
+        return(NA)
+      }
     })  
     
     # convert to factor
@@ -884,13 +859,13 @@ server <- function(input, output, session) {
         add_trace(data = clusters.sh, 
                   type = "scatter",
                   mode = "markers", 
-                  x = ~ecc.0.1.0,
+                  x = ~tp1.ecc.0.1.0,
                   y = 1,
-                  frame = ~timepoint, 
-                  size = ~I(cluster.size.1.2),
+                  frame = ~interval, 
+                  size = ~I(tp1.cluster.size.1),
                   color = ~I("#898a8c"), 
                   hovertemplate = ~paste('<b>', tp1.cluster,'</b>', '<br>',
-                                         'Geospatial ECC:', ecc.0.1.0,
+                                         'Geospatial ECC:', tp1.ecc.0.1.0,
                                          '<extra></extra>',
                                          sep = " "),
                   showlegend = FALSE,
