@@ -220,6 +220,68 @@ server <- function(input, output, session) {
                                         "Multi strain clusters",
                                         "Single strain clusters"))
         
+        
+        strains_raw <- strains_raw %>% 
+            mutate(delta.ecc.angle = angle(delta.ecc.0.1.0, delta.ecc.0.0.1))
+        
+        # use new column to assign ecc values speed, spread, and combined
+        strains_raw <- strains_raw %>%
+            mutate(delta.ecc.direction = cut(delta.ecc.angle,
+                                             breaks = c(0, directions$degree_max, 360), 
+                                             labels = c(directions$ecc.comb, 'F')),
+                   delta.ecc.speed = cut(delta.ecc.angle, 
+                                         breaks = c(0, directions$degree_max, 360), 
+                                         labels = c(directions$ecc.speed, 'F')),
+                   delta.ecc.spread = cut(delta.ecc.angle,
+                                          breaks = c(0, directions$degree_max, 360), 
+                                          labels = c(directions$ecc.spread, 'F')))
+        
+        # convert to factor
+        strains_raw$delta.ecc.direction <- as.factor(strains_raw$delta.ecc.direction)
+        
+        # set levels 
+        strains_raw$delta.ecc.direction <-  factor(strains_raw$delta.ecc.direction, 
+                                                    levels = c("Slower", "Slower/Slower, isolated", "Slower, Isolated", "Isolated/Slower, isolated",
+                                                               "Isolated", "Isolated/Faster, isolated", "Faster, Isolated", "Faster/Faster, isolated",
+                                                               "Faster", "Faster/Faster, dispersed", "Faster, dispersed", "Dispersed/Faster, dispersed", 
+                                                               "Dispersed", "Dispersed/Slower, dispersed", "Slower, dispersed", "Slower/Slower, dispersed"))
+
+        
+        #############################
+        # calculate strain bearing #
+        #############################
+        
+        # get bearing (direction of change)
+        strains_raw$delta.bearing <- 
+            bearing(as.matrix(strains_raw[,c("average.tp1.longitude", 
+                                              "average.tp1.latitude")]),
+                    as.matrix(strains_raw[,c("average.tp2.longitude", 
+                                              "average.tp2.latitude")]))
+        
+        # convert bearing to compass direction
+        # centre on directions 
+        strains_raw$delta.cardinal <- sapply(strains_raw$delta.bearing, cardinal)  
+        
+        # convert to factor
+        strains_raw$delta.cardinal <- 
+            factor(strains_raw$delta.cardinal,
+                   levels = c("N", "NNE", "NE", "ENE",
+                              "E", "ESE", "SE", "SSE",
+                              "S", "SSW", "SW", "WSW", 
+                              "W", "WNW", "NW", "NNW"))
+        
+        # set levels 
+        strains_raw$delta.cardinal.long <- 
+            plyr::revalue(strains_raw$delta.cardinal, 
+                          c("N" = "North", "NNE" = "North/Northeast", 
+                            "NE" = "Northeast", "ENE" = "East/Northeast",
+                            "E"= "East", "ESE" = "East/Southeast", 
+                            "SE" = "Southeast", "SSE" = "South/Southeast", 
+                            "S" = "South", "SSW" = "South/Southwest", 
+                            "SW" = "Southwest", "WSW" = "West/Southwest", 
+                            "W" = "West", "WNW" = "West/Northwest",
+                            "NW" = "Northwest", "NNW" = "North/Northwest"))
+        
         # write out to reactive vals object
         vals$strains <- strains_raw
     })
@@ -243,7 +305,7 @@ server <- function(input, output, session) {
         
         # update cluster sliders
         updateSelectInput(inputId = "tp1.cluster", label = "Cluster", choices = unique(vals$clusters$tp1.cluster),  selected = NULL)
-        updateSelectInput(inputId = "timepoint", label = "Time point", choices = unique(vals$clusters$timepoint), selected = NULL)
+        updateSelectInput(inputId = "interval", label = "Time point", choices = unique(vals$clusters$interval), selected = NULL)
         updateSelectInput(inputId = "type", label = "Type", choices = unique(vals$clusters$type),  selected = NULL)
         updateSliderInput(inputId = "cluster.size.1.2", label = "Cluster size", min = min(vals$clusters$cluster.size.1.2, na.rm = T), max =  max(vals$clusters$cluster.size.1.2, na.rm = T), value = c(min(vals$clusters$cluster.size.1.2, na.rm = T),  max(vals$clusters$cluster.size.1.2, na.rm = T)))
         updateSliderInput(inputId = "average.date", label = "Cluster date", min = min(vals$clusters$average.date, na.rm = T), max = max(vals$clusters$average.date, na.rm = T), value = c(min(vals$clusters$average.date, na.rm = T), max(vals$clusters$average.date, na.rm = T)))
@@ -274,41 +336,43 @@ server <- function(input, output, session) {
         
         req(vals$clusters)
         data <- vals$clusters 
+        data
         
-        # get top n
-        topn <- {if (input$number != "all") as.numeric(input$number) else nrow(data)}
-        
-        filtered <- data %>%
-            {if (!is.null(input$tp1.cluster)) filter(., tp1.cluster %in% input$tp1.cluster)  else . } %>%
-            {if (!is.null(input$timepoint)) filter(., interval %in% input$timepoint)  else . } %>%
-            {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
-            filter(tp1.cluster.size.1.2 >= input$cluster.size.1.2[1] & tp1.cluster.size.1.2 <= input$cluster.size.1.2[2]) %>%
-            filter(average.date >= input$average.date[1] & average.date <= input$average.date[2]) %>%
-            filter(tp1.ecc.0.0.1 >= input$ecc.0.0.1[1] & tp1.ecc.0.0.1 <= input$ecc.0.0.1[2]) %>%
-            filter(tp1.ecc.0.1.0 >= input$ecc.0.1.0[1] & tp1.ecc.0.1.0 <= input$ecc.0.1.0[2]) %>%
-            filter(average.tp1.latitude >= input$average.latitude[1] & average.tp1.latitude <= input$average.latitude[2]) %>%
-            filter(average.tp1.longitude >= input$average.longitude[1] & average.tp1.longitude <= input$average.longitude[2]) %>%
-            # delta filters
-            filter(actual.cluster.growth.tp2.size.tp1.size >= input$actual.cluster.size.tp2.size.tp1.size[1] & actual.cluster.growth.tp2.size.tp1.size <= input$actual.cluster.size.tp2.size.tp1.size[2]) %>%
-            filter(number.of.novels.in.the.tp2.match >= input$number.of.novels.in.the.tp2.match[1] & number.of.novels.in.the.tp2.match <= input$number.of.novels.in.the.tp2.match[2]) %>%
-            filter(actual.growth.rate.tp2.size.tp1.size.tp1.size >= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[1] & actual.growth.rate.tp2.size.tp1.size.tp1.size <= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[2]) %>%
-            filter(novel.growth.tp2.size.tp2.size.number.of.novels >= input$novel.growth.tp2.size.tp2.size.number.of.novels[1] & novel.growth.tp2.size.tp2.size.number.of.novels <= input$novel.growth.tp2.size.tp2.size.number.of.novels[2]) %>%
-            filter(delta.ecc.0.0.1 >= input$delta.ecc.0.0.1[1] & delta.ecc.0.0.1 <= input$delta.ecc.0.0.1[2]) %>%
-            filter(delta.ecc.0.1.0 >= input$delta.ecc.0.1.0[1] & delta.ecc.0.1.0 <= input$delta.ecc.0.1.0[2])%>%
-            
-            # data subsetting 
-            {if (input$subsets==1) arrange(., desc(abs(cluster.size.1.2))) else . }  %>%
-            {if (input$subsets==2) arrange(., desc(abs(delta.ecc.0.0.1))) else . }  %>%
-            {if (input$subsets==3) arrange(., desc(abs(delta.ecc.0.1.0))) else . } 
-        
-        # grab n rows according to input
-        if (input$number != 99){
-            topn <- as.numeric(input$number)
-            unique.clust <- head(unique(filtered$tp1.cluster),topn)
-            return(filtered %>% subset(tp1.cluster %in% unique.clust))
-        } else{  
-            return(filtered)
-        }
+        # 
+        # # get top n
+        # topn <- {if (input$number != "all") as.numeric(input$number) else nrow(data)}
+        # 
+        # filtered <- data %>%
+        #     {if (!is.null(input$tp1.cluster)) filter(., tp1.cluster %in% input$tp1.cluster)  else . } %>%
+        #     {if (!is.null(input$interval)) filter(., interval %in% input$interval)  else . } %>%
+        #     {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
+        #     filter(tp1.cluster.size.1.2 >= input$cluster.size.1.2[1] & tp1.cluster.size.1.2 <= input$cluster.size.1.2[2]) %>%
+        #     filter(average.tp1.date >= input$average.date[1] & average.tp1.date <= input$average.date[2]) %>%
+        #     filter(tp1.ecc.0.0.1 >= input$ecc.0.0.1[1] & tp1.ecc.0.0.1 <= input$ecc.0.0.1[2]) %>%
+        #     filter(tp1.ecc.0.1.0 >= input$ecc.0.1.0[1] & tp1.ecc.0.1.0 <= input$ecc.0.1.0[2]) %>%
+        #     filter(average.tp1.latitude >= input$average.latitude[1] & average.tp1.latitude <= input$average.latitude[2]) %>%
+        #     filter(average.tp1.longitude >= input$average.longitude[1] & average.tp1.longitude <= input$average.longitude[2]) %>%
+        #     # delta filters
+        #     filter(actual.cluster.growth.tp2.size.tp1.size >= input$actual.cluster.size.tp2.size.tp1.size[1] & actual.cluster.growth.tp2.size.tp1.size <= input$actual.cluster.size.tp2.size.tp1.size[2]) %>%
+        #     filter(number.of.novels.in.the.tp2.match >= input$number.of.novels.in.the.tp2.match[1] & number.of.novels.in.the.tp2.match <= input$number.of.novels.in.the.tp2.match[2]) %>%
+        #     filter(actual.growth.rate.tp2.size.tp1.size.tp1.size >= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[1] & actual.growth.rate.tp2.size.tp1.size.tp1.size <= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[2]) %>%
+        #     filter(novel.growth.tp2.size.tp2.size.number.of.novels >= input$novel.growth.tp2.size.tp2.size.number.of.novels[1] & novel.growth.tp2.size.tp2.size.number.of.novels <= input$novel.growth.tp2.size.tp2.size.number.of.novels[2]) %>%
+        #     filter(delta.ecc.0.0.1 >= input$delta.ecc.0.0.1[1] & delta.ecc.0.0.1 <= input$delta.ecc.0.0.1[2]) %>%
+        #     filter(delta.ecc.0.1.0 >= input$delta.ecc.0.1.0[1] & delta.ecc.0.1.0 <= input$delta.ecc.0.1.0[2])%>%
+        #     
+        #     # data subsetting 
+        #     {if (input$subsets==1) arrange(., desc(abs(tp1.cluster.size.1.2))) else . }  %>%
+        #     {if (input$subsets==2) arrange(., desc(abs(delta.ecc.0.0.1))) else . }  %>%
+        #     {if (input$subsets==3) arrange(., desc(abs(delta.ecc.0.1.0))) else . } 
+        # 
+        # # grab n rows according to input
+        # if (input$number != 99){
+        #     topn <- as.numeric(input$number)
+        #     unique.clust <- head(unique(filtered$tp1.cluster),topn)
+        #     return(filtered %>% subset(tp1.cluster %in% unique.clust))
+        # } else{  
+        #     return(filtered)
+        # }
         
     })
     
@@ -413,7 +477,6 @@ server <- function(input, output, session) {
                   selection = 'none')
     }, server=F)
     
-
     
     ################################
     # cluster movement value boxes #
@@ -428,7 +491,7 @@ server <- function(input, output, session) {
         valueBox(
             subtitle = "clusters actively growing",
             value = clusters_r() %>% 
-                subset(as.numeric(timepoint) == max(as.numeric(timepoint))) %>%
+                subset(as.numeric(interval) == max(as.numeric(interval))) %>%
                 subset(actual.growth.rate.tp2.size.tp1.size.tp1.size >= 3) %>% 
                 nrow()
         )
@@ -440,7 +503,7 @@ server <- function(input, output, session) {
         valueBox(
             subtitle = "clusters actively spreading",
             value = clusters_r() %>% 
-                subset(as.numeric(timepoint) == max(as.numeric(timepoint))) %>%
+                subset(as.numeric(interval) == max(as.numeric(interval))) %>%
                 subset(delta.ecc.spread == "Dispersed") %>% 
                 nrow()
         )
@@ -454,7 +517,7 @@ server <- function(input, output, session) {
             subtitle = "clusters with local transmission",
             value = clusters_r() %>% 
                 slice(which(clusters_r()$ecc.spread=="Isolated")) %>%                 
-                subset(as.numeric(timepoint) == max(as.numeric(timepoint))) %>%
+                subset(as.numeric(interval) == max(as.numeric(interval))) %>%
                 subset(actual.growth.rate.tp2.size.tp1.size.tp1.size >= 3) %>%
                 nrow()
         )
@@ -478,10 +541,10 @@ server <- function(input, output, session) {
         # bubble plot faceted by country
         plotvals$bubble_c <- 
             strains.sh$data() %>%
-            group_by(country, tp1.cluster, timepoint) %>%
+            group_by(country, tp1.cluster, interval) %>%
             summarize(n = n(),
-                      ecc.0.1.0 = mean(ecc.0.1.0),
-                      ecc.0.0.1 = mean(ecc.0.0.1),
+                      ecc.0.1.0 = mean(tp1.ecc.0.1.0),
+                      ecc.0.0.1 = mean(tp1.ecc.0.0.1),
                       color = "#898a8c",
                       selected = F) %>%
             split(.$country)
@@ -489,119 +552,119 @@ server <- function(input, output, session) {
         # bubble plot faceted by province
         plotvals$bubble_p <- strains.sh$data() %>%
             subset(country %in% input$regionProvince) %>%
-            group_by(province, tp1.cluster, timepoint) %>%
+            group_by(province, tp1.cluster, interval) %>%
             summarize(n = n(),
-                      ecc.0.1.0 = mean(ecc.0.1.0),
-                      ecc.0.0.1 = mean(ecc.0.0.1),
+                      ecc.0.1.0 = mean(tp1.ecc.0.1.0),
+                      ecc.0.0.1 = mean(tp1.ecc.0.0.1),
                       color = "#898a8c",
                       selected = F) %>%
             split(.$province)
         
-        # cluster growth rate by country 
-        bycountry <- strains.long %>%
-            mutate(country = as.factor(country),
-                   timepoint = as.factor(timepoint),
-                   tp1 = as.factor(tp1)) %>%
-            group_by(country, tp1.cluster, timepoint, tp1) %>%
-            count() %>%
-            ungroup() %>%
-            complete(expand(.,timepoint, tp1, country, tp1.cluster), fill = list(n = NA)) 
-        
-        growth = data.frame(expand(bycountry, country, tp1.cluster))
-        
-        for(i in seq(length(levels(bycountry$timepoint))-1)){
-            
-            tp2 <- bycountry %>% 
-                group_by(country) %>%
-                subset(timepoint == i+1) %>%
-                group_by(country, tp1.cluster) %>%
-                summarize(n=sum(na.omit(n)))
-            
-            tp2novels <- bycountry %>% 
-                group_by(country) %>%
-                subset(timepoint == i+1) %>%
-                group_by(country, tp1.cluster, tp1) %>%
-                summarize(n=sum(n)) %>%
-                subset(tp1==0)
-            
-            tp1 <- bycountry %>% 
-                group_by(country) %>%
-                subset(timepoint == i) %>%
-                subset(tp1==1) %>%
-                group_by(country, tp1.cluster) %>%
-                summarize(n=sum(na.omit(n)))
-            
-            overall_name <- paste("overall", i, sep="_")
-            novel_name <- paste("novel", i, sep="_")
-            
-            growth[[overall_name]] <- (tp2$n - tp1$n)/tp1$n
-            growth[[novel_name]] <- tp2$n/(tp2$n -tp2novels$n)
-        }
-        
-        # for more time points, use this method
-        plotvals$growth_c <- data.table::melt(setDT(growth),
-                                              id.vars = c("country", "tp1.cluster"),
-                                              measure = patterns(overall = "^overall_*",
-                                                                 novel = "^novel_*"),
-                                              variable.name='timepoint') %>% 
-            mutate(color = "#898a8c") %>%
-            split(.$country)
-        
-        
-        # cluster growthp rate by province      
-        byprovince <- 
-            strains.sh$data() %>%
-            subset(country %in% input$regionProvince) %>%
-            mutate(province = as.factor(province),
-                   timepoint = as.factor(timepoint),
-                   tp1 = as.factor(tp1),
-                   tp1.cluster = as.character(tp1.cluster)) %>%
-            group_by(province, tp1.cluster, timepoint, tp1) %>%
-            count() %>%
-            ungroup() %>%
-            complete(expand(.,timepoint, tp1, province, tp1.cluster), fill = list(n = NA)) 
-        
-        growthp = data.frame(expand(byprovince, province, tp1.cluster))
-        
-        for(i in seq(length(levels(byprovince$timepoint))-1)){
-            
-            tp2 <- byprovince %>% 
-                group_by(province) %>%
-                subset(timepoint == i+1) %>%
-                group_by(province, tp1.cluster) %>%
-                summarize(n=sum(na.omit(n)))
-            
-            tp2novels <- byprovince %>% 
-                group_by(province) %>%
-                subset(timepoint == i+1) %>%
-                group_by(province, tp1.cluster, tp1) %>%
-                summarize(n=sum(n)) %>%
-                subset(tp1==0)
-            
-            tp1 <- byprovince %>% 
-                group_by(province) %>%
-                subset(timepoint == i) %>%
-                subset(tp1==1) %>%
-                group_by(province, tp1.cluster) %>%
-                summarize(n=sum(na.omit(n)))
-            
-            overall_name <- paste("overall", i, sep="_")
-            novel_name <- paste("novel", i, sep="_")
-            
-            growthp[[overall_name]] <- (tp2$n - tp1$n)/tp1$n
-            growthp[[novel_name]] <- tp2$n/(tp2$n -tp2novels$n)
-        }
-        
-        # for more time points, use this method
-        plotvals$growth_p <- as.data.frame(data.table::melt(setDT(growthp),
-                                                            id.vars = c("province", "tp1.cluster"),
-                                                            measure = patterns(overall = "^overall_*",
-                                                                               novel = "^novel_*"),
-                                                            variable.name='timepoint')) %>%
-            mutate(color = "#898a8c") %>%
-            split(.$province)
-        
-        
+        # # cluster growth rate by country 
+        # bycountry <- strains %>%
+        #     mutate(country = as.factor(country),
+        #            interval = as.factor(interval),
+        #            tp1 = as.factor(tp1)) %>%
+        #     group_by(country, tp1.cluster, interval, tp1) %>%
+        #     count() %>%
+        #     ungroup() %>%
+        #     complete(expand(.,interval, tp1, country, tp1.cluster), fill = list(n = NA)) 
+        # 
+        # growth = data.frame(expand(bycountry, country, tp1.cluster))
+        # 
+        # for(i in seq(length(levels(bycountry$interval))-1)){
+        #     
+        #     tp2 <- bycountry %>% 
+        #         group_by(country) %>%
+        #         subset(interval == i+1) %>%
+        #         group_by(country, tp1.cluster) %>%
+        #         summarize(n=sum(na.omit(n)))
+        #     
+        #     tp2novels <- bycountry %>% 
+        #         group_by(country) %>%
+        #         subset(interval == i+1) %>%
+        #         group_by(country, tp1.cluster, tp1) %>%
+        #         summarize(n=sum(n)) %>%
+        #         subset(tp1==0)
+        #     
+        #     tp1 <- bycountry %>% 
+        #         group_by(country) %>%
+        #         subset(interval == i) %>%
+        #         subset(tp1==1) %>%
+        #         group_by(country, tp1.cluster) %>%
+        #         summarize(n=sum(na.omit(n)))
+        #     
+        #     overall_name <- paste("overall", i, sep="_")
+        #     novel_name <- paste("novel", i, sep="_")
+        #     
+        #     growth[[overall_name]] <- (tp2$n - tp1$n)/tp1$n
+        #     growth[[novel_name]] <- tp2$n/(tp2$n -tp2novels$n)
+        # }
+        # 
+        # # for more time points, use this method
+        # plotvals$growth_c <- data.table::melt(setDT(growth),
+        #                                       id.vars = c("country", "tp1.cluster"),
+        #                                       measure = patterns(overall = "^overall_*",
+        #                                                          novel = "^novel_*"),
+        #                                       variable.name='interval') %>% 
+        #     mutate(color = "#898a8c") %>%
+        #     split(.$country)
+        # 
+        # 
+        # # cluster growthp rate by province      
+        # byprovince <- 
+        #     strains.sh$data() %>%
+        #     subset(country %in% input$regionProvince) %>%
+        #     mutate(province = as.factor(province),
+        #            interval = as.factor(interval),
+        #            tp1 = as.factor(tp1),
+        #            tp1.cluster = as.character(tp1.cluster)) %>%
+        #     group_by(province, tp1.cluster, interval, tp1) %>%
+        #     count() %>%
+        #     ungroup() %>%
+        #     complete(expand(.,interval, tp1, province, tp1.cluster), fill = list(n = NA)) 
+        # 
+        # growthp = data.frame(expand(byprovince, province, tp1.cluster))
+        # 
+        # for(i in seq(length(levels(byprovince$interval))-1)){
+        #     
+        #     tp2 <- byprovince %>% 
+        #         group_by(province) %>%
+        #         subset(interval == i+1) %>%
+        #         group_by(province, tp1.cluster) %>%
+        #         summarize(n=sum(na.omit(n)))
+        #     
+        #     tp2novels <- byprovince %>% 
+        #         group_by(province) %>%
+        #         subset(interval == i+1) %>%
+        #         group_by(province, tp1.cluster, tp1) %>%
+        #         summarize(n=sum(n)) %>%
+        #         subset(tp1==0)
+        #     
+        #     tp1 <- byprovince %>% 
+        #         group_by(province) %>%
+        #         subset(interval == i) %>%
+        #         subset(tp1==1) %>%
+        #         group_by(province, tp1.cluster) %>%
+        #         summarize(n=sum(na.omit(n)))
+        #     
+        #     overall_name <- paste("overall", i, sep="_")
+        #     novel_name <- paste("novel", i, sep="_")
+        #     
+        #     growthp[[overall_name]] <- (tp2$n - tp1$n)/tp1$n
+        #     growthp[[novel_name]] <- tp2$n/(tp2$n -tp2novels$n)
+        # }
+        # 
+        # # for more time points, use this method
+        # plotvals$growth_p <- as.data.frame(data.table::melt(setDT(growthp),
+        #                                                     id.vars = c("province", "tp1.cluster"),
+        #                                                     measure = patterns(overall = "^overall_*",
+        #                                                                        novel = "^novel_*"),
+        #                                                     variable.name='interval')) %>%
+        #     mutate(color = "#898a8c") %>%
+        #     split(.$province)
+        # 
+        # 
         # new cluster strains identified by country
         plotvals$strainbycluster_c <- strains.sh$data() %>%
             group_by(country, tp1.cluster, strain.date) %>%
@@ -643,20 +706,20 @@ server <- function(input, output, session) {
         
         # radar plot for cluster spread and speed by country
         plotvals$radar_c <- strains_r() %>%
-            group_by(country, tp1.cluster, timepoint) %>%
+            group_by(country, tp1.cluster, interval) %>%
             summarize(n = n(),
-                      ecc.0.0.1 = mean(ecc.0.0.1),
-                      ecc.0.1.0 = mean(ecc.0.1.0),
+                      ecc.0.0.1 = mean(tp1.ecc.0.0.1),
+                      ecc.0.1.0 = mean(tp1.ecc.0.1.0),
                       ecc.comb = unique(as.character(delta.ecc.direction))) %>%
             rowid_to_column(., var = "rowid") 
         
         # radar plot for cluster spread and speed by province
         plotvals$radar_p <- strains_r() %>%
             subset(country %in% input$regionProvince) %>%
-            group_by(province, tp1.cluster, timepoint) %>%
+            group_by(province, tp1.cluster, interval) %>%
             summarize(n = n(),
-                      ecc.0.0.1 = mean(ecc.0.0.1),
-                      ecc.0.1.0 = mean(ecc.0.1.0),
+                      ecc.0.0.1 = mean(tp1.ecc.0.0.1),
+                      ecc.0.1.0 = mean(tp1.ecc.0.1.0),
                       ecc.comb = unique(as.character(delta.ecc.direction))) %>%
             rowid_to_column(., var = "rowid") 
         
@@ -800,7 +863,7 @@ server <- function(input, output, session) {
                                            x = ~ecc.0.1.0,
                                            y = 1,
                                            color = ~I(color),
-                                           frame = ~timepoint,
+                                           frame = ~interval,
                                            hovertemplate = ~paste('<b>', tp1.cluster,'</b>', '<br>',
                                                                   'Geospatial ECC:', ecc.0.1.0, '<br>',
                                                                   '<extra></extra>',
@@ -847,7 +910,7 @@ server <- function(input, output, session) {
                                            x = ~ecc.0.0.1,
                                            y = 1,
                                            color = ~I(color),
-                                           frame = ~timepoint, 
+                                           frame = ~interval, 
                                            hovertemplate = ~paste('<b>', tp1.cluster,'</b>', '<br>',
                                                                   'Temporal ECC:', ecc.0.0.1,
                                                                   '<extra></extra>',
@@ -894,7 +957,7 @@ server <- function(input, output, session) {
                                            y = ~ecc.0.0.1,
                                            x = ~ecc.0.1.0,
                                            color = ~I(color),
-                                           frame = ~timepoint, 
+                                           frame = ~interval, 
                                            hovertemplate = ~paste('<b>', tp1.cluster,'</b>', '<br>',
                                                                   'Geospatial ECC:', ecc.0.1.0, '<br>',
                                                                   'Temporal ECC:', ecc.0.0.1,
@@ -965,7 +1028,7 @@ server <- function(input, output, session) {
                                            x = ~ecc.0.1.0,
                                            y = 1,
                                            color = ~I(color),
-                                           frame = ~timepoint, 
+                                           frame = ~interval, 
                                            hovertemplate = ~paste('<b>', tp1.cluster,'</b>', '<br>',
                                                                   'Geospatial ECC:', ecc.0.1.0, '<br>',
                                                                   '<extra></extra>',
@@ -1013,7 +1076,7 @@ server <- function(input, output, session) {
                                            x = ~ecc.0.0.1,
                                            y = 1,
                                            color = ~I(color),
-                                           frame = ~timepoint, 
+                                           frame = ~interval, 
                                            hovertemplate = ~paste('<b>', tp1.cluster,'</b>', '<br>',
                                                                   'Temporal ECC:', ecc.0.0.1,
                                                                   '<extra></extra>',
@@ -1061,7 +1124,7 @@ server <- function(input, output, session) {
                                            y = ~ecc.0.0.1,
                                            x = ~ecc.0.1.0,
                                            color = ~I(color),
-                                           frame = ~timepoint, 
+                                           frame = ~interval, 
                                            hovertemplate = ~paste('<b>', tp1.cluster,'</b>', '<br>',
                                                                   'Geospatial ECC:', ecc.0.1.0, '<br>',
                                                                   'Temporal ECC:', ecc.0.0.1,
@@ -1137,8 +1200,8 @@ server <- function(input, output, session) {
             geo <- plot_ly() %>%
                 add_trace(data = strains.sh,
                           type = "histogram",
-                          x = ~ecc.0.1.0,
-                          frame = ~timepoint,
+                          x = ~tp1.ecc.0.1.0,
+                          frame = ~interval,
                           color = I("#898a8c"),
                           xbins = list(size = 0.01),
                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
@@ -1149,8 +1212,12 @@ server <- function(input, output, session) {
                           source = "histogram") %>%
                 layout(xaxis = list(range = c(0,1),
                                     title = "Geospatial epicluster cohesion index"),
-                       yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
-                                                          filter(selected_ | is.na(selected_))))),
+                       yaxis = list(range = c(0, strains.sh$data(withSelection = T) %>%
+                                                          filter(selected_ | is.na(selected_)) %>%
+                                                          group_by(interval) %>% 
+                                                          count() %>% 
+                                                          pull(n) %>% 
+                                                          max())),
                        annotations = list(
                            list(text= "Geospatial epicluster cohesion index",
                                 xref = "paper",
@@ -1180,7 +1247,7 @@ server <- function(input, output, session) {
                 add_trace(data = strains.sh,
                           type = "histogram",
                           x = ~delta.ecc.0.1.0,
-                          frame = ~timepoint,
+                          frame = ~interval,
                           color = I("#898a8c"),
                           xbins = list(size = 0.01),
                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
@@ -1191,8 +1258,12 @@ server <- function(input, output, session) {
                           source = "histogram") %>%
                 layout(xaxis = list(range = c(-1,1),
                                     title = "Delta geospatial epicluster cohesion index"),
-                       yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
-                                                          filter(selected_ | is.na(selected_))))),
+                       yaxis = list(range = c(0, strains.sh$data(withSelection = T) %>%
+                                                          filter(selected_ | is.na(selected_)) %>%
+                                                          group_by(interval) %>% 
+                                                          count() %>% 
+                                                          pull(n) %>% 
+                                                          max())),
                        annotations = list(
                            list(text= "Delta geospatial epicluster cohesion index",
                                 xref = "paper",
@@ -1221,8 +1292,8 @@ server <- function(input, output, session) {
             temp <- plot_ly() %>%
                 add_trace(data = strains.sh,
                           type = "histogram",
-                          x = ~ecc.0.0.1,
-                          frame = ~timepoint,
+                          x = ~tp1.ecc.0.0.1,
+                          frame = ~interval,
                           color = I("#898a8c"), 
                           xbins = list(size = 0.01),
                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
@@ -1233,8 +1304,12 @@ server <- function(input, output, session) {
                           source = "histogram") %>%
                 layout(xaxis = list(range = c(0,1),
                                     title = "Temporal epicluster cohesion index"),
-                       yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
-                                                          filter(selected_ | is.na(selected_))))),
+                       yaxis = list(range = c(0, strains.sh$data(withSelection = T) %>%
+                                                          filter(selected_ | is.na(selected_)) %>%
+                                                          group_by(interval) %>% 
+                                                          count() %>% 
+                                                          pull(n) %>% 
+                                                          max())),
                        annotations = list(
                            list(text= "Temporal epicluster cohesion index",
                                 xref = "paper",
@@ -1264,7 +1339,7 @@ server <- function(input, output, session) {
                 add_trace(data = strains.sh,
                           type = "histogram",
                           x = ~delta.ecc.0.0.1,
-                          frame = ~timepoint,
+                          frame = ~interval,
                           color = I("#898a8c"), 
                           xbins = list(size = 0.01),
                           hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
@@ -1275,8 +1350,12 @@ server <- function(input, output, session) {
                           source = "histogram") %>%
                 layout(xaxis = list(range = c(-1,1),
                                     title = "Delta temporal epicluster cohesion index"),
-                       yaxis = list(range = c(0, nrow(strains.sh$data(withSelection = T) %>%
-                                                          filter(selected_ | is.na(selected_))))),
+                       yaxis = list(range = c(0, strains.sh$data(withSelection = T) %>%
+                                                          filter(selected_ | is.na(selected_)) %>% 
+                                                          group_by(interval) %>% 
+                                                          count() %>% 
+                                                          pull(n) %>% 
+                                                          max())),
                        annotations = list(
                            list(text= "Delta temporal epicluster cohesion index",
                                 xref = "paper",
@@ -1314,11 +1393,11 @@ server <- function(input, output, session) {
                 split(.$country) %>%
                 lapply(function(d) plot_ly(d, 
                                            type = "histogram",
-                                           x = ~ecc.0.1.0,
+                                           x = ~tp1.ecc.0.1.0,
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
-                                           frame = ~timepoint,
+                                           frame = ~interval,
                                            source = "histogram_c",
                                            hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
                                                                   'Count:', '%{y}' ,
@@ -1327,8 +1406,8 @@ server <- function(input, output, session) {
                            layout(xaxis = list(range = c(0,1), 
                                                title = ""),
                                   yaxis = list(range = c(0, max(strains.sh$data() %>%
-                                                                    group_by(country, timepoint) %>%
-                                                                    count(cut_width(ecc.0.1.0, width=0.01)) %>%
+                                                                    group_by(country, interval) %>%
+                                                                    count(cut_width(tp1.ecc.0.1.0, width=0.01)) %>%
                                                                     pull(n))*1.1)),
                                   annotations = list(text= ~unique(country),
                                                      xref = "paper",
@@ -1374,11 +1453,11 @@ server <- function(input, output, session) {
                 split(.$country) %>%
                 lapply(function(d) plot_ly(d, 
                                            type = "histogram",
-                                           x = ~ecc.0.0.1,
+                                           x = ~tp1.ecc.0.0.1,
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
-                                           frame = ~timepoint,
+                                           frame = ~interval,
                                            source = "histogram_c",
                                            hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
                                                                   'Count:', '%{y}' ,
@@ -1387,8 +1466,8 @@ server <- function(input, output, session) {
                            layout(xaxis = list(range = c(0,1), 
                                                title = ""),
                                   yaxis = list(range = c(0, max(strains.sh$data() %>%
-                                                                    group_by(country, timepoint) %>%
-                                                                    count(cut_width(ecc.0.0.1, width=0.01)) %>%
+                                                                    group_by(country, interval) %>%
+                                                                    count(cut_width(tp1.ecc.0.0.1, width=0.01)) %>%
                                                                     pull(n))*1.1)),
                                   annotations = list(text= ~unique(country),
                                                      xref = "paper",
@@ -1438,7 +1517,7 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
-                                           frame = ~timepoint,
+                                           frame = ~interval,
                                            source = "histogram_c",
                                            hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
                                                                   'Count:', '%{y}' ,
@@ -1447,7 +1526,7 @@ server <- function(input, output, session) {
                            layout(xaxis = list(range = c(0,1), 
                                                title = ""),
                                   yaxis = list(range = c(0, max(strains.sh$data() %>%
-                                                                    group_by(country, timepoint) %>%
+                                                                    group_by(country, interval) %>%
                                                                     count(cut_width(delta.ecc.0.1.0, width=0.01)) %>%
                                                                     pull(n))*1.1)),
                                   annotations = list(text= ~unique(country),
@@ -1498,7 +1577,7 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
-                                           frame = ~timepoint,
+                                           frame = ~interval,
                                            source = "histogram_c",
                                            hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
                                                                   'Count:', '%{y}' ,
@@ -1507,7 +1586,7 @@ server <- function(input, output, session) {
                            layout(xaxis = list(range = c(0,1), 
                                                title = ""),
                                   yaxis = list(range = c(0, max(strains.sh$data() %>%
-                                                                    group_by(country, timepoint) %>%
+                                                                    group_by(country, interval) %>%
                                                                     count(cut_width(delta.ecc.0.0.1, width=0.01)) %>%
                                                                     pull(n))*1.1)),
                                   annotations = list(text= ~unique(country),
@@ -1554,7 +1633,7 @@ server <- function(input, output, session) {
                     nrows=2, 
                     margin = 0.03)  %>%
                 layout(height = ceiling(length(unique(strains.sh$data() %>% 
-                                                          pull(country)))/4)*200)
+                                                          pull(country)))/4)*600)
             
             # facet by province
         } else if (input$region == 3) {
@@ -1567,11 +1646,11 @@ server <- function(input, output, session) {
             geo <- df %>%
                 lapply(function(d) plot_ly(d, 
                                            type = "histogram",
-                                           x = ~ecc.0.1.0,
+                                           x = ~tp1.ecc.0.1.0,
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
-                                           frame = ~timepoint,
+                                           frame = ~interval,
                                            source = "histogram_p",
                                            hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
                                                                   'Count:', '%{y}' ,
@@ -1581,8 +1660,8 @@ server <- function(input, output, session) {
                                                title = ""),
                                   yaxis = list(range = c(0, max(strains.sh$data() %>%
                                                                     subset(country %in% input$regionProvince) %>%
-                                                                    group_by(province, timepoint) %>%
-                                                                    count(cut_width(ecc.0.1.0, width=0.01)) %>%
+                                                                    group_by(province, interval) %>%
+                                                                    count(cut_width(tp1.ecc.0.1.0, width=0.01)) %>%
                                                                     pull(n))*1.1)),
                                   annotations = list(text= ~unique(province),
                                                      xref = "paper",
@@ -1628,11 +1707,11 @@ server <- function(input, output, session) {
             temp <- df %>%
                 lapply(function(d) plot_ly(d, 
                                            type = "histogram",
-                                           x = ~ecc.0.0.1,
+                                           x = ~tp1.ecc.0.0.1,
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
-                                           frame = ~timepoint,
+                                           frame = ~interval,
                                            source = "histogram_p",
                                            hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
                                                                   'Count:', '%{y}' ,
@@ -1642,8 +1721,8 @@ server <- function(input, output, session) {
                                                title = ""),
                                   yaxis = list(range = c(0, max(strains.sh$data() %>%
                                                                     subset(country %in% input$regionProvince) %>%
-                                                                    group_by(province, timepoint) %>%
-                                                                    count(cut_width(ecc.0.0.1, width=0.01)) %>%
+                                                                    group_by(province, interval) %>%
+                                                                    count(cut_width(tp1.ecc.0.0.1, width=0.01)) %>%
                                                                     pull(n))*1.1)),
                                   annotations = list(text= ~unique(province),
                                                      xref = "paper",
@@ -1693,7 +1772,7 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
-                                           frame = ~timepoint,
+                                           frame = ~interval,
                                            source = "histogram_p",
                                            hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
                                                                   'Count:', '%{y}' ,
@@ -1703,7 +1782,7 @@ server <- function(input, output, session) {
                                                title = ""),
                                   yaxis = list(range = c(0, max(strains.sh$data() %>%
                                                                     subset(country %in% input$regionProvince) %>%
-                                                                    group_by(province, timepoint) %>%
+                                                                    group_by(province, interval) %>%
                                                                     count(cut_width(delta.ecc.0.1.0, width=0.01)) %>%
                                                                     pull(n))*1.1)),
                                   annotations = list(text= ~unique(province),
@@ -1754,7 +1833,7 @@ server <- function(input, output, session) {
                                            color = I("#898a8c"),
                                            xbins = list(size = 0.01),
                                            showlegend = FALSE,
-                                           frame = ~timepoint,
+                                           frame = ~interval,
                                            source = "histogram_p",
                                            hovertemplate = ~paste('Bin range:', '%{x}', '<br>',
                                                                   'Count:', '%{y}' ,
@@ -1764,7 +1843,7 @@ server <- function(input, output, session) {
                                                title = ""),
                                   yaxis = list(range = c(0, max(strains.sh$data() %>%
                                                                     subset(country %in% input$regionProvince) %>%
-                                                                    group_by(province, timepoint) %>%
+                                                                    group_by(province, interval) %>%
                                                                     count(cut_width(delta.ecc.0.0.1, width=0.01)) %>%
                                                                     pull(n))*1.1)),
                                   annotations = list(text= ~unique(province),
@@ -1860,14 +1939,14 @@ server <- function(input, output, session) {
         } else if (input$region == 2) {
             
             plotvals$radar_c %>%
-                group_by(country, timepoint) %>%
+                group_by(country, interval) %>%
                 count(ecc.comb, .drop=FALSE) %>%
                 full_join(directions, by = c('ecc.comb')) %>%
                 na.omit() %>%
                 subset(n>0) %>%
                 arrange(cardinal) %>%
                 plot_ly(type="scatterpolar",
-                        frame = ~timepoint,
+                        frame = ~interval,
                         r = ~n,
                         split = ~country,
                         theta = ~degree.mid,
@@ -1898,13 +1977,13 @@ server <- function(input, output, session) {
         } else if (input$region == 3){
             
             plotvals$radar_p %>%
-                group_by(province, timepoint) %>%
+                group_by(province, interval) %>%
                 count(ecc.comb, .drop=FALSE) %>%
                 full_join(directions, by = c('ecc.comb')) %>%
                 na.omit() %>%
                 arrange(cardinal) %>%
                 plot_ly(type="scatterpolar",
-                        frame = ~timepoint,
+                        frame = ~interval,
                         r = ~n,
                         split = ~province,
                         theta = ~degree.mid,
@@ -1945,22 +2024,20 @@ server <- function(input, output, session) {
             op <- clusters.sh$data(withSelection = T)
             op$colour <- ifelse(is.na(op$selected_) | !op$selected_ , "#898a8c", "#1F78C8")
             
-            plot_ly(type = "scatter", mode="lines+markers") %>% 
+            plot_ly(type = "scatter", mode="markers") %>% 
                 #add segment to connect each point to origin
-                add_trace(data = clusters,
-                          x = c(0,~delta.ecc.0.1.0), # geographical
-                          y = c(0,~delta.ecc.0.0.1), # temporal 
-                          split = ~tp1.cluster,
-                          legendgroup = ~tp1.cluster,
+                add_trace(data = clusters.sh,
+                          x = ~delta.ecc.0.1.0, # geographical
+                          y = ~delta.ecc.0.0.1, # temporal 
                           frame = ~interval,
-                          #color = I(op$colour),
+                          color = I(op$colour),
                           opacity = 0.7,
                           showlegend = F,
                           hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
                                                  'Delta geospatial ECC:', '%{x}', '<br>',
                                                  'Delta temporal ECC:', '%{y}', 
                                                  '<extra></extra>',
-                                                 sep = " ")) %>%
+                                                 sepx = " ")) %>%
                 # set range and overlay arrow annotations
                 layout(xaxis = list(range = c(-1.05, 1.05), 
                                     title = "Delta geospatial ECC value"),
@@ -1971,21 +2048,19 @@ server <- function(input, output, session) {
             # facet by country  
         } else if (input$region == 2) {
             
-            strains.sh$data() %>%
-                distinct(country, tp1.cluster, .keep_all = T) %>%
+            #strains.sh$data() %>%
+            strains %>%  
+               distinct(country, tp1.cluster, .keep_all = T) %>%
                 split(.$country) %>%
                 lapply(function(d) plot_ly(d,
                                            type = "scatter", 
-                                           mode='lines+markers',
-                                           x = c(0, ~delta.ecc.0.1.0), # geographical
-                                           y = c(0, ~delta.ecc.0.0.1), # temporal 
-                                           split = ~tp1.cluster,
+                                           mode='markers',
+                                           x = ~delta.ecc.0.1.0, # geographical
+                                           y = ~delta.ecc.0.0.1, # temporal 
                                            color = I("#898a8c"),
                                            showlegend = F,
-                                           opacity = 0.7,
-                                           marker = list(size = 3),
-                                           size=I(1),
-                                           frame = ~timepoint, 
+                                           opacity = 0.5,
+                                           frame = ~interval, 
                                            hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
                                                                   'Delta geospatial ECC:', '%{x}', '<br>',
                                                                   'Delta temporal ECC:', '%{y}', 
@@ -2004,14 +2079,16 @@ server <- function(input, output, session) {
                                            x = 0.5,
                                            y = 1.1,
                                            showarrow = FALSE)) %>%
-                subplot(nrows = ceiling(length(unique(strains.sh$data() %>%
+                subplot(nrows = ceiling(length(unique(strains #.sh$data() 
+                                                      %>%
                                                           distinct(country, tp1.cluster, .keep_all = T) %>% 
                                                           pull(country)))/4), 
                         shareX = T, 
                         shareY = T) %>%
-                layout(height = ceiling(length(unique(strains.sh$data() %>%
+                layout(height = ceiling(length(unique(strains#.sh$data() 
+                                                      %>%
                                                           distinct(country, tp1.cluster, .keep_all = T) %>% 
-                                                          pull(country)))/4)*100,
+                                                          pull(country)))/4)*600,
                        annotations = list(
                            list(text= "Delta geospatial epicluster cohesion index",
                                 xref = "paper",
@@ -2045,16 +2122,13 @@ server <- function(input, output, session) {
                 split(.$province) %>%
                 lapply(function(d) plot_ly(d, 
                                            type = "scatter", 
-                                           mode='lines',
-                                           x = c(0, ~delta.ecc.0.1.0), # geographical
-                                           y = c(0, ~delta.ecc.0.0.1), # temporal 
-                                           split = ~tp1.cluster,
+                                           mode='markers',
+                                           x = ~delta.ecc.0.1.0, # geographical
+                                           y = ~delta.ecc.0.0.1, # temporal 
                                            color = I("#898a8c"),
                                            showlegend = F,
                                            opacity = 1,
-                                           marker = list(size = 3),
-                                           size=I(1), 
-                                           frame = ~timepoint, 
+                                           frame = ~interval, 
                                            hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
                                                                   'Delta geospatial ECC:', '%{x}', '<br>',
                                                                   'Delta temporal ECC:', '%{y}', 
@@ -2116,473 +2190,473 @@ server <- function(input, output, session) {
     
     output$cluster_growth <- renderPlotly({
         
-        # no faceting 
-        if (input$region == 1) {
-            
-            
-            accumulate_by <- function(dat, var) {
-                var <- lazyeval::f_eval(var, dat)
-                lvls <- plotly:::getLevels(var)
-                dats <- lapply(seq_along(lvls), function(x) {
-                    cbind(dat[var %in% lvls[seq(1, x)], ], frame = lvls[[x]])
-                })
-                dplyr::bind_rows(dats)
-            }
-            
-            
-            # overall growth rate
-            overall <- plot_ly(data = test) %>%
-                add_trace(type = "scatter",
-                          mode = "markers",
-                          x = ~interval,
-                          y = ~actual.growth.rate.tp2.size.tp1.size.tp1.size,
-                          color = I("#898a8c"),
-                          showlegend = F,
-                          hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                 'Overall growth rate:', '%{y}', '<br>', 
-                                                 'Time point:', '%{x}', 
-                                                 '<extra></extra>',
-                                                 sep = " "),
-                          frame=~interval) %>%
-                layout(yaxis = list(rangemode = "tozero", 
-                                    title = "Overall growth rate"),
-                       xaxis = list(title = "Time point"),
-                       annotations = list(
-                           list(text= "Overall cluster growth rate",
-                                xref = "paper",
-                                yref = "paper",
-                                yanchor = "center",
-                                xanchor = "center",
-                                align = "center",
-                                textangle = -90,
-                                x = -0.05,
-                                y = 0.5,
-                                showarrow = FALSE),
-                           list(text= "Time point",
-                                xref = "paper",
-                                yref = "paper",
-                                yanchor = "center",
-                                xanchor = "center",
-                                align = "center",
-                                x = 0.5,
-                                y = -0.1,
-                                showarrow = FALSE)))%>%
-                highlight(color = "#1F78C8")
-            
-            # novel growth rate
-            novel <- plot_ly(data = clusters.sh) %>%
-                add_trace(type = "scatter",
-                          mode = "markers",
-                          x = ~timepoint,
-                          y = ~novel.growth.tp2.size.tp2.size.number.of.novels,
-                          color = I("#898a8c"),
-                          showlegend = F,
-                          hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                 'Novel growth rate:', '%{y}', '<br>', 
-                                                 'Time point:', '%{x}', 
-                                                 '<extra></extra>',
-                                                 sep = " "),
-                          frame=~timepoint) %>%
-                layout(yaxis = list(rangemode = "tozero",
-                                    title = "Novel growth rate"),
-                       xaxis = list(title = "Time point"),
-                       annotations = list(
-                           list(text= "Novel cluster growth rate",
-                                xref = "paper",
-                                yref = "paper",
-                                yanchor = "center",
-                                xanchor = "center",
-                                align = "center",
-                                textangle = -90,
-                                x = -0.05,
-                                y = 0.5,
-                                showarrow = FALSE),
-                           list(text= "Time point",
-                                xref = "paper",
-                                yref = "paper",
-                                yanchor = "center",
-                                xanchor = "center",
-                                align = "center",
-                                x = 0.5,
-                                y = -0.1,
-                                showarrow = FALSE))) %>%
-                highlight(color = "#1F78C8")
-            
-            subplot(overall, novel, nrows = 1, margin = 0.025)
-            
-            # facet by country
-        } else if (input$region == 2) {
-            
-            # these calculations are repeated to grab some values for setting axes
-            # could be cleaned up by putting everything in reactiveValues?
-            
-            bycountry <- 
-                strains.sh$data(withSelection=T) %>%
-                filter(selected_ | is.na(selected_)) %>%
-                mutate(country = as.factor(country),
-                       timepoint = as.factor(timepoint),
-                       tp1 = as.factor(tp1)) %>%
-                group_by(country, tp1.cluster, timepoint, tp1) %>%
-                count() %>%
-                ungroup() %>%
-                complete(expand(.,timepoint, tp1, country, tp1.cluster), fill = list(n = NA)) 
-            
-            growth = data.frame(expand(bycountry, country, tp1.cluster))
-            
-            for(i in seq(length(levels(bycountry$timepoint))-1)){
-                
-                tp2 <- bycountry %>% 
-                    group_by(country) %>%
-                    subset(timepoint == i+1) %>%
-                    group_by(country, tp1.cluster) %>%
-                    summarize(n=sum(na.omit(n)))
-                
-                tp2novels <- bycountry %>% 
-                    group_by(country) %>%
-                    subset(timepoint == i+1) %>%
-                    group_by(country, tp1.cluster, tp1) %>%
-                    summarize(n=sum(n)) %>%
-                    subset(tp1==0)
-                
-                tp1 <- bycountry %>% 
-                    group_by(country) %>%
-                    subset(timepoint == i) %>%
-                    subset(tp1==1) %>%
-                    group_by(country, tp1.cluster) %>%
-                    summarize(n=sum(na.omit(n)))
-                
-                overall_name <- paste("overall", i, sep="_")
-                novel_name <- paste("novel", i, sep="_")
-                
-                growth[[overall_name]] <- (tp2$n - tp1$n)/tp1$n
-                growth[[novel_name]] <- tp2$n/(tp2$n -tp2novels$n)
-            }
-            
-            # for more time points, use this method
-            long_df <- as.data.frame(data.table::melt(setDT(growth),
-                                                      id.vars = c("country", "tp1.cluster"),
-                                                      measure = patterns(overall = "^overall_*",
-                                                                         novel = "^novel_*"),
-                                                      variable.name='timepoint'))
-            
-            overall_max <- max(na.omit(long_df$overall)[!is.infinite(na.omit(long_df$overall))])
-            novel_max <- max(na.omit(long_df$novel)[!is.infinite(na.omit(long_df$novel))])
-            
-            # overall growth rate
-            overall <- plotvals$growth_c  %>%
-                lapply(function(d) plot_ly(d,
-                                           type = "scatter",
-                                           y = ~overall,
-                                           x = ~timepoint, 
-                                           frame = ~timepoint,
-                                           hovertext = ~tp1.cluster,
-                                           color = ~I(color),
-                                           hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                                  'Ovwerall growth rate:', '%{y}', '<br>', 
-                                                                  'Time point:', '%{x}', 
-                                                                  '<extra></extra>',
-                                                                  sep = " "),
-                                           showlegend = FALSE,
-                                           source = "growth_c") %>%
-                           layout(xaxis = list(title = ""), 
-                                  yaxis = list(title = "",
-                                               range = c(0,overall_max)),
-                                  annotations = list(
-                                      list(text= ~unique(country),
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           x = 0.5,
-                                           y = 1.1,
-                                           showarrow = FALSE)))) %>%
-                subplot(nrows = ceiling(length(unique(long_df %>% 
-                                                          pull(country)))/4),
-                        shareX = T,
-                        shareY = T) %>%
-                layout(annotations = list(
-                    list(text= "Time point",
-                         xref = "paper",
-                         yref = "paper",
-                         yanchor = "center",
-                         xanchor = "center",
-                         align = "center",
-                         x = 0.5,
-                         y = -0.1,
-                         font = list(size = 14),
-                         showarrow = FALSE),
-                    list(text= "Overall cluster growth",
-                         xref = "paper",
-                         yref = "paper",
-                         yanchor = "center",
-                         xanchor = "center",
-                         align = "center",
-                         x = -0.1,
-                         y = 0.5,
-                         textangle = -90,
-                         font = list(size = 14),
-                         showarrow = FALSE))) %>%
-                event_register(event = 'plotly_click') %>%
-                event_register(event = 'plotly_doubleclick')
-            
-            # novel growth rate
-            novel <- plotvals$growth_c %>%
-                lapply(function(d) plot_ly(d,
-                                           type = "scatter",
-                                           y = ~novel,
-                                           x = ~timepoint, 
-                                           frame = ~timepoint,
-                                           hovertext = ~tp1.cluster,
-                                           color = ~I(color),
-                                           hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                                  'Novel growth rate:', '%{y}', '<br>', 
-                                                                  'Time point:', '%{x}', 
-                                                                  '<extra></extra>',
-                                                                  sep = " "),
-                                           showlegend = FALSE,
-                                           source = "growth_c") %>%
-                           layout(xaxis = list(title = ""), 
-                                  yaxis = list(title = "",
-                                               range = c(0,novel_max)),
-                                  annotations = list(
-                                      list(text= ~unique(country),
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           x = 0.5,
-                                           y = 1.1,
-                                           showarrow = FALSE)))) %>%
-                subplot(nrows = ceiling(length(unique(long_df %>% 
-                                                          pull(country)))/4),
-                        shareX = T,
-                        shareY = T) %>%
-                layout(annotations = list(
-                    list(text= "Time point",
-                         xref = "paper",
-                         yref = "paper",
-                         yanchor = "center",
-                         xanchor = "center",
-                         align = "center",
-                         x = 0.5,
-                         y = -0.1,
-                         font = list(size = 14),
-                         showarrow = FALSE),
-                    list(text= "Novel cluster growth",
-                         xref = "paper",
-                         yref = "paper",
-                         yanchor = "center",
-                         xanchor = "center",
-                         align = "center",
-                         x = -0.1,
-                         y = 0.5,
-                         textangle = -90,
-                         font = list(size = 14),
-                         showarrow = FALSE))) %>%
-                event_register(event = 'plotly_click') %>%
-                event_register(event = 'plotly_doubleclick')
-            
-            subplot(overall, novel, margin = 0.05) %>%
-                layout(height = ceiling(length(unique(long_df %>% 
-                                                          pull(country)))/4)*100)
-            
-            # facet by province
-        } else if (input$region == 3) {
-            
-            # these calculations are repeated to grab some values for setting axes
-            # could be cleaned up by putting everything in reactiveValues?
-            
-            byprovince <- 
-                strains.sh$data(withSelection=T) %>%
-                filter(selected_ | is.na(selected_)) %>%
-                subset(country %in% input$regionProvince) %>%
-                mutate(province = as.factor(province),
-                       timepoint = as.factor(timepoint),
-                       tp1 = as.factor(tp1)) %>%
-                group_by(province, tp1.cluster, timepoint, tp1) %>%
-                count() %>%
-                ungroup() %>%
-                complete(expand(.,timepoint, tp1, province, tp1.cluster), fill = list(n = NA)) 
-            
-            growth = data.frame(expand(byprovince, province, tp1.cluster))
-            
-            for(i in seq(length(levels(byprovince$timepoint))-1)){
-                
-                tp2 <- byprovince %>% 
-                    group_by(province) %>%
-                    subset(timepoint == i+1) %>%
-                    group_by(province, tp1.cluster) %>%
-                    summarize(n=sum(na.omit(n)))
-                
-                tp2novels <- byprovince %>% 
-                    group_by(province) %>%
-                    subset(timepoint == i+1) %>%
-                    group_by(province, tp1.cluster, tp1) %>%
-                    summarize(n=sum(n)) %>%
-                    subset(tp1==0)
-                
-                tp1 <- byprovince %>% 
-                    group_by(province) %>%
-                    subset(timepoint == i) %>%
-                    subset(tp1==1) %>%
-                    group_by(province, tp1.cluster) %>%
-                    summarize(n=sum(na.omit(n)))
-                
-                overall_name <- paste("overall", i, sep="_")
-                novel_name <- paste("novel", i, sep="_")
-                
-                growth[[overall_name]] <- (tp2$n - tp1$n)/tp1$n
-                growth[[novel_name]] <- tp2$n/(tp2$n -tp2novels$n)
-            }
-            
-            # for more time points, use this method
-            long_df <- as.data.frame(data.table::melt(setDT(growth),
-                                                      id.vars = c("province", "tp1.cluster"),
-                                                      measure = patterns(overall = "^overall_*",
-                                                                         novel = "^novel_*"),
-                                                      variable.name='timepoint'))
-            
-            overall_max <- max(na.omit(long_df$overall)[!is.infinite(na.omit(long_df$overall))])
-            novel_max <- max(na.omit(long_df$novel)[!is.infinite(na.omit(long_df$novel))])
-            
-            # overall growth rate
-            overall <-  plotvals$growth_p %>%
-                lapply(function(d) plot_ly(d,
-                                           type = "scatter",
-                                           y = ~overall,
-                                           x = ~timepoint, 
-                                           frame = ~timepoint,
-                                           hovertext = ~tp1.cluster,
-                                           color = ~I(color),
-                                           hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                                  'Overall growth rate:', '%{y}', '<br>', 
-                                                                  'Time point:', '%{x}', 
-                                                                  '<extra></extra>',
-                                                                  sep = " "),
-                                           showlegend = FALSE,
-                                           source = "growth_p") %>%
-                           layout(xaxis = list(title = ""), 
-                                  yaxis = list(title = "",
-                                               range = c(0,overall_max)),
-                                  annotations = list(
-                                      list(text= ~unique(province),
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           x = 0.5,
-                                           y = 1.1,
-                                           showarrow = FALSE)))) %>%
-                subplot(nrows = ceiling(length(unique(long_df %>% 
-                                                          pull(province)))/4),
-                        shareX = T, 
-                        shareY = T) %>%
-                layout(annotations = list(
-                    list(text= "Time point",
-                         xref = "paper",
-                         yref = "paper",
-                         yanchor = "center",
-                         xanchor = "center",
-                         align = "center",
-                         x = 0.5,
-                         y = -0.1,
-                         font = list(size = 14),
-                         showarrow = FALSE),
-                    list(text= "Overall cluster growth",
-                         xref = "paper",
-                         yref = "paper",
-                         yanchor = "center",
-                         xanchor = "center",
-                         align = "center",
-                         x = -0.1,
-                         y = 0.5,
-                         textangle = -90,
-                         font = list(size = 14),
-                         showarrow = FALSE))) %>%         
-                event_register(event = 'plotly_click') %>%
-                event_register(event = 'plotly_doubleclick')
-            
-            # novel growth rate
-            novel <- plotvals$growth_p %>%
-                lapply(function(d) plot_ly(d,
-                                           type = "scatter",
-                                           y = ~novel,
-                                           x = ~timepoint, 
-                                           frame = ~timepoint,
-                                           hovertext = ~tp1.cluster,
-                                           color = ~I(color),
-                                           hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                                  'Novel growth rate:', '%{y}', '<br>', 
-                                                                  'Time point:', '%{x}', 
-                                                                  '<extra></extra>',
-                                                                  sep = " "),
-                                           showlegend = FALSE,
-                                           source = "growth_p") %>%
-                           layout(xaxis = list(title = ""), 
-                                  yaxis = list(title = "",
-                                               range = c(0, novel_max)),
-                                  annotations = list(
-                                      list(text= ~unique(province),
-                                           xref = "paper",
-                                           yref = "paper",
-                                           yanchor = "center",
-                                           xanchor = "center",
-                                           align = "center",
-                                           x = 0.5,
-                                           y = 1.1,
-                                           showarrow = FALSE)))) %>%
-                subplot(nrows = ceiling(length(unique(long_df %>% 
-                                                          pull(province)))/4), 
-                        shareX = T, 
-                        shareY = T) %>%
-                layout(annotations = list(
-                    list(text= "Time point",
-                         xref = "paper",
-                         yref = "paper",
-                         yanchor = "center",
-                         xanchor = "center",
-                         align = "center",
-                         x = 0.5,
-                         y = -0.1,
-                         font = list(size = 14),
-                         showarrow = FALSE),
-                    list(text= "Novel cluster growth",
-                         xref = "paper",
-                         yref = "paper",
-                         yanchor = "center",
-                         xanchor = "center",
-                         align = "center",
-                         x = -0.1,
-                         y = 0.5,
-                         textangle = -90,
-                         font = list(size = 14),
-                         showarrow = FALSE))) %>%
-                event_register(event = 'plotly_click') %>%
-                event_register(event = 'plotly_doubleclick')
-            
-            subplot(overall, novel, margin = 0.05) %>%
-                layout(height = ceiling(length(unique(long_df %>% 
-                                                          pull(province)))/4)*150)
-        }
-    }) 
-    
+    #     # no faceting 
+    #     if (input$region == 1) {
+    #         
+    #         
+    #         accumulate_by <- function(dat, var) {
+    #             var <- lazyeval::f_eval(var, dat)
+    #             lvls <- plotly:::getLevels(var)
+    #             dats <- lapply(seq_along(lvls), function(x) {
+    #                 cbind(dat[var %in% lvls[seq(1, x)], ], frame = lvls[[x]])
+    #             })
+    #             dplyr::bind_rows(dats)
+    #         }
+    #         
+    #         
+    #         # overall growth rate
+    #         overall <- plot_ly(data = test) %>%
+    #             add_trace(type = "scatter",
+    #                       mode = "markers",
+    #                       x = ~interval,
+    #                       y = ~actual.growth.rate.tp2.size.tp1.size.tp1.size,
+    #                       color = I("#898a8c"),
+    #                       showlegend = F,
+    #                       hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
+    #                                              'Overall growth rate:', '%{y}', '<br>', 
+    #                                              'Time point:', '%{x}', 
+    #                                              '<extra></extra>',
+    #                                              sep = " "),
+    #                       frame=~interval) %>%
+    #             layout(yaxis = list(rangemode = "tozero", 
+    #                                 title = "Overall growth rate"),
+    #                    xaxis = list(title = "Time point"),
+    #                    annotations = list(
+    #                        list(text= "Overall cluster growth rate",
+    #                             xref = "paper",
+    #                             yref = "paper",
+    #                             yanchor = "center",
+    #                             xanchor = "center",
+    #                             align = "center",
+    #                             textangle = -90,
+    #                             x = -0.05,
+    #                             y = 0.5,
+    #                             showarrow = FALSE),
+    #                        list(text= "Time point",
+    #                             xref = "paper",
+    #                             yref = "paper",
+    #                             yanchor = "center",
+    #                             xanchor = "center",
+    #                             align = "center",
+    #                             x = 0.5,
+    #                             y = -0.1,
+    #                             showarrow = FALSE)))%>%
+    #             highlight(color = "#1F78C8")
+    #         
+    #         # novel growth rate
+    #         novel <- plot_ly(data = clusters.sh) %>%
+    #             add_trace(type = "scatter",
+    #                       mode = "markers",
+    #                       x = ~interval,
+    #                       y = ~novel.growth.tp2.size.tp2.size.number.of.novels,
+    #                       color = I("#898a8c"),
+    #                       showlegend = F,
+    #                       hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
+    #                                              'Novel growth rate:', '%{y}', '<br>', 
+    #                                              'Time point:', '%{x}', 
+    #                                              '<extra></extra>',
+    #                                              sep = " "),
+    #                       frame=~interval) %>%
+    #             layout(yaxis = list(rangemode = "tozero",
+    #                                 title = "Novel growth rate"),
+    #                    xaxis = list(title = "Time point"),
+    #                    annotations = list(
+    #                        list(text= "Novel cluster growth rate",
+    #                             xref = "paper",
+    #                             yref = "paper",
+    #                             yanchor = "center",
+    #                             xanchor = "center",
+    #                             align = "center",
+    #                             textangle = -90,
+    #                             x = -0.05,
+    #                             y = 0.5,
+    #                             showarrow = FALSE),
+    #                        list(text= "Time point",
+    #                             xref = "paper",
+    #                             yref = "paper",
+    #                             yanchor = "center",
+    #                             xanchor = "center",
+    #                             align = "center",
+    #                             x = 0.5,
+    #                             y = -0.1,
+    #                             showarrow = FALSE))) %>%
+    #             highlight(color = "#1F78C8")
+    #         
+    #         subplot(overall, novel, nrows = 1, margin = 0.025)
+    #         
+    #         # facet by country
+    #     } else if (input$region == 2) {
+    #         
+    #         # these calculations are repeated to grab some values for setting axes
+    #         # could be cleaned up by putting everything in reactiveValues?
+    #         
+    #         bycountry <- 
+    #             strains.sh$data(withSelection=T) %>%
+    #             filter(selected_ | is.na(selected_)) %>%
+    #             mutate(country = as.factor(country),
+    #                    interval = as.factor(interval),
+    #                    tp1 = as.factor(tp1)) %>%
+    #             group_by(country, tp1.cluster, interval, tp1) %>%
+    #             count() %>%
+    #             ungroup() %>%
+    #             complete(expand(.,interval, tp1, country, tp1.cluster), fill = list(n = NA)) 
+    #         
+    #         growth = data.frame(expand(bycountry, country, tp1.cluster))
+    #         
+    #         for(i in seq(length(levels(bycountry$interval))-1)){
+    #             
+    #             tp2 <- bycountry %>% 
+    #                 group_by(country) %>%
+    #                 subset(interval == i+1) %>%
+    #                 group_by(country, tp1.cluster) %>%
+    #                 summarize(n=sum(na.omit(n)))
+    #             
+    #             tp2novels <- bycountry %>% 
+    #                 group_by(country) %>%
+    #                 subset(interval == i+1) %>%
+    #                 group_by(country, tp1.cluster, tp1) %>%
+    #                 summarize(n=sum(n)) %>%
+    #                 subset(tp1==0)
+    #             
+    #             tp1 <- bycountry %>% 
+    #                 group_by(country) %>%
+    #                 subset(interval == i) %>%
+    #                 subset(tp1==1) %>%
+    #                 group_by(country, tp1.cluster) %>%
+    #                 summarize(n=sum(na.omit(n)))
+    #             
+    #             overall_name <- paste("overall", i, sep="_")
+    #             novel_name <- paste("novel", i, sep="_")
+    #             
+    #             growth[[overall_name]] <- (tp2$n - tp1$n)/tp1$n
+    #             growth[[novel_name]] <- tp2$n/(tp2$n -tp2novels$n)
+    #         }
+    #         
+    #         # for more time points, use this method
+    #         long_df <- as.data.frame(data.table::melt(setDT(growth),
+    #                                                   id.vars = c("country", "tp1.cluster"),
+    #                                                   measure = patterns(overall = "^overall_*",
+    #                                                                      novel = "^novel_*"),
+    #                                                   variable.name='interval'))
+    #         
+    #         overall_max <- max(na.omit(long_df$overall)[!is.infinite(na.omit(long_df$overall))])
+    #         novel_max <- max(na.omit(long_df$novel)[!is.infinite(na.omit(long_df$novel))])
+    #         
+    #         # overall growth rate
+    #         overall <- plotvals$growth_c  %>%
+    #             lapply(function(d) plot_ly(d,
+    #                                        type = "scatter",
+    #                                        y = ~overall,
+    #                                        x = ~interval, 
+    #                                        frame = ~interval,
+    #                                        hovertext = ~tp1.cluster,
+    #                                        color = ~I(color),
+    #                                        hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
+    #                                                               'Ovwerall growth rate:', '%{y}', '<br>', 
+    #                                                               'Time point:', '%{x}', 
+    #                                                               '<extra></extra>',
+    #                                                               sep = " "),
+    #                                        showlegend = FALSE,
+    #                                        source = "growth_c") %>%
+    #                        layout(xaxis = list(title = ""), 
+    #                               yaxis = list(title = "",
+    #                                            range = c(0,overall_max)),
+    #                               annotations = list(
+    #                                   list(text= ~unique(country),
+    #                                        xref = "paper",
+    #                                        yref = "paper",
+    #                                        yanchor = "center",
+    #                                        xanchor = "center",
+    #                                        align = "center",
+    #                                        x = 0.5,
+    #                                        y = 1.1,
+    #                                        showarrow = FALSE)))) %>%
+    #             subplot(nrows = ceiling(length(unique(long_df %>% 
+    #                                                       pull(country)))/4),
+    #                     shareX = T,
+    #                     shareY = T) %>%
+    #             layout(annotations = list(
+    #                 list(text= "Time point",
+    #                      xref = "paper",
+    #                      yref = "paper",
+    #                      yanchor = "center",
+    #                      xanchor = "center",
+    #                      align = "center",
+    #                      x = 0.5,
+    #                      y = -0.1,
+    #                      font = list(size = 14),
+    #                      showarrow = FALSE),
+    #                 list(text= "Overall cluster growth",
+    #                      xref = "paper",
+    #                      yref = "paper",
+    #                      yanchor = "center",
+    #                      xanchor = "center",
+    #                      align = "center",
+    #                      x = -0.1,
+    #                      y = 0.5,
+    #                      textangle = -90,
+    #                      font = list(size = 14),
+    #                      showarrow = FALSE))) %>%
+    #             event_register(event = 'plotly_click') %>%
+    #             event_register(event = 'plotly_doubleclick')
+    #         
+    #         # novel growth rate
+    #         novel <- plotvals$growth_c %>%
+    #             lapply(function(d) plot_ly(d,
+    #                                        type = "scatter",
+    #                                        y = ~novel,
+    #                                        x = ~interval, 
+    #                                        frame = ~interval,
+    #                                        hovertext = ~tp1.cluster,
+    #                                        color = ~I(color),
+    #                                        hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
+    #                                                               'Novel growth rate:', '%{y}', '<br>', 
+    #                                                               'Time point:', '%{x}', 
+    #                                                               '<extra></extra>',
+    #                                                               sep = " "),
+    #                                        showlegend = FALSE,
+    #                                        source = "growth_c") %>%
+    #                        layout(xaxis = list(title = ""), 
+    #                               yaxis = list(title = "",
+    #                                            range = c(0,novel_max)),
+    #                               annotations = list(
+    #                                   list(text= ~unique(country),
+    #                                        xref = "paper",
+    #                                        yref = "paper",
+    #                                        yanchor = "center",
+    #                                        xanchor = "center",
+    #                                        align = "center",
+    #                                        x = 0.5,
+    #                                        y = 1.1,
+    #                                        showarrow = FALSE)))) %>%
+    #             subplot(nrows = ceiling(length(unique(long_df %>% 
+    #                                                       pull(country)))/4),
+    #                     shareX = T,
+    #                     shareY = T) %>%
+    #             layout(annotations = list(
+    #                 list(text= "Time point",
+    #                      xref = "paper",
+    #                      yref = "paper",
+    #                      yanchor = "center",
+    #                      xanchor = "center",
+    #                      align = "center",
+    #                      x = 0.5,
+    #                      y = -0.1,
+    #                      font = list(size = 14),
+    #                      showarrow = FALSE),
+    #                 list(text= "Novel cluster growth",
+    #                      xref = "paper",
+    #                      yref = "paper",
+    #                      yanchor = "center",
+    #                      xanchor = "center",
+    #                      align = "center",
+    #                      x = -0.1,
+    #                      y = 0.5,
+    #                      textangle = -90,
+    #                      font = list(size = 14),
+    #                      showarrow = FALSE))) %>%
+    #             event_register(event = 'plotly_click') %>%
+    #             event_register(event = 'plotly_doubleclick')
+    #         
+    #         subplot(overall, novel, margin = 0.05) %>%
+    #             layout(height = ceiling(length(unique(long_df %>% 
+    #                                                       pull(country)))/4)*100)
+    #         
+    #         # facet by province
+    #     } else if (input$region == 3) {
+    #         
+    #         # these calculations are repeated to grab some values for setting axes
+    #         # could be cleaned up by putting everything in reactiveValues?
+    #         
+    #         byprovince <- 
+    #             strains.sh$data(withSelection=T) %>%
+    #             filter(selected_ | is.na(selected_)) %>%
+    #             subset(country %in% input$regionProvince) %>%
+    #             mutate(province = as.factor(province),
+    #                    interval = as.factor(interval),
+    #                    tp1 = as.factor(tp1)) %>%
+    #             group_by(province, tp1.cluster, interval, tp1) %>%
+    #             count() %>%
+    #             ungroup() %>%
+    #             complete(expand(.,interval, tp1, province, tp1.cluster), fill = list(n = NA)) 
+    #         
+    #         growth = data.frame(expand(byprovince, province, tp1.cluster))
+    #         
+    #         for(i in seq(length(levels(byprovince$interval))-1)){
+    #             
+    #             tp2 <- byprovince %>% 
+    #                 group_by(province) %>%
+    #                 subset(interval == i+1) %>%
+    #                 group_by(province, tp1.cluster) %>%
+    #                 summarize(n=sum(na.omit(n)))
+    #             
+    #             tp2novels <- byprovince %>% 
+    #                 group_by(province) %>%
+    #                 subset(interval == i+1) %>%
+    #                 group_by(province, tp1.cluster, tp1) %>%
+    #                 summarize(n=sum(n)) %>%
+    #                 subset(tp1==0)
+    #             
+    #             tp1 <- byprovince %>% 
+    #                 group_by(province) %>%
+    #                 subset(interval == i) %>%
+    #                 subset(tp1==1) %>%
+    #                 group_by(province, tp1.cluster) %>%
+    #                 summarize(n=sum(na.omit(n)))
+    #             
+    #             overall_name <- paste("overall", i, sep="_")
+    #             novel_name <- paste("novel", i, sep="_")
+    #             
+    #             growth[[overall_name]] <- (tp2$n - tp1$n)/tp1$n
+    #             growth[[novel_name]] <- tp2$n/(tp2$n -tp2novels$n)
+    #         }
+    #         
+    #         # for more time points, use this method
+    #         long_df <- as.data.frame(data.table::melt(setDT(growth),
+    #                                                   id.vars = c("province", "tp1.cluster"),
+    #                                                   measure = patterns(overall = "^overall_*",
+    #                                                                      novel = "^novel_*"),
+    #                                                   variable.name='interval'))
+    #         
+    #         overall_max <- max(na.omit(long_df$overall)[!is.infinite(na.omit(long_df$overall))])
+    #         novel_max <- max(na.omit(long_df$novel)[!is.infinite(na.omit(long_df$novel))])
+    #         
+    #         # overall growth rate
+    #         overall <-  plotvals$growth_p %>%
+    #             lapply(function(d) plot_ly(d,
+    #                                        type = "scatter",
+    #                                        y = ~overall,
+    #                                        x = ~interval, 
+    #                                        frame = ~interval,
+    #                                        hovertext = ~tp1.cluster,
+    #                                        color = ~I(color),
+    #                                        hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
+    #                                                               'Overall growth rate:', '%{y}', '<br>', 
+    #                                                               'Time point:', '%{x}', 
+    #                                                               '<extra></extra>',
+    #                                                               sep = " "),
+    #                                        showlegend = FALSE,
+    #                                        source = "growth_p") %>%
+    #                        layout(xaxis = list(title = ""), 
+    #                               yaxis = list(title = "",
+    #                                            range = c(0,overall_max)),
+    #                               annotations = list(
+    #                                   list(text= ~unique(province),
+    #                                        xref = "paper",
+    #                                        yref = "paper",
+    #                                        yanchor = "center",
+    #                                        xanchor = "center",
+    #                                        align = "center",
+    #                                        x = 0.5,
+    #                                        y = 1.1,
+    #                                        showarrow = FALSE)))) %>%
+    #             subplot(nrows = ceiling(length(unique(long_df %>% 
+    #                                                       pull(province)))/4),
+    #                     shareX = T, 
+    #                     shareY = T) %>%
+    #             layout(annotations = list(
+    #                 list(text= "Time point",
+    #                      xref = "paper",
+    #                      yref = "paper",
+    #                      yanchor = "center",
+    #                      xanchor = "center",
+    #                      align = "center",
+    #                      x = 0.5,
+    #                      y = -0.1,
+    #                      font = list(size = 14),
+    #                      showarrow = FALSE),
+    #                 list(text= "Overall cluster growth",
+    #                      xref = "paper",
+    #                      yref = "paper",
+    #                      yanchor = "center",
+    #                      xanchor = "center",
+    #                      align = "center",
+    #                      x = -0.1,
+    #                      y = 0.5,
+    #                      textangle = -90,
+    #                      font = list(size = 14),
+    #                      showarrow = FALSE))) %>%         
+    #             event_register(event = 'plotly_click') %>%
+    #             event_register(event = 'plotly_doubleclick')
+    #         
+    #         # novel growth rate
+    #         novel <- plotvals$growth_p %>%
+    #             lapply(function(d) plot_ly(d,
+    #                                        type = "scatter",
+    #                                        y = ~novel,
+    #                                        x = ~interval, 
+    #                                        frame = ~interval,
+    #                                        hovertext = ~tp1.cluster,
+    #                                        color = ~I(color),
+    #                                        hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
+    #                                                               'Novel growth rate:', '%{y}', '<br>', 
+    #                                                               'Time point:', '%{x}', 
+    #                                                               '<extra></extra>',
+    #                                                               sep = " "),
+    #                                        showlegend = FALSE,
+    #                                        source = "growth_p") %>%
+    #                        layout(xaxis = list(title = ""), 
+    #                               yaxis = list(title = "",
+    #                                            range = c(0, novel_max)),
+    #                               annotations = list(
+    #                                   list(text= ~unique(province),
+    #                                        xref = "paper",
+    #                                        yref = "paper",
+    #                                        yanchor = "center",
+    #                                        xanchor = "center",
+    #                                        align = "center",
+    #                                        x = 0.5,
+    #                                        y = 1.1,
+    #                                        showarrow = FALSE)))) %>%
+    #             subplot(nrows = ceiling(length(unique(long_df %>% 
+    #                                                       pull(province)))/4), 
+    #                     shareX = T, 
+    #                     shareY = T) %>%
+    #             layout(annotations = list(
+    #                 list(text= "Time point",
+    #                      xref = "paper",
+    #                      yref = "paper",
+    #                      yanchor = "center",
+    #                      xanchor = "center",
+    #                      align = "center",
+    #                      x = 0.5,
+    #                      y = -0.1,
+    #                      font = list(size = 14),
+    #                      showarrow = FALSE),
+    #                 list(text= "Novel cluster growth",
+    #                      xref = "paper",
+    #                      yref = "paper",
+    #                      yanchor = "center",
+    #                      xanchor = "center",
+    #                      align = "center",
+    #                      x = -0.1,
+    #                      y = 0.5,
+    #                      textangle = -90,
+    #                      font = list(size = 14),
+    #                      showarrow = FALSE))) %>%
+    #             event_register(event = 'plotly_click') %>%
+    #             event_register(event = 'plotly_doubleclick')
+    #         
+    #         subplot(overall, novel, margin = 0.05) %>%
+    #             layout(height = ceiling(length(unique(long_df %>% 
+    #                                                       pull(province)))/4)*150)
+    #     }
+    })
+
     # strain by cluster plots include number of novel strains identified by cluster
     # and cumulative strains identified bu cluster
-    
+
     output$strainsbycluster <- renderPlotly({
-        
-        # no faceting 
+
+        # no faceting
         if (input$region == 1) {
-            
-            # tally counts by cluster and strain date 
+
+            # tally counts by cluster and strain date
             counts <- strains.sh$data(withSelection = T) %>%
-                filter(selected_ | is.na(selected_)) %>% 
+                filter(selected_ | is.na(selected_)) %>%
                 group_by(tp1.cluster, strain.date) %>%
                 tally()
-            
+
             # mountain plot
             # novel strains identifed
             mountain <- plot_ly(data = counts) %>%
@@ -2590,11 +2664,11 @@ server <- function(input, output, session) {
                           mode = "line",
                           color = I("#898a8c"),
                           x = ~strain.date,
-                          y = ~n, 
-                          name = ~tp1.cluster, 
+                          y = ~n,
+                          name = ~tp1.cluster,
                           hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                 'Date:', '%{x}', '<br>', 
-                                                 'Count:', '%{y}', 
+                                                 'Date:', '%{x}', '<br>',
+                                                 'Count:', '%{y}',
                                                  '<extra></extra>',
                                                  sep = " "),
                           showlegend = F) %>%
@@ -2605,14 +2679,14 @@ server <- function(input, output, session) {
                                                            distinct(strain.date) %>%
                                                            pull(strain.date) %>%
                                                            sort()),
-                                    ticktext = as.list(as.character(seq(length(strains.sh$data() %>% 
-                                                                                   group_by(tp1) %>% 
-                                                                                   filter(strain.date == min(strain.date)) %>% 
-                                                                                   distinct(strain.date) %>% 
-                                                                                   pull(strain.date) %>% 
+                                    ticktext = as.list(as.character(seq(length(strains.sh$data() %>%
+                                                                                   group_by(tp1) %>%
+                                                                                   filter(strain.date == min(strain.date)) %>%
+                                                                                   distinct(strain.date) %>%
+                                                                                   pull(strain.date) %>%
                                                                                    order())))),
                                     tickmode = "array")) %>%
-                add_annotations(text= "Timepoint",
+                add_annotations(text= "interval",
                                 xref = "paper",
                                 yref = "paper",
                                 yanchor = "center",
@@ -2634,26 +2708,26 @@ server <- function(input, output, session) {
                                 font = list(size = 14),
                                 showarrow = FALSE) %>%
                 highlight(color = "#1F78C8")
-            
-            # need to aggregate data for cumsum 
+
+            # need to aggregate data for cumsum
             cumsum <- strains.sh$data(withSelection = T) %>%
                 filter(selected_ | is.na(selected_)) %>%
-                group_by(tp1.cluster, strain.date) %>% 
-                tally(!is.na(strain)) %>% 
+                group_by(tp1.cluster, strain.date) %>%
+                tally(!is.na(strain)) %>%
                 mutate(cumsum = cumsum(n))
-            
-            # cumsum plot 
+
+            # cumsum plot
             # cumulative strains identified
             cumplot <- plot_ly(data = cumsum) %>%
                 add_trace(type = "scatter",
                           mode = "line",
                           color = I("#898a8c"),
                           x = ~strain.date,
-                          y = ~cumsum, 
+                          y = ~cumsum,
                           name = ~tp1.cluster,
                           hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                 'Date:', '%{x}', '<br>', 
-                                                 'Count:', '%{y}', 
+                                                 'Date:', '%{x}', '<br>',
+                                                 'Count:', '%{y}',
                                                  '<extra></extra>',
                                                  sep = " "),
                           showlegend = F) %>%
@@ -2664,14 +2738,14 @@ server <- function(input, output, session) {
                                                            distinct(strain.date) %>%
                                                            pull(strain.date) %>%
                                                            sort()),
-                                    ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
-                                                                                    group_by(tp1) %>% 
-                                                                                    filter(strain.date == min(strain.date)) %>% 
-                                                                                    distinct(strain.date) %>% 
-                                                                                    pull(strain.date) %>% 
+                                    ticktext = as.list( as.character(seq(length(strains.sh$data() %>%
+                                                                                    group_by(tp1) %>%
+                                                                                    filter(strain.date == min(strain.date)) %>%
+                                                                                    distinct(strain.date) %>%
+                                                                                    pull(strain.date) %>%
                                                                                     order())))),
                                     tickmode = "array")) %>%
-                add_annotations(text= "Timepoint",
+                add_annotations(text= "interval",
                                 xref = "paper",
                                 yref = "paper",
                                 yanchor = "center",
@@ -2693,37 +2767,37 @@ server <- function(input, output, session) {
                                 font = list(size = 14),
                                 showarrow = FALSE) %>%
                 highlight(color = "#1F78C8")
-            
-            # subplot mountain and cumsum together 
+
+            # subplot mountain and cumsum together
             subplot(mountain, cumplot, nrows = 1, margin = 0.05)
-            
-            # facet by country     
+
+            # facet by country
         } else if (input$region == 2) {
-            
+
             counts<- strains.sh$data() %>%
                 group_by(country, tp1.cluster, strain.date) %>%
-                tally() 
-            
-            # aggregate data by country, cluster, and strain date 
-            # take cumsum of counts 
+                tally()
+
+            # aggregate data by country, cluster, and strain date
+            # take cumsum of counts
             cumsum <- strains.sh$data() %>%
-                group_by(country, tp1.cluster, strain.date) %>% 
-                tally(!is.na(strain)) %>% 
-                mutate(cumsum = cumsum(n)) 
-            
-            # mountain plot 
+                group_by(country, tp1.cluster, strain.date) %>%
+                tally(!is.na(strain)) %>%
+                mutate(cumsum = cumsum(n))
+
+            # mountain plot
             # novel strains identified
             mountain <- plotvals$strainbycluster_c %>%
-                lapply(function(d) plot_ly(d, 
+                lapply(function(d) plot_ly(d,
                                            type = "scatter",
                                            mode = "line",
                                            color = ~I(color),
                                            x = ~strain.date,
-                                           y = ~n, 
-                                           name = ~tp1.cluster, 
+                                           y = ~n,
+                                           name = ~tp1.cluster,
                                            hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                                  'Date:', '%{x}', '<br>', 
-                                                                  'Count:', '%{y}', 
+                                                                  'Date:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}',
                                                                   '<extra></extra>',
                                                                   sep = " "),
                                            showlegend = F,
@@ -2735,11 +2809,11 @@ server <- function(input, output, session) {
                                                                        distinct(strain.date) %>%
                                                                        pull(strain.date) %>%
                                                                        sort()),
-                                               ticktext = as.list( as.character(seq(length(strains.sh$data(withSelection = T) %>% 
-                                                                                               group_by(tp1) %>% 
-                                                                                               filter(strain.date == min(strain.date)) %>% 
-                                                                                               distinct(strain.date) %>% 
-                                                                                               pull(strain.date) %>% 
+                                               ticktext = as.list( as.character(seq(length(strains.sh$data(withSelection = T) %>%
+                                                                                               group_by(tp1) %>%
+                                                                                               filter(strain.date == min(strain.date)) %>%
+                                                                                               distinct(strain.date) %>%
+                                                                                               pull(strain.date) %>%
                                                                                                order())))),
                                                tickmode = "array"),
                                   yaxis = list(title = "",
@@ -2754,11 +2828,11 @@ server <- function(input, output, session) {
                                            x = 0.5,
                                            y = 1.1,
                                            showarrow = FALSE))) %>%
-                           highlight(color = "#1F78C8")) %>% 
+                           highlight(color = "#1F78C8")) %>%
                 subplot(nrows = ceiling(length(unique(counts %>%
-                                                          pull(country)))/4), 
-                        shareX = T, 
-                        shareY=T, 
+                                                          pull(country)))/4),
+                        shareX = T,
+                        shareY=T,
                         margin = 0.025) %>%
                 layout(annotations = list(
                     list(text= "Date",
@@ -2781,23 +2855,23 @@ server <- function(input, output, session) {
                          y = 0.5,
                          textangle = -90,
                          font = list(size = 14),
-                         showarrow = FALSE))) %>%         
+                         showarrow = FALSE))) %>%
                 event_register(event = 'plotly_click') %>%
                 event_register(event = 'plotly_doubleclick')
-            
-            # cumsum plot 
+
+            # cumsum plot
             # cumulative strains identified
-            cumplot <- plotvals$cumsum_c %>% 
-                lapply(function(d) plot_ly(d, 
+            cumplot <- plotvals$cumsum_c %>%
+                lapply(function(d) plot_ly(d,
                                            type = "scatter",
                                            mode = "line",
                                            color = ~I(color),
                                            x = ~strain.date,
-                                           y = ~cumsum, 
-                                           name = ~tp1.cluster, 
+                                           y = ~cumsum,
+                                           name = ~tp1.cluster,
                                            hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                                  'Date:', '%{x}', '<br>', 
-                                                                  'Count:', '%{y}', 
+                                                                  'Date:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}',
                                                                   '<extra></extra>',
                                                                   sep = " "),
                                            showlegend = F,
@@ -2809,11 +2883,11 @@ server <- function(input, output, session) {
                                                                        distinct(strain.date) %>%
                                                                        pull(strain.date) %>%
                                                                        sort()),
-                                               ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
-                                                                                               group_by(tp1) %>% 
-                                                                                               filter(strain.date == min(strain.date)) %>% 
-                                                                                               distinct(strain.date) %>% 
-                                                                                               pull(strain.date) %>% 
+                                               ticktext = as.list( as.character(seq(length(strains.sh$data() %>%
+                                                                                               group_by(tp1) %>%
+                                                                                               filter(strain.date == min(strain.date)) %>%
+                                                                                               distinct(strain.date) %>%
+                                                                                               pull(strain.date) %>%
                                                                                                order())))),
                                                tickmode = "array"),
                                   yaxis = list(title = "",
@@ -2828,11 +2902,11 @@ server <- function(input, output, session) {
                                            x = 0.5,
                                            y = 1.1,
                                            showarrow = FALSE))) %>%
-                           highlight(color = "#1F78C8")) %>% 
-                subplot(nrows = ceiling(length(unique(cumsum %>% 
+                           highlight(color = "#1F78C8")) %>%
+                subplot(nrows = ceiling(length(unique(cumsum %>%
                                                           pull(country)))/4),
-                        shareX = T, 
-                        shareY=T, 
+                        shareX = T,
+                        shareY=T,
                         margin = 0.025) %>%
                 layout(annotations = list(
                     list(text= "Time point",
@@ -2855,36 +2929,36 @@ server <- function(input, output, session) {
                          y = 0.5,
                          textangle = -90,
                          font = list(size = 14),
-                         showarrow = FALSE))) %>%         
+                         showarrow = FALSE))) %>%
                 event_register(event = 'plotly_click') %>%
                 event_register(event = 'plotly_doubleclick')
-            
-            # subplot mountain and cumsum together 
+
+            # subplot mountain and cumsum together
             subplot(mountain, cumplot, margin = 0.05) %>%
                 layout(height = ceiling(length(unique(counts %>% pull(country)))/4)*100)
-            
-            # facet by province    
+
+            # facet by province
         } else if (input$region == 3) {
-            
+
             # tally counts by province, cluster, and date
             counts <- strains.sh$data() %>%
                 subset(country %in% input$regionProvince) %>%
                 group_by(province, tp1.cluster, strain.date) %>%
                 tally()
-            
-            # mountain plot 
+
+            # mountain plot
             # novel strains identified
             mountain <- plotvals$strainbycluster_p %>%
-                lapply(function(d) plot_ly(d, 
+                lapply(function(d) plot_ly(d,
                                            type = "scatter",
                                            mode = "line",
                                            color = ~I(color),
                                            x = ~strain.date,
-                                           y = ~n, 
-                                           name = ~tp1.cluster, 
+                                           y = ~n,
+                                           name = ~tp1.cluster,
                                            hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                                  'Date:', '%{x}', '<br>', 
-                                                                  'Count:', '%{y}', 
+                                                                  'Date:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}',
                                                                   '<extra></extra>',
                                                                   sep = " "),
                                            showlegend = F,
@@ -2896,11 +2970,11 @@ server <- function(input, output, session) {
                                                                        distinct(strain.date) %>%
                                                                        pull(strain.date) %>%
                                                                        sort()),
-                                               ticktext = as.list( as.character(seq(length(strains.sh$data(withSelection = T) %>% 
-                                                                                               group_by(tp1) %>% 
-                                                                                               filter(strain.date == min(strain.date)) %>% 
-                                                                                               distinct(strain.date) %>% 
-                                                                                               pull(strain.date) %>% 
+                                               ticktext = as.list( as.character(seq(length(strains.sh$data(withSelection = T) %>%
+                                                                                               group_by(tp1) %>%
+                                                                                               filter(strain.date == min(strain.date)) %>%
+                                                                                               distinct(strain.date) %>%
+                                                                                               pull(strain.date) %>%
                                                                                                order())))),
                                                tickmode = "array"),
                                   yaxis = list(title = "",
@@ -2914,11 +2988,11 @@ server <- function(input, output, session) {
                                                           x = 0.5,
                                                           y = 1.1,
                                                           showarrow = FALSE))) %>%
-                           highlight(color = "#1F78C8")) %>% 
-                subplot(nrows = ceiling(length(unique(counts %>% 
-                                                          pull(province)))/4), 
-                        shareX = T, 
-                        shareY=T, 
+                           highlight(color = "#1F78C8")) %>%
+                subplot(nrows = ceiling(length(unique(counts %>%
+                                                          pull(province)))/4),
+                        shareX = T,
+                        shareY=T,
                         margin = 0.025) %>%
                 layout(annotations = list(list(text= "Date",
                                                xref = "paper",
@@ -2943,28 +3017,28 @@ server <- function(input, output, session) {
                                                showarrow = FALSE))) %>%
                 event_register(event = 'plotly_click') %>%
                 event_register(event = 'plotly_doubleclick')
-            
-            # aggregate data by province, cluster, and strain date 
-            # take cumsum of counts 
+
+            # aggregate data by province, cluster, and strain date
+            # take cumsum of counts
             cumsum <- strains.sh$data() %>%
                 subset(country %in% input$regionProvince) %>%
-                group_by(province, tp1.cluster, strain.date) %>% 
-                tally(!is.na(strain)) %>% 
+                group_by(province, tp1.cluster, strain.date) %>%
+                tally(!is.na(strain)) %>%
                 mutate(cumsum = cumsum(n))
-            
-            # cumsum plot 
+
+            # cumsum plot
             # cumulative strains identified
             cumplot <- plotvals$cumsum_p %>%
-                lapply(function(d) plot_ly(d, 
+                lapply(function(d) plot_ly(d,
                                            type = "scatter",
                                            mode = "line",
                                            color = ~I(color),
                                            x = ~strain.date,
-                                           y = ~cumsum, 
-                                           name = ~tp1.cluster, 
+                                           y = ~cumsum,
+                                           name = ~tp1.cluster,
                                            hovertemplate = ~paste('<b>', tp1.cluster, '</b>', '<br>',
-                                                                  'Date:', '%{x}', '<br>', 
-                                                                  'Count:', '%{y}', 
+                                                                  'Date:', '%{x}', '<br>',
+                                                                  'Count:', '%{y}',
                                                                   '<extra></extra>',
                                                                   sep = " "),
                                            showlegend = F,
@@ -2976,11 +3050,11 @@ server <- function(input, output, session) {
                                                                       distinct(strain.date) %>%
                                                                       pull(strain.date) %>%
                                                                       sort()),
-                                               ticktext = as.list(as.character(seq(length(strains.sh$data(withSelection = T) %>% 
-                                                                                              group_by(tp1) %>% 
-                                                                                              filter(strain.date == min(strain.date)) %>% 
-                                                                                              distinct(strain.date) %>% 
-                                                                                              pull(strain.date) %>% 
+                                               ticktext = as.list(as.character(seq(length(strains.sh$data(withSelection = T) %>%
+                                                                                              group_by(tp1) %>%
+                                                                                              filter(strain.date == min(strain.date)) %>%
+                                                                                              distinct(strain.date) %>%
+                                                                                              pull(strain.date) %>%
                                                                                               order())))),
                                                tickmode = "array"),
                                   yaxis = list(title = "",
@@ -2994,11 +3068,11 @@ server <- function(input, output, session) {
                                                           x = 0.5,
                                                           y = 1.1,
                                                           showarrow = FALSE))) %>%
-                           highlight(color = "#1F78C8")) %>% 
-                subplot(nrows = ceiling(length(unique(cumsum %>% 
-                                                          pull(province)))/4), 
-                        shareX = T, 
-                        shareY=T, 
+                           highlight(color = "#1F78C8")) %>%
+                subplot(nrows = ceiling(length(unique(cumsum %>%
+                                                          pull(province)))/4),
+                        shareX = T,
+                        shareY=T,
                         margin = 0.025) %>%
                 layout(annotations = list(
                     list(text= "Time point",
@@ -3023,28 +3097,28 @@ server <- function(input, output, session) {
                          font = list(size = 14),
                          showarrow = FALSE))) %>%
                 event_register(event = 'plotly_click') %>%
-                event_register(event = 'plotly_doubleclick') 
-            
-            # subplot mountain and cumsum together 
+                event_register(event = 'plotly_doubleclick')
+
+            # subplot mountain and cumsum together
             subplot(mountain, cumplot, nrows = 1, margin = 0.05) %>%
-                layout(height = ceiling(length(unique(counts %>% 
+                layout(height = ceiling(length(unique(counts %>%
                                                           pull(province)))/4)*100)
         }
     })
-    
+
     # number of new strains identified by date
     # not separated by cluster
-    
+
     output$newstrainsbydate <- renderPlotly({
-        
+
         # no faceting
         if (input$region == 1) {
-            
+
             plot_ly(type = "histogram",
                     data = strains.sh,
                     histfunc = "count",
                     x = ~strain.date,
-                    color = I("#898a8c"),                
+                    color = I("#898a8c"),
                     xbins = list(size = 86400000.0),
                     hovertemplate = ~paste('Count: %{y}', '<br>',
                                            'Date range: %{x}', '<extra></extra>', sep=" ")) %>%
@@ -3056,15 +3130,15 @@ server <- function(input, output, session) {
                                                            distinct(strain.date) %>%
                                                            pull(strain.date) %>%
                                                            sort()),
-                                    ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
-                                                                                    group_by(tp1) %>% 
-                                                                                    filter(strain.date == min(strain.date)) %>% 
-                                                                                    distinct(strain.date) %>% 
-                                                                                    pull(strain.date) %>% 
+                                    ticktext = as.list( as.character(seq(length(strains.sh$data() %>%
+                                                                                    group_by(tp1) %>%
+                                                                                    filter(strain.date == min(strain.date)) %>%
+                                                                                    distinct(strain.date) %>%
+                                                                                    pull(strain.date) %>%
                                                                                     order())))),
                                     tickmode = "array"),
                        yaxis = list(title = "Number of new strains identified"),
-                       updatemenus = list( 
+                       updatemenus = list(
                            list(active = -1,
                                 x= -0.1,
                                 type = 'buttons',
@@ -3080,27 +3154,27 @@ server <- function(input, output, session) {
                                          args = list(list(xbins = list(size = "M1"))))
                                 )))) %>%
                 highlight(color = "#1F78C8")
-            
+
             # facet by country
         } else if (input$region == 2) {
-            
+
             # calc maximum count and use to set yaxis max
             counts <- plotvals$strainsbydate_c %>%
-                group_by(country, strain.date) %>% 
-                tally() 
-            
+                group_by(country, strain.date) %>%
+                tally()
+
             plotvals$strainsbydate_c %>%
                 split(.$country) %>%
-                lapply(function(d) plot_ly(d, 
+                lapply(function(d) plot_ly(d,
                                            type = "histogram",
                                            histfunc = "count",
                                            x = ~strain.date,
-                                           color = I("#898a8c"),                
+                                           color = I("#898a8c"),
                                            xbins = list(size = 86400000.0),
                                            showlegend = F,
                                            hovertemplate = ~paste('Count: %{y}', '<br>',
-                                                                  'Date range: %{x}', 
-                                                                  '<extra></extra>', 
+                                                                  'Date range: %{x}',
+                                                                  '<extra></extra>',
                                                                   sep=" ")) %>%
                            layout(xaxis = list(title = "Time point",
                                                tickvals = as.list(strains.sh$data() %>%
@@ -3109,14 +3183,14 @@ server <- function(input, output, session) {
                                                                       distinct(strain.date) %>%
                                                                       pull(strain.date) %>%
                                                                       sort()),
-                                               ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
-                                                                                               group_by(tp1) %>% 
-                                                                                               filter(strain.date == min(strain.date)) %>% 
-                                                                                               distinct(strain.date) %>% 
-                                                                                               pull(strain.date) %>% 
+                                               ticktext = as.list( as.character(seq(length(strains.sh$data() %>%
+                                                                                               group_by(tp1) %>%
+                                                                                               filter(strain.date == min(strain.date)) %>%
+                                                                                               distinct(strain.date) %>%
+                                                                                               pull(strain.date) %>%
                                                                                                order())))),
                                                tickmode = "array"),
-                                  yaxis = list(title = "", 
+                                  yaxis = list(title = "",
                                                range = c(0, max(counts$n)*1.1)),
                                   annotations = list(
                                       list(text= ~unique(country),
@@ -3142,13 +3216,13 @@ server <- function(input, output, session) {
                                                list(label = "By month",
                                                     method = "restyle",
                                                     args = list(list(xbins = list(size = "M1"))))
-                                           ))))) %>% 
+                                           ))))) %>%
                 subplot(nrows = ceiling(length(unique(strains.sh$data(withSelection = T) %>%
                                                           pull(country)))/5),
-                        shareX = T, 
+                        shareX = T,
                         shareY = T) %>%
                 layout(height = ceiling(length(unique(strains.sh$data(withSelection = T) %>%
-                                                          pull(country)))/5)*100, 
+                                                          pull(country)))/5)*100,
                        annotations = list(list(text= "Time point",
                                                xref = "paper",
                                                yref = "paper",
@@ -3170,28 +3244,28 @@ server <- function(input, output, session) {
                                                textangle = -90,
                                                font = list(size = 14),
                                                showarrow = FALSE)))
-            
+
             # facet by province
         } else if (input$region == 3) {
-            
+
             # calc maximum count and use to set yaxis max
             counts <- strains.sh$data() %>%
                 subset(country %in% input$regionProvince) %>%
-                group_by(province, strain.date) %>% 
-                tally() 
-            
+                group_by(province, strain.date) %>%
+                tally()
+
             plotvals$strainsbydate_p %>%
                 split(.$province) %>%
-                lapply(function(d) plot_ly(d, 
+                lapply(function(d) plot_ly(d,
                                            type = "histogram",
                                            histfunc = "count",
                                            x = ~strain.date,
-                                           color = I("#898a8c"),                
+                                           color = I("#898a8c"),
                                            xbins = list(size = 86400000.0),
                                            showlegend = F,
                                            hovertemplate = ~paste('Count: %{y}', '<br>',
-                                                                  'Date range: %{x}', 
-                                                                  '<extra></extra>', 
+                                                                  'Date range: %{x}',
+                                                                  '<extra></extra>',
                                                                   sep=" ")) %>%
                            layout(xaxis = list(title = "Time point",
                                                tickvals = as.list(strains.sh$data() %>%
@@ -3200,14 +3274,14 @@ server <- function(input, output, session) {
                                                                       distinct(strain.date) %>%
                                                                       pull(strain.date) %>%
                                                                       sort()),
-                                               ticktext = as.list( as.character(seq(length(strains.sh$data() %>% 
-                                                                                               group_by(tp1) %>% 
-                                                                                               filter(strain.date == min(strain.date)) %>% 
-                                                                                               distinct(strain.date) %>% 
-                                                                                               pull(strain.date) %>% 
+                                               ticktext = as.list( as.character(seq(length(strains.sh$data() %>%
+                                                                                               group_by(tp1) %>%
+                                                                                               filter(strain.date == min(strain.date)) %>%
+                                                                                               distinct(strain.date) %>%
+                                                                                               pull(strain.date) %>%
                                                                                                order())))),
                                                tickmode = "array"),
-                                  yaxis = list(title = "", 
+                                  yaxis = list(title = "",
                                                range = c(0, max(counts$n)*1.1)),
                                   annotations = list(
                                       list(text= ~unique(province),
@@ -3232,15 +3306,15 @@ server <- function(input, output, session) {
                                                     args = list(list(xbins = list(size = 604800000.0)))),
                                                list(label = "By month",
                                                     method = "restyle",
-                                                    args = list(list(xbins = list(size = "M1"))))))))) %>% 
-                subplot(nrows = ceiling(length(unique(strains.sh$data() %>% 
+                                                    args = list(list(xbins = list(size = "M1"))))))))) %>%
+                subplot(nrows = ceiling(length(unique(strains.sh$data() %>%
                                                           subset(country %in% input$regionProvince) %>%
-                                                          pull(province)))/5), 
-                        shareX = T, 
+                                                          pull(province)))/5),
+                        shareX = T,
                         shareY = T) %>%
-                layout(height = ceiling(length(unique(strains.sh$data() %>% 
+                layout(height = ceiling(length(unique(strains.sh$data() %>%
                                                           subset(country %in% input$regionProvince) %>%
-                                                          pull(province)))/5)*100, 
+                                                          pull(province)))/5)*100,
                        annotations = list(
                            list(text= "Time point",
                                 xref = "paper",
@@ -3379,7 +3453,7 @@ server <- function(input, output, session) {
                         name = "Clusters",
                         x = ~average.longitude,
                         y = ~average.latitude,
-                        frame = ~timepoint,
+                        frame = ~interval,
                         color= I("#646566"),
                         size = ~log10(cluster.size.1.2)*10,
                         opacity = 0.6,
@@ -3495,7 +3569,7 @@ server <- function(input, output, session) {
         # subset data used in radar plot for cluster transmission
         plotvals$radar_c <- strains_r() %>%
             subset(tp1.cluster == clust) %>%
-            group_by(country, tp1.cluster, timepoint) %>%
+            group_by(country, tp1.cluster, interval) %>%
             summarize(n = n(),
                       ecc.0.0.1 = mean(ecc.0.0.1),
                       ecc.0.1.0 = mean(ecc.0.1.0),
@@ -3569,7 +3643,7 @@ server <- function(input, output, session) {
         plotvals$radar_p <- strains_r() %>%
             subset(country %in% input$regionProvince) %>%
             subset(tp1.cluster == clust) %>%
-            group_by(province, tp1.cluster, timepoint) %>%
+            group_by(province, tp1.cluster, interval) %>%
             summarize(n = n(),
                       ecc.0.0.1 = mean(ecc.0.0.1),
                       ecc.0.1.0 = mean(ecc.0.1.0),
@@ -3639,7 +3713,7 @@ server <- function(input, output, session) {
         # subset data used in radar plot for cluster transmission
         plotvals$radar_c <- strains_r() %>%
             subset(tp1.cluster == clust) %>%
-            group_by(country, tp1.cluster, timepoint) %>%
+            group_by(country, tp1.cluster, interval) %>%
             summarize(n = n(),
                       ecc.0.0.1 = mean(ecc.0.0.1),
                       ecc.0.1.0 = mean(ecc.0.1.0),
@@ -3707,7 +3781,7 @@ server <- function(input, output, session) {
         # subset data used in radar plot for cluster transmission
         plotvals$radar_p <- strains_r() %>%
             subset(tp1.cluster == clust) %>%
-            group_by(country, tp1.cluster, timepoint) %>%
+            group_by(country, tp1.cluster, interval) %>%
             summarize(n = n(),
                       ecc.0.0.1 = mean(ecc.0.0.1),
                       ecc.0.1.0 = mean(ecc.0.1.0),
@@ -3830,7 +3904,7 @@ server <- function(input, output, session) {
             subset(country %in% input$regionProvince)
         
         plotvals$radar_c <- strains_r() %>%
-            group_by(country, tp1.cluster, timepoint) %>%
+            group_by(country, tp1.cluster, interval) %>%
             summarize(n = n(),
                       ecc.0.0.1 = mean(ecc.0.0.1),
                       ecc.0.1.0 = mean(ecc.0.1.0),
@@ -3840,7 +3914,7 @@ server <- function(input, output, session) {
         
         plotvals$radar_p <- strains_r() %>%
             subset(country %in% input$regionProvince) %>%
-            group_by(province, tp1.cluster, timepoint) %>%
+            group_by(province, tp1.cluster, interval) %>%
             summarize(n = n(),
                       ecc.0.0.1 = mean(ecc.0.0.1),
                       ecc.0.1.0 = mean(ecc.0.1.0),
