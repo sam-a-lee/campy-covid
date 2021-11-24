@@ -21,10 +21,14 @@ library(rvest) # for downloading cardinal table
 library(shinyalert) # for alters on data loading
 
 # expanding data so countries/provinces do not disappear
-# test <- clusters1 %>% complete(interval, nesting(actual.tp1.cluster, tp1.cluster, actual.tp2.cluster, tp2.cluster))
-# test <- strains %>% expand(interval, nesting(actual.tp1.cluster, actual.tp2.cluster, tp1.cluster, tp2.cluster, country))
-#test <- strains %>% expand(interval, nesting(actual.tp1.cluster, actual.tp2.cluster, tp1.cluster, tp2.cluster, country, province, city))
-#merged <- merge(x=test, y=strains, by = c("interval", "actual.tp1.cluster", "actual.tp2.cluster", "tp1.cluster", "tp2.cluster", "country", "province", "city"), all.x=T)
+# test <- strains %>% expand(interval, nesting(actual.tp1.cluster, actual.tp2.cluster, tp1.cluster, tp2.cluster, country, province, city))
+# merged <- merge(x=test, y=strains, by = c("interval", "actual.tp1.cluster", "actual.tp2.cluster", "tp1.cluster", "tp2.cluster", "country", "province", "city"), all.x=T)
+
+# need to fill in missing data from merge...
+
+# fill(data, ..., .direction = c("down", "up", "downup", "updown"))
+
+
 ############# 
 # functions #
 #############
@@ -310,14 +314,14 @@ server <- function(input, output, session) {
         updateSelectInput(inputId = "tp1.cluster", label = "Cluster", choices = unique(vals$clusters$tp1.cluster),  selected = NULL)
         updateSelectInput(inputId = "interval", label = "Time point", choices = unique(vals$clusters$interval), selected = NULL)
         updateSelectInput(inputId = "type", label = "Type", choices = unique(vals$clusters$type),  selected = NULL)
-        updateSliderInput(inputId = "cluster.size.1.2", label = "Cluster size", min = min(vals$clusters$cluster.size.1.2, na.rm = T), max =  max(vals$clusters$cluster.size.1.2, na.rm = T), value = c(min(vals$clusters$cluster.size.1.2, na.rm = T),  max(vals$clusters$cluster.size.1.2, na.rm = T)))
-        updateSliderInput(inputId = "average.date", label = "Cluster date", min = min(vals$clusters$average.date, na.rm = T), max = max(vals$clusters$average.date, na.rm = T), value = c(min(vals$clusters$average.date, na.rm = T), max(vals$clusters$average.date, na.rm = T)))
-        updateSliderInput(inputId = "ecc.0.0.1", label = "Temporal ECC", min = floor(min(vals$clusters$ecc.0.0.1, na.rm = T)), max = ceiling(max(vals$clusters$ecc.0.0.1, na.rm = T)), value = c(floor(min(vals$clusters$ecc.0.0.1, na.rm = T)), ceiling(max(vals$clusters$ecc.0.0.1, na.rm = T))))
-        updateSliderInput(inputId = "ecc.0.1.0", label = "Geospatial ECC", min = floor(min(vals$clusters$ecc.0.1.0, na.rm = T)), max = ceiling(max(vals$clusters$ecc.0.1.0, na.rm = T)), value = c(floor(min(vals$clusters$ecc.0.1.0, na.rm = T)), ceiling(max(vals$clusters$ecc.0.1.0, na.rm = T))))
-        updateSliderInput(inputId = "average.latitude", label = "Average latitude", min = floor(min(vals$clusters$average.latitude, na.rm = T)), max = ceiling(max(vals$clusters$average.latitude, na.rm = T)), value = c(floor(min(vals$clusters$average.latitude, na.rm = T)), ceiling(max(vals$clusters$average.latitude, na.rm = T))))
-        updateSliderInput(inputId = "average.longitude", label = "Average longitude", min = floor(min(vals$clusters$average.longitude, na.rm = T)), max = ceiling(max(vals$clusters$average.longitude, na.rm = T)), value = c(floor(min(vals$clusters$average.longitude, na.rm = T)), ceiling(max(vals$clusters$average.longitude, na.rm = T))))
+        updateSliderInput(inputId = "cluster.size.1.2", label = "Cluster size", min = min(vals$clusters$tp1.cluster.size.1.2, na.rm = T), max =  max(vals$clusters$tp1.cluster.size.1.2, na.rm = T), value = c(min(vals$clusters$tp1.cluster.size.1.2, na.rm = T),  max(vals$clusters$tp1.cluster.size.1.2, na.rm = T)))
+        updateSliderInput(inputId = "average.date", label = "Cluster date", min = min(as.Date(vals$clusters$average.tp1.date, format =  "%Y-%m-%d"), na.rm = T), max = max(as.Date(vals$clusters$average.tp1.date, format = "%Y-%m-%d"), na.rm = T), value = c(min(as.Date(vals$clusters$average.tp1.date, format = "%Y-%m-%d"), na.rm = T), max(as.Date(vals$clusters$average.tp1.date, format =  "%Y-%m-%d"), na.rm = T)))
+        updateSliderInput(inputId = "ecc.0.0.1", label = "Temporal ECC", min = floor(min(vals$clusters$tp1.ecc.0.0.1, na.rm = T)), max = ceiling(max(vals$clusters$tp1.ecc.0.0.1, na.rm = T)), value = c(floor(min(vals$clusters$tp1.ecc.0.0.1, na.rm = T)), ceiling(max(vals$clusters$tp1.ecc.0.0.1, na.rm = T))))
+        updateSliderInput(inputId = "ecc.0.1.0", label = "Geospatial ECC", min = floor(min(vals$clusters$tp1.ecc.0.1.0, na.rm = T)), max = ceiling(max(vals$clusters$tp1.ecc.0.1.0, na.rm = T)), value = c(floor(min(vals$clusters$tp1.ecc.0.1.0, na.rm = T)), ceiling(max(vals$clusters$tp1.ecc.0.1.0, na.rm = T))))
+        updateSliderInput(inputId = "average.latitude", label = "Average latitude", min = floor(min(vals$clusters$average.tp1.latitude, na.rm = T)), max = ceiling(max(vals$clusters$average.tp1.latitude, na.rm = T)), value = c(floor(min(vals$clusters$average.tp1.latitude, na.rm = T)), ceiling(max(vals$clusters$average.tp1.latitude, na.rm = T))))
+        updateSliderInput(inputId = "average.longitude", label = "Average longitude", min = floor(min(vals$clusters$average.tp1.longitude, na.rm = T)), max = ceiling(max(vals$clusters$average.tp1.longitude, na.rm = T)), value = c(floor(min(vals$clusters$average.tp1.longitude, na.rm = T)), ceiling(max(vals$clusters$average.tp1.longitude, na.rm = T))))
         # update cluster delta sliders 
-        updateSliderInput(inputId = "actual.cluster.size.tp2.size.tp1.size", label = "Delta cluster size", min = floor(min(vals$clusters$actual.cluster.size.tp2.size.tp1.size, na.rm = T)), max = ceiling(max(vals$clusters$actual.cluster.size.tp2.size.tp1.size, na.rm = T)), value = c(floor(min(vals$clusters$actual.cluster.size.tp2.size.tp1.size, na.rm = T)), ceiling(max(vals$clusters$actual.cluster.size.tp2.size.tp1.size, na.rm = T))))
+        updateSliderInput(inputId = "actual.cluster.size.tp2.size.tp1.size", label = "Delta cluster size", min = floor(min(vals$clusters$actual.cluster.growth.tp2.size.tp1.size, na.rm = T)), max = ceiling(max(vals$clusters$actual.cluster.growth.tp2.size.tp1.size, na.rm = T)), value = c(floor(min(vals$clusters$actual.cluster.growth.tp2.size.tp1.size, na.rm = T)), ceiling(max(vals$clusters$actual.cluster.growth.tp2.size.tp1.size, na.rm = T))))
         updateSliderInput(inputId = "number.of.novels.in.the.tp2.match", label = "Number of new strains", min = floor(min(vals$clusters$number.of.novels.in.the.tp2.match, na.rm = T)), max = ceiling(max(vals$clusters$number.of.novels.in.the.tp2.match, na.rm = T)), value = c(floor(min(vals$clusters$number.of.novels.in.the.tp2.match, na.rm = T)), ceiling(max(vals$clusters$number.of.novels.in.the.tp2.match, na.rm = T))))
         updateSliderInput(inputId = "actual.growth.rate.tp2.size.tp1.size.tp1.size", label = "Overall growth rate", min = floor(min(vals$clusters$actual.growth.rate.tp2.size.tp1.size.tp1.size, na.rm = T)), max = ceiling(max(vals$clusters$actual.growth.rate.tp2.size.tp1.size.tp1.size, na.rm = T)), value = c(floor(min(vals$clusters$actual.growth.rate.tp2.size.tp1.size.tp1.size, na.rm = T)), ceiling(max(vals$clusters$actual.growth.rate.tp2.size.tp1.size.tp1.size, na.rm = T))))
         updateSliderInput(inputId = "novel.growth.tp2.size.tp2.size.number.of.novels", label = "Novel growth rate", min = floor(min(vals$clusters$novel.growth.tp2.size.tp2.size.number.of.novels, na.rm = T)), max = ceiling(max(vals$clusters$novel.growth.tp2.size.tp2.size.number.of.novels, na.rm = T)), value = c(floor(min(vals$clusters$novel.growth.tp2.size.tp2.size.number.of.novels, na.rm = T)), ceiling(max(vals$clusters$novel.growth.tp2.size.tp2.size.number.of.novels, na.rm = T))))
@@ -338,44 +342,41 @@ server <- function(input, output, session) {
     clusters_r <- reactive({
         
         req(vals$clusters)
-        data <- vals$clusters 
-        data
+        data <- as.data.frame(vals$clusters) 
         
-        # 
-        # # get top n
-        # topn <- {if (input$number != "all") as.numeric(input$number) else nrow(data)}
-        # 
-        # filtered <- data %>%
-        #     {if (!is.null(input$tp1.cluster)) filter(., tp1.cluster %in% input$tp1.cluster)  else . } %>%
-        #     {if (!is.null(input$interval)) filter(., interval %in% input$interval)  else . } %>%
-        #     {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
-        #     filter(tp1.cluster.size.1.2 >= input$cluster.size.1.2[1] & tp1.cluster.size.1.2 <= input$cluster.size.1.2[2]) %>%
-        #     filter(average.tp1.date >= input$average.date[1] & average.tp1.date <= input$average.date[2]) %>%
-        #     filter(tp1.ecc.0.0.1 >= input$ecc.0.0.1[1] & tp1.ecc.0.0.1 <= input$ecc.0.0.1[2]) %>%
-        #     filter(tp1.ecc.0.1.0 >= input$ecc.0.1.0[1] & tp1.ecc.0.1.0 <= input$ecc.0.1.0[2]) %>%
-        #     filter(average.tp1.latitude >= input$average.latitude[1] & average.tp1.latitude <= input$average.latitude[2]) %>%
-        #     filter(average.tp1.longitude >= input$average.longitude[1] & average.tp1.longitude <= input$average.longitude[2]) %>%
-        #     # delta filters
-        #     filter(actual.cluster.growth.tp2.size.tp1.size >= input$actual.cluster.size.tp2.size.tp1.size[1] & actual.cluster.growth.tp2.size.tp1.size <= input$actual.cluster.size.tp2.size.tp1.size[2]) %>%
-        #     filter(number.of.novels.in.the.tp2.match >= input$number.of.novels.in.the.tp2.match[1] & number.of.novels.in.the.tp2.match <= input$number.of.novels.in.the.tp2.match[2]) %>%
-        #     filter(actual.growth.rate.tp2.size.tp1.size.tp1.size >= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[1] & actual.growth.rate.tp2.size.tp1.size.tp1.size <= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[2]) %>%
-        #     filter(novel.growth.tp2.size.tp2.size.number.of.novels >= input$novel.growth.tp2.size.tp2.size.number.of.novels[1] & novel.growth.tp2.size.tp2.size.number.of.novels <= input$novel.growth.tp2.size.tp2.size.number.of.novels[2]) %>%
-        #     filter(delta.ecc.0.0.1 >= input$delta.ecc.0.0.1[1] & delta.ecc.0.0.1 <= input$delta.ecc.0.0.1[2]) %>%
-        #     filter(delta.ecc.0.1.0 >= input$delta.ecc.0.1.0[1] & delta.ecc.0.1.0 <= input$delta.ecc.0.1.0[2])%>%
-        #     
-        #     # data subsetting 
-        #     {if (input$subsets==1) arrange(., desc(abs(tp1.cluster.size.1.2))) else . }  %>%
-        #     {if (input$subsets==2) arrange(., desc(abs(delta.ecc.0.0.1))) else . }  %>%
-        #     {if (input$subsets==3) arrange(., desc(abs(delta.ecc.0.1.0))) else . } 
-        # 
-        # # grab n rows according to input
-        # if (input$number != 99){
-        #     topn <- as.numeric(input$number)
-        #     unique.clust <- head(unique(filtered$tp1.cluster),topn)
-        #     return(filtered %>% subset(tp1.cluster %in% unique.clust))
-        # } else{  
-        #     return(filtered)
-        # }
+        # get top n
+        topn <- {if (input$number != "all") as.numeric(input$number) else nrow(data)}
+        
+        filtered <- data %>%
+            {if (!is.null(input$tp1.cluster)) filter(., tp1.cluster %in% input$tp1.cluster)  else . } %>%
+            {if (!is.null(input$interval)) filter(., interval %in% input$interval)  else . } %>%
+            {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
+            filter(tp1.cluster.size.1.2 >= input$cluster.size.1.2[1] & tp1.cluster.size.1.2 <= input$cluster.size.1.2[2]) %>%
+            filter(as.Date(average.tp1.date, format = "%Y-%m-%d") >= input$average.date[1] & as.Date(average.tp1.date, format = "%Y-%m-%d") <= input$average.date[2]) %>%
+            filter(tp1.ecc.0.0.1 >= input$ecc.0.0.1[1] & tp1.ecc.0.0.1 <= input$ecc.0.0.1[2]) %>%
+            filter(tp1.ecc.0.1.0 >= input$ecc.0.1.0[1] & tp1.ecc.0.1.0 <= input$ecc.0.1.0[2]) %>%
+            filter(average.tp1.latitude >= input$average.latitude[1] & average.tp1.latitude <= input$average.latitude[2]) %>%
+            filter(average.tp1.longitude >= input$average.longitude[1] & average.tp1.longitude <= input$average.longitude[2]) %>%
+            # delta filters
+            filter(actual.cluster.growth.tp2.size.tp1.size >= input$actual.cluster.size.tp2.size.tp1.size[1] & actual.cluster.growth.tp2.size.tp1.size <= input$actual.cluster.size.tp2.size.tp1.size[2]) %>%
+            filter(number.of.novels.in.the.tp2.match >= input$number.of.novels.in.the.tp2.match[1] & number.of.novels.in.the.tp2.match <= input$number.of.novels.in.the.tp2.match[2]) %>%
+            filter(actual.growth.rate.tp2.size.tp1.size.tp1.size >= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[1] & actual.growth.rate.tp2.size.tp1.size.tp1.size <= input$actual.growth.rate.tp2.size.tp1.size.tp1.size[2]) %>%
+            filter(novel.growth.tp2.size.tp2.size.number.of.novels >= input$novel.growth.tp2.size.tp2.size.number.of.novels[1] & novel.growth.tp2.size.tp2.size.number.of.novels <= input$novel.growth.tp2.size.tp2.size.number.of.novels[2]) %>%
+            filter(delta.ecc.0.0.1 >= input$delta.ecc.0.0.1[1] & delta.ecc.0.0.1 <= input$delta.ecc.0.0.1[2]) %>%
+            filter(delta.ecc.0.1.0 >= input$delta.ecc.0.1.0[1] & delta.ecc.0.1.0 <= input$delta.ecc.0.1.0[2])%>%
+            # data subsetting
+            {if (input$subsets==1) arrange(., desc(abs(tp1.cluster.size.1.2))) else . }  %>%
+            {if (input$subsets==2) arrange(., desc(abs(delta.ecc.0.0.1))) else . }  %>%
+            {if (input$subsets==3) arrange(., desc(abs(delta.ecc.0.1.0))) else . }
+        
+        # grab n rows according to input
+        if (input$number != 99){
+            topn <- as.numeric(input$number)
+            unique.clust <- head(unique(filtered$tp1.cluster),topn)
+            return(filtered %>% subset(tp1.cluster %in% unique.clust))
+        } else{
+            return(filtered)
+        }
         
     })
     
@@ -494,7 +495,7 @@ server <- function(input, output, session) {
         valueBox(
             subtitle = "clusters actively growing",
             value = clusters_r() %>% 
-                subset(as.numeric(interval) == max(as.numeric(interval))) %>%
+                subset(interval == max(interval)) %>% 
                 subset(actual.growth.rate.tp2.size.tp1.size.tp1.size >= 3) %>% 
                 nrow()
         )
@@ -506,7 +507,7 @@ server <- function(input, output, session) {
         valueBox(
             subtitle = "clusters actively spreading",
             value = clusters_r() %>% 
-                subset(as.numeric(interval) == max(as.numeric(interval))) %>%
+                subset(interval == max(interval)) %>% 
                 subset(delta.ecc.spread == "Dispersed") %>% 
                 nrow()
         )
@@ -519,9 +520,9 @@ server <- function(input, output, session) {
         valueBox(
             subtitle = "clusters with local transmission",
             value = clusters_r() %>% 
-                slice(which(clusters_r()$ecc.spread=="Isolated")) %>%                 
-                subset(as.numeric(interval) == max(as.numeric(interval))) %>%
-                subset(actual.growth.rate.tp2.size.tp1.size.tp1.size >= 3) %>%
+                slice(which(delta.ecc.spread=="Isolated")) %>%                 
+                subset(interval == max(interval)) %>% 
+                subset(actual.growth.rate.tp2.size.tp1.size.tp1.size >= 3) %>% 
                 nrow()
         )
     })
@@ -743,7 +744,7 @@ server <- function(input, output, session) {
             
             # geospatial bubble plot
             geo <- plot_ly() %>%
-                add_trace(data = clusters, 
+                add_trace(data = clusters.sh, 
                           type = "scatter",
                           mode = "markers", 
                           x = ~tp1.ecc.0.1.0,
@@ -775,7 +776,7 @@ server <- function(input, output, session) {
             
             # temporal bubble plot 
             temp <- plot_ly() %>%
-                add_trace(data = clusters, 
+                add_trace(data = clusters.sh, 
                           type = "scatter",
                           mode = "markers", 
                           x = ~tp1.ecc.0.0.1,
@@ -806,7 +807,7 @@ server <- function(input, output, session) {
             
             # geosptial and temporal ECC values plotted against one another bubble plot 
             both <- plot_ly() %>%
-                add_trace(data = clusters,
+                add_trace(data = clusters.sh,
                           type = "scatter",
                           mode = "markers", 
                           x = ~tp1.ecc.0.1.0,
@@ -2191,18 +2192,43 @@ server <- function(input, output, session) {
     
     output$cluster_growth <- renderPlotly({
         
+        accumulate_by <- function(dat, var) {
+            var <- lazyeval::f_eval(var, dat)
+            lvls <- plotly:::getLevels(var)
+            dats <- lapply(seq_along(lvls), function(x) {
+                cbind(dat[var %in% lvls[seq(1, x)], ], frame = lvls[[x]])
+            })
+            dplyr::bind_rows(dats)
+        }
+        
+        # have to convert interval to numeric prior to accumulate function
+        #merged$interval_num <- (as.numeric(as.factor(merged$interval)))
+        # merged2 <- merged %>% 
+        #     subset(tp1.cluster %in% c(1:5)) %>%
+        #     accumulate_by(~interval_num)
+        
+        
+        # there cannot be any NAs
+        # merged2 %>%
+        #     plot_ly(
+        #         x = ~interval_num, 
+        #         y = ~tp1.cluster,
+        #         #split = ~tp1.cluster,
+        #         frame = ~frame, 
+        #         type = 'scatter',
+        #         mode = 'lines', 
+        #         line = list(simplyfy = F)
+        #     )
+        
+        
+        
+        
+        
         #     # no faceting 
         #     if (input$region == 1) {
         #         
         #         
-        #         accumulate_by <- function(dat, var) {
-        #             var <- lazyeval::f_eval(var, dat)
-        #             lvls <- plotly:::getLevels(var)
-        #             dats <- lapply(seq_along(lvls), function(x) {
-        #                 cbind(dat[var %in% lvls[seq(1, x)], ], frame = lvls[[x]])
-        #             })
-        #             dplyr::bind_rows(dats)
-        #         }
+        
         #         
         #         
         #         # overall growth rate
@@ -3452,14 +3478,14 @@ server <- function(input, output, session) {
         plot_mapbox(mode = 'scattermapbox') %>%
             add_markers(data = clusters.sh,
                         name = "Clusters",
-                        x = ~average.longitude,
-                        y = ~average.latitude,
+                        x = ~average.tp1.longitude,
+                        y = ~average.tp1.latitude,
                         frame = ~interval,
                         color= I("#646566"),
-                        size = ~log10(cluster.size.1.2)*10,
+                        size = ~log10(tp1.cluster.size.1.2)*10,
                         opacity = 0.6,
                         hovertemplate = ~paste(tp1.cluster, '<br>',
-                                               'Avg distance between strains (km):', geo.average.cluster.distance.km,
+                                               'Avg distance between strains (km):', tp1.geo.avg.dist,
                                                '<extra></extra>',
                                                sep = " ")) %>%
             config(mapboxAccessToken = Sys.getenv("MAPBOX_TOKEN")) %>%
