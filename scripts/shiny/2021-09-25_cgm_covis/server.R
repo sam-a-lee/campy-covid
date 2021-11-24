@@ -349,6 +349,7 @@ server <- function(input, output, session) {
         
         filtered <- data %>%
             {if (!is.null(input$tp1.cluster)) filter(., tp1.cluster %in% input$actual.tp1.cluster)  else . } %>%
+            {if (!is.null(input$tp1.cluster)) filter(., tp1.cluster %in% input$tp1.cluster)  else . } %>%
             {if (!is.null(input$interval)) filter(., interval %in% input$interval)  else . } %>%
             {if (!is.null(input$type)) filter(., type %in% input$type)  else . } %>%
             filter(tp1.cluster.size.1.2 >= input$cluster.size.1.2[1] & tp1.cluster.size.1.2 <= input$cluster.size.1.2[2]) %>%
