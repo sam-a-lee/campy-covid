@@ -50,7 +50,7 @@ sidebar <- dashboardSidebar(
                                   
                                   # cluster filters
                                   selectizeInput("tp1.cluster", "TP1 cluster", c(1,2,3,4,5),  selected = NULL, multiple = T),
-                                  selectizeInput("timepoint", "Timepoint", c(1,2), selected = NULL, multiple = T),
+                                  selectizeInput("timepoint", "Timepoint", c("01-01", "01-02"), selected = NULL, multiple = T),
                                   selectizeInput("type", "Type", c(1,2,3,4), selected = NULL, multiple = T),
                                   sliderInput(inputId = "cluster.size.1.2", label = "Cluster size", min = 0, max = 10000, value = c(1, 10000)),
                                   sliderInput(inputId = "average.date", label = "Average date", min = as.Date("2020-01-01"), max = as.Date("2025-01-01"), value = c(as.Date("2020-01-01"), as.Date("2025-01-01"))),
